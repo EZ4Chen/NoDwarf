@@ -1,5 +1,6 @@
 """Install verified Godot .NET tools, export, smoke-test and package one desktop target."""
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -32,6 +33,30 @@ def sha256(path):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def arm64_template(template):
+    # Official macOS templates contain a universal binary. An arm64 preset
+    # expects an explicitly named arm64 binary, so derive it with Apple's lipo.
+    binary_name = "macos_template.app/Contents/MacOS/godot_macos_release.universal"
+    with zipfile.ZipFile(template) as source:
+        if binary_name not in source.namelist():
+            raise RuntimeError("Official macOS template layout changed")
+        universal = LOCAL / "godot_macos_release.universal"
+        universal.write_bytes(source.read(binary_name))
+        thin = LOCAL / "godot_macos_release.arm64"
+        run(["lipo", universal, "-thin", "arm64", "-output", thin])
+        run(["lipo", thin, "-verify_arch", "arm64"])
+        result = LOCAL / "macos-arm64-template.zip"
+        with zipfile.ZipFile(result, "w", compression=zipfile.ZIP_DEFLATED) as output:
+            for info in source.infolist():
+                if info.filename == binary_name:
+                    arm_info = copy.copy(info)
+                    arm_info.filename = binary_name.replace(".universal", ".arm64")
+                    output.writestr(arm_info, thin.read_bytes())
+                else:
+                    output.writestr(info, source.read(info.filename))
+    return result
 
 
 def install(target):
@@ -68,6 +93,8 @@ def install(target):
         template = templates / "windows_release_x86_64.exe"
     if not template.is_file():
         raise RuntimeError(f"Missing .NET export template: {template}")
+    if target == "macos":
+        template = arm64_template(template)
     feed = PROJECT / ".local/godot-packages"
     feed.mkdir(parents=True, exist_ok=True)
     nupkgs = list(packages.glob("*.nupkg"))
@@ -151,6 +178,7 @@ def build(target):
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("target", choices=TARGETS)
     args = parser.parse_args()
