@@ -51,6 +51,7 @@ internal static class OptimizationChecks
     }
     public static void Run()
     {
+        ResidentHotPathChecks.Run();
         void Compare(DemoWorld world, string label)
         {
             world.ValidateWorkshop(); var expected = LegacyRooms(world);

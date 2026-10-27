@@ -10,6 +10,8 @@ internal static class RealtimeSimulationBenchmark
         for (int i = 0; i < 150; i++)
         { scenario.BeforeTick(i); scenario.World.Update(1d / 30); if (i % 30 == 0) scenario.Sample(); }
         if (profile) scenario.World.Probe = new PerformanceProbe();
+        long allocatedStart=GC.GetTotalAllocatedBytes(true);
+        var gcStart=Enumerable.Range(0,3).Select(GC.CollectionCount).ToArray();
         var times = new List<double>();
         for (int i = 150; i < 1950; i++)
         {
@@ -18,10 +20,13 @@ internal static class RealtimeSimulationBenchmark
             times.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
             if (i % 30 == 0) scenario.Sample();
         }
+        long allocatedBytes=GC.GetTotalAllocatedBytes(true)-allocatedStart;
+        var collections=Enumerable.Range(0,3).Select(g=>GC.CollectionCount(g)-gcStart[g]).ToArray();
+        string stateHash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(scenario.World.SaveJson())));
         var sorted = times.Order().ToArray();
         double Quantile(double q) => sorted[(int)Math.Ceiling(sorted.Length * q) - 1];
         var result = new { mode = "simulation-only, no frame pacing or scene synchronization", residents = 100,
-            mapSize = DemoWorld.Width, ticks = times.Count, gameSeconds = times.Count / 30d,
+            mapSize = DemoWorld.Width, ticks = times.Count, gameSeconds = times.Count / 30d, allocatedBytes, collections, stateHash,
             totalComputeSeconds = times.Sum() / 1000, meanTickMs = times.Average(), p50 = Quantile(.5), p95 = Quantile(.95), p99 = Quantile(.99), max = times.Max(),
             ticksOver33ms = times.Count(v => v > 1000d / 30), ticksOver11ms = times.Count(v => v > 1000d / 90),
             scenario.GateChanges, scenario.CompletedConstruction, scenario.LevelTransitions, profiling = scenario.World.Probe?.Report(),

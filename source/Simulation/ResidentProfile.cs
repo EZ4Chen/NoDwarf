@@ -99,14 +99,33 @@ public sealed class ResidentProfile
     [JsonIgnore] public double Consciousness => Math.Min(Math.Min(Integrity("head"),Integrity("torso")),Blood/100);
     [JsonIgnore] public bool Dead => Consciousness<=0;
     [JsonIgnore] public bool Incapacitated => Consciousness<.2;
-    [JsonIgnore] public double Pain => Math.Min(100,Injuries.Where(i=>i.Kind!="missing").Sum(i=>i.Severity)*.5);
+    [JsonIgnore] public double Pain
+    {
+        get { double sum=0; foreach(var injury in Injuries) if(injury.Kind!="missing") sum+=injury.Severity; return Math.Min(100,sum*.5); }
+    }
     [JsonIgnore] public double Mood => Math.Clamp(70 + MoodEffects.Sum(e=>e.Amount) - Math.Max(0,40-Hunger)*.5 - Math.Max(0,40-Rest)*.5 - Math.Max(0,40-Recreation)*.4 - Pain*(Traits.Contains("calm")?.15:.3),0,100);
-    [JsonIgnore] public double MoveRate => Incapacitated ? 0 : Math.Clamp(Mobility * Consciousness * Math.Min(1,Capacity/Math.Max(1,CarriedWeight)),.08,1);
-    public double Integrity(string part) => Math.Clamp(1-Injuries.Where(i=>i.Part==part).Sum(i=>i.Severity)/100,0,1);
+    [JsonIgnore] public double MoveRate
+    {
+        get { double consciousness=Consciousness; return consciousness<.2 ? 0 : Math.Clamp(Mobility * consciousness * Math.Min(1,Capacity/Math.Max(1,CarriedWeight)),.08,1); }
+    }
+    // Injuries are mutable (including treatment and recovery); compute from live data
+    // without allocating a capturing predicate/iterator for every limb on every tick.
+    public double Integrity(string part)
+    {
+        double severity=0;
+        foreach(var injury in Injuries) if(injury.Part==part) severity+=injury.Severity;
+        return Math.Clamp(1-severity/100,0,1);
+    }
     public int Level(string skill) => ResidentCatalog.Level(SkillXp.GetValueOrDefault(skill));
-    public double WorkRate(string skill) => Incapacitated || skill!="social"&&Manipulation<.05 ? 0 :
-        (1 + Level(skill)*.02 + Talents.GetValueOrDefault(skill)*.15) * (skill=="social"?1:Manipulation) * Consciousness *
-        (Traits.Contains("diligent")?1.05:1) * (Hunger<20?.75:1) * (Rest<20?.75:1);
+    public double WorkRate(string skill)
+    {
+        double consciousness=Consciousness;
+        if(consciousness<.2)return 0;
+        double manipulation=skill=="social"?1:Manipulation;
+        if(skill!="social"&&manipulation<.05)return 0;
+        return (1 + Level(skill)*.02 + Talents.GetValueOrDefault(skill)*.15) * manipulation * consciousness *
+            (Traits.Contains("diligent")?1.05:1) * (Hunger<20?.75:1) * (Rest<20?.75:1);
+    }
     public void Earn(string skill,int amount)
     {
         if(amount<=0 || !SkillXp.ContainsKey(skill))return;
