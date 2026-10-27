@@ -7,7 +7,7 @@ macOS Apple Silicon：完整解压后打开 NoDwarf.app，仅支持 M 系列芯�
 macOS 包使用 ad-hoc 签名，尚未通过 Apple 公证；Windows 包尚未代码签名。
 系统可能显示来源验证提示。只使用项目维护者提供的下载。
 
-进入游戏后按 F1 查看帮助。开发中的版本可能调整存档格式，升级前请备份存档。
+操作说明见仓库 source/README.md。开发中的版本可能调整存档格式，升级前请备份存档。
 源码与问题反馈：https://github.com/EZ4Chen/NoDwarf
 私人仓库阶段需要仓库访问权限。
 

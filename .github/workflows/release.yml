@@ -74,6 +74,8 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
+      - name: Check release safeguards
+        run: node --test tools/ci/publish.test.cjs
       - name: Verify packages and publish
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
