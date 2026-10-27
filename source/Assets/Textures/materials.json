@@ -1,0 +1,183 @@
+{
+  "root": "res://Assets/Textures/PureBDcraft/",
+  "blocks": {
+    "nodwarf:log_stairs": {
+      "alias": "nodwarf:log"
+    },
+    "nodwarf:plank_stairs": {
+      "alias": "nodwarf:planks"
+    },
+    "nodwarf:stone_wall": {
+      "alias": "nodwarf:stone_bricks"
+    },
+    "nodwarf:stone_brick_stairs": {
+      "alias": "nodwarf:stone_bricks"
+    },
+    "nodwarf:cobblestone_stairs": {
+      "alias": "nodwarf:cobblestone"
+    },
+    "nodwarf:soil_ramp": {
+      "alias": "nodwarf:soil"
+    },
+    "nodwarf:sand_ramp": {
+      "alias": "nodwarf:sand"
+    },
+    "nodwarf:stone_ramp": {
+      "alias": "nodwarf:stone"
+    },
+    "nodwarf:log": {
+      "side": "oak_log.png",
+      "top": "oak_log_top.png"
+    },
+    "nodwarf:planks": {
+      "side": "oak_planks.png",
+      "top": "oak_planks.png"
+    },
+    "nodwarf:soil": {
+      "side": "dirt.png",
+      "top": "dirt.png"
+    },
+    "nodwarf:grass": {
+      "side": "grass_block_side.png",
+      "top": "grass_block_top.png",
+      "bottom": "dirt.png",
+      "topTint": "8cba62"
+    },
+    "nodwarf:furnace": {
+      "side": "blast_furnace_side.png",
+      "top": "blast_furnace_top.png",
+      "front": "blast_furnace_front.png"
+    },
+    "nodwarf:anvil": {
+      "side": "anvil.png",
+      "top": "anvil_top.png",
+      "model": "anvil.model.json"
+    },
+    "nodwarf:sand": {
+      "side": "sand.png",
+      "tint": "b4a78b"
+    },
+    "nodwarf:deepslate": {
+      "side": "deepslate.png",
+      "top": "deepslate_top.png"
+    },
+    "nodwarf:stove": {
+      "side": "furnace_side.png",
+      "top": "furnace_top.png",
+      "front": "furnace_front.png"
+    },
+    "nodwarf:campfire": {
+      "side": "campfire_log.png",
+      "top": "campfire_log.png"
+    },
+    "nodwarf:bed": {
+      "alias": "nodwarf:planks"
+    },
+    "nodwarf:mill": {
+      "alias": "nodwarf:cobblestone"
+    },
+    "nodwarf:loom": {
+      "alias": "nodwarf:planks"
+    },
+    "nodwarf:tree_oak_log": {
+      "side": "oak_log.png",
+      "top": "oak_log_top.png"
+    },
+    "nodwarf:tree_oak_leaves": {
+      "side": "oak_leaves.png",
+      "tint": "80a458",
+      "cutout": true
+    },
+    "nodwarf:tree_birch_log": {
+      "side": "birch_log.png",
+      "top": "birch_log_top.png"
+    },
+    "nodwarf:tree_birch_leaves": {
+      "side": "birch_leaves.png",
+      "tint": "9fb76b",
+      "cutout": true
+    },
+    "nodwarf:tree_spruce_log": {
+      "side": "spruce_log.png",
+      "top": "spruce_log_top.png"
+    },
+    "nodwarf:tree_spruce_leaves": {
+      "side": "spruce_leaves.png",
+      "tint": "668568",
+      "cutout": true
+    },
+    "nodwarf:humus": {
+      "side": "podzol_side.png",
+      "top": "podzol_top.png",
+      "bottom": "dirt.png"
+    },
+    "nodwarf:humus_ramp": {
+      "alias": "nodwarf:humus"
+    },
+    "nodwarf:dry_grass": {
+      "side": "grass_block_side.png",
+      "top": "grass_block_top.png",
+      "bottom": "dirt.png",
+      "topTint": "c3b36b"
+    },
+    "nodwarf:dry_grass_ramp": {
+      "alias": "nodwarf:dry_grass"
+    },
+    "nodwarf:gravel": {
+      "side": "gravel.png"
+    },
+    "nodwarf:gravel_ramp": {
+      "alias": "nodwarf:gravel"
+    },
+    "nodwarf:granite": {
+      "side": "granite.png"
+    },
+    "nodwarf:granite_ramp": {
+      "alias": "nodwarf:granite"
+    },
+    "nodwarf:limestone": {
+      "side": "calcite.png",
+      "tint": "e8dfc6"
+    },
+    "nodwarf:limestone_ramp": {
+      "alias": "nodwarf:limestone"
+    },
+    "nodwarf:sandstone": {
+      "side": "sandstone.png",
+      "top": "sandstone_top.png"
+    },
+    "nodwarf:sandstone_ramp": {
+      "alias": "nodwarf:sandstone"
+    },
+    "nodwarf:tree_acacia_log": {
+      "side": "acacia_log.png",
+      "top": "acacia_log_top.png"
+    },
+    "nodwarf:tree_acacia_leaves": {
+      "side": "acacia_leaves.png",
+      "cutout": true,
+      "tint": "9aa65f"
+    },
+    "nodwarf:tree_jungle_log": {
+      "side": "jungle_log.png",
+      "top": "jungle_log_top.png"
+    },
+    "nodwarf:tree_jungle_leaves": {
+      "side": "jungle_leaves.png",
+      "cutout": true,
+      "tint": "50933c"
+    },
+    "nodwarf:cover_grass": {
+      "side": "grass.png",
+      "cutout": true
+    },
+    "nodwarf:cover_fern": {
+      "side": "fern.png",
+      "cutout": true
+    },
+    "nodwarf:cover_dead_bush": {
+      "side": "dead_bush.png",
+      "cutout": true
+    }
+  }
+}

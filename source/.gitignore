@@ -1,0 +1,7 @@
+.godot/
+.local/
+bin/
+obj/
+builds/
+.DS_Store
+*.user

@@ -1,0 +1,25 @@
+.tools/
+source/.godot/
+source/bin/
+source/obj/
+source/builds/
+source/.local/
+benchmarks/bin/
+benchmarks/obj/
+.DS_Store
+*.user
+
+# Local development output and reference downloads
+/work/
+/artifacts/
+/PureBDcraft*.zip
+*.log
+
+# Local credentials and machine-specific settings
+.env
+.env.*
+!.env.example
+!.env.sample
+export_credentials.cfg
+*.pfx
+*.p12
