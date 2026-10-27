@@ -42,6 +42,33 @@ bash source/tools/check.sh   # 现有回归检查
 ./source/tools/windows.ps1 -Godot "C:\Tools\Godot\Godot_v4.7.2-stable_mono_win64.exe" -Mode editor
 ```
 
+## 自动打包与发布
+
+[Build and release](https://github.com/EZ4Chen/NoDwarf/actions/workflows/release.yml) 使用 GitHub Actions 分别在 Windows 和 macOS 上编译、导出、运行检查并生成 ZIP：
+
+- **Windows x64**：`NoDwarf-<版本>-windows-x64.zip`。
+- **macOS Apple Silicon（M 系列）**：`NoDwarf-<版本>-macos-arm64.zip`。
+- 安装包自带 Godot 与 .NET 运行时，玩家不需要安装开发环境。
+
+推送 `main`、向 `main` 提交 PR，或在 Actions 页面点击 **Run workflow**，都会生成测试包；在该次运行的 **Artifacts** 中下载，保留 7 天。这些操作不会创建 Release。
+
+准备发布时，先提交并推送要发布的代码，再对该提交创建版本标签。例如首次测试发布：
+
+```sh
+git tag v0.1.0-alpha.1
+git push origin v0.1.0-alpha.1
+```
+
+标签只包含已经提交的代码。工作目录中的未提交修改不会进入安装包。使用 `v主版本.次版本.修订号` 格式；带 `-alpha.1`、`-beta.1` 等后缀会自动标为预发布。
+
+两个平台都导出成功且安装包运行检查通过后，工作流才会创建 Release、上传两个 ZIP 和 `SHA256SUMS.txt`，最后发布。若上传中断，Release 保持草稿，重新运行失败任务可重试；已发布的同名版本不会被覆盖，应创建新版本标签。
+
+工作流使用仓库自带的 `GITHUB_TOKEN`，无需个人访问令牌。仓库为私有时，Release 和测试包也需要仓库访问权限。组织或仓库策略若禁止 Actions 写入，需要允许该工作流的 `contents: write` 发布任务。私人仓库的构建和存储计入账户的 Actions 用量。
+
+Mac 包仅作 ad-hoc 签名，未做 Apple 公证；Windows 包未做发行证书签名，系统可能显示来源验证提示。当前没有 Intel Mac 构建。自动检查不替代真实窗口、音频和长时间游玩验收。
+
+导出设置见 [`source/export_presets.cfg`](source/export_presets.cfg)。升级 Godot 时，应同时更新工程 SDK、[`tools/ci/godot-downloads.json`](tools/ci/godot-downloads.json) 中的版本和官方文件 SHA-256 校验值；.NET 版本由 `source/global.json` 决定。
+
 ## 资源与许可
 
 代码和第三方素材的授权分别处理。当前原型使用部分 PureBDcraft 资源，原始条款保存在 [`terms of use.txt`](source/Assets/Textures/PureBDcraft/terms%20of%20use.txt)。

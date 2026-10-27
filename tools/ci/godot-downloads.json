@@ -1,0 +1,15 @@
+{
+  "version": "4.7.2",
+  "templates": {
+    "name": "Godot_v4.7.2-stable_mono_export_templates.tpz",
+    "sha256": "92f8681e349ef1f90891b792da95e3b2b0bd1ed610b78018c58feb2d87e15a9d"
+  },
+  "macos": {
+    "name": "Godot_v4.7.2-stable_mono_macos.universal.zip",
+    "sha256": "8af3977b60d2c59802f7c8ff1914b3ca02a5e294f7381fc1104ee777e33cbbd8"
+  },
+  "windows": {
+    "name": "Godot_v4.7.2-stable_mono_win64.zip",
+    "sha256": "a2a48473a7414c5f19fab690518caebb738c09ef9601f6bd2388676a7f53b3c0"
+  }
+}
