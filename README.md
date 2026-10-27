@@ -50,7 +50,7 @@ bash source/tools/check.sh   # 现有回归检查
 - **macOS Apple Silicon（M 系列）**：`NoDwarf-<版本>-macos-arm64.zip`。
 - 安装包自带 Godot 与 .NET 运行时，玩家不需要安装开发环境。
 
-推送 `main`、向 `main` 提交 PR，或在 Actions 页面点击 **Run workflow**，都会生成测试包；在该次运行的 **Artifacts** 中下载，保留 7 天。这些操作不会创建 Release。
+推送 `main`、向 `main` 提交 PR，或在 Actions 页面选择分支点击 **Run workflow**，都会生成测试包；在该次运行的 **Artifacts** 中下载，保留 7 天。这些操作不会创建 Release。手动选择版本标签运行则会执行该版本的发布流程。
 
 准备发布时，先提交并推送要发布的代码，再对该提交创建版本标签。例如首次测试发布：
 
@@ -74,5 +74,7 @@ Mac 包仅作 ad-hoc 签名，未做 Apple 公证；Windows 包未做发行证�
 代码和第三方素材的授权分别处理。当前原型使用部分 PureBDcraft 资源，原始条款保存在 [`terms of use.txt`](source/Assets/Textures/PureBDcraft/terms%20of%20use.txt)。
 
 Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net
+
+中文字体随游戏附带 Noto Sans CJK SC Regular（SIL Open Font License 1.1），来源与许可证见 [`source/Assets/Fonts/NotoSansCJK/`](source/Assets/Fonts/NotoSansCJK/)。
 
 私人仓库不代表这些素材已获得开源授权。未来公开仓库或发布游戏前，应确认各项素材的适用许可及署名要求。

@@ -852,12 +852,12 @@ public partial class Main : Node3D
                 Text = _world.Workers[i].Name, Position = new Vector3(0, 1.35f, 0),
                 FontSize = 36, PixelSize = 0.006f, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
                 Modulate = Ink, OutlineSize = 8,
-                Font = new SystemFont { FontNames = new[] { "PingFang SC", "Microsoft YaHei" } }
+                Font = GameFont.Regular
             });
             var body = new StaticBody3D { CollisionLayer = 4, CollisionMask = 0, Position = new Vector3(0, WorldScale.DwarfHeightMeters / 2, 0) };
             body.SetMeta("resident", i); node.AddChild(body);
             body.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = .27f, Height = WorldScale.DwarfHeightMeters } });
-            node.AddChild(new Label3D{Name="Cargo",Position=new Vector3(0,1.7f,0),FontSize=28,PixelSize=.004f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Font=new SystemFont{FontNames=new[]{"PingFang SC","Microsoft YaHei"}},OutlineSize=8});
+            node.AddChild(new Label3D{Name="Cargo",Position=new Vector3(0,1.7f,0),FontSize=28,PixelSize=.004f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Font=GameFont.Regular,OutlineSize=8});
         }
         for (int i = 0; i < _residentButtons.Count; i++) { _residentButtons[i].Visible=i<_people.Count; if(i<_people.Count) _residentButtons[i].Icon = _people[i].GetChild<Sprite3D>(0).Texture; }
         AnimatePeople();
@@ -961,7 +961,7 @@ public partial class Main : Node3D
         var layer=new CanvasLayer();AddChild(layer);
         var root=new Control{MouseFilter=Control.MouseFilterEnum.Ignore};
         layer.AddChild(root);root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        root.Theme=new Theme{DefaultFont=new SystemFont{FontNames=new[]{"PingFang SC","Microsoft YaHei","Noto Sans CJK SC"}},DefaultFontSize=14};
+        root.Theme=new Theme{DefaultFont=GameFont.Regular,DefaultFontSize=14};
         var resources=Panel(root,new Vector2(8,8),new Vector2(78,0));
         resources.AddThemeStyleboxOverride("panel",HudStyle("151a20b8",4));
         var stock=new VBoxContainer();resources.AddChild(stock);

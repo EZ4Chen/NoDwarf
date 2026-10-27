@@ -163,6 +163,7 @@ def build(target):
     checked_game(executable, "--interaction-test", "INTERACTION_OK:")
     shutil.copy2(ROOT / "docs/PLAYER-README.txt", output / "README.txt")
     shutil.copy2(PROJECT / "Assets/Textures/PureBDcraft/terms of use.txt", output / "PureBDcraft-terms.txt")
+    shutil.copy2(PROJECT / "Assets/Fonts/NotoSansCJK/LICENSE.txt", output / "NotoSansCJK-LICENSE.txt")
     DIST.mkdir(exist_ok=True)
     archive = DIST / f"NoDwarf-{version}-{platform}.zip"
     if archive.exists():

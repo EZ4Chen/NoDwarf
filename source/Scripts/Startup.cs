@@ -24,7 +24,7 @@ public partial class Startup : Control
         if(args.Any(a=>a.EndsWith("-test")||a.EndsWith("-review"))&&!args.Contains("--startup-preview-test"))
         {Callable.From(()=>GetTree().ChangeSceneToFile("res://Scenes/Main.tscn")).CallDeferred();return;}
         GetWindow().Title="NoDwarf · 开始";
-        Theme=new Theme{DefaultFont=new SystemFont{FontNames=new[]{"PingFang SC","Microsoft YaHei","Noto Sans CJK SC"}},DefaultFontSize=16};
+        Theme=new Theme{DefaultFont=GameFont.Regular,DefaultFontSize=16};
         var frame=new MarginContainer();AddChild(frame);frame.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         foreach(var side in new[]{"left","right"})frame.AddThemeConstantOverride("margin_"+side,64);
         foreach(var side in new[]{"top","bottom"})frame.AddThemeConstantOverride("margin_"+side,40);
