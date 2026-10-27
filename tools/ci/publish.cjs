@@ -28,6 +28,9 @@ module.exports = async ({ github, context, core }) => {
     release = (await github.rest.repos.getReleaseByTag({ ...repo, tag })).data;
   } catch (error) {
     if (error.status !== 404) throw error;
+    // Tag lookup is for published releases; use the authenticated list for drafts.
+    const releases = await github.paginate(github.rest.repos.listReleases, repo);
+    release = releases.find(item => item.tag_name === tag);
   }
   if (release && !release.draft) {
     core.info(`Release ${tag} is already published; keeping existing assets unchanged.`);

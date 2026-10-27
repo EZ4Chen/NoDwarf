@@ -30,11 +30,12 @@ async function fixture(options, check) {
     const repos = {
       getCommit: async () => ({ data: { sha: options.moved ? 'different' : commit } }),
       getReleaseByTag: async () => {
-        if (!options.existing) throw Object.assign(new Error('missing'), { status: 404 });
+        if (options.existing !== 'published') throw Object.assign(new Error('missing'), { status: 404 });
         return { data: { id: 1, draft: options.existing === 'draft', target_commitish: commit } };
       },
       createRelease: async args => { calls.push(['create', args]); return { data: { id: 1 } }; },
       listReleaseAssets: () => {},
+      listReleases: () => {},
       deleteReleaseAsset: async args => { calls.push(['delete', args]); },
       uploadReleaseAsset: async args => {
         calls.push(['upload', args]);
@@ -43,7 +44,9 @@ async function fixture(options, check) {
       updateRelease: async args => { calls.push(['publish', args]); }
     };
     const invoke = () => publish({
-      github: { rest: { repos }, paginate: async () => options.assets || [] },
+      github: { rest: { repos }, paginate: async method => method === repos.listReleases
+        ? (options.existing === 'draft' ? [{ id: 1, draft: true, tag_name: tag, target_commitish: commit }] : [])
+        : options.assets || [] },
       context: { ref: `refs/tags/${tag}`, repo: { owner: 'test', repo: 'test' } },
       core: { info: () => {} }
     });
