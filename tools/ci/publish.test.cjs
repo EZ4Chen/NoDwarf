@@ -64,6 +64,11 @@ test('both checked packages and checksum file upload before publishing a prerele
     assert.equal(calls[0][1].draft, true);
     assert.equal(calls[0][1].prerelease, true);
     assert.equal(calls[3][1].name, 'SHA256SUMS.txt');
+    assert.equal(calls[1][1].headers['content-type'], 'application/zip');
+    assert.equal(calls[3][1].headers['content-type'], 'text/plain');
+    for (const [, args] of calls.filter(c => c[0] === 'upload')) {
+      assert.equal(args.headers['content-length'], args.data.length);
+    }
     assert.equal(calls[4][1].draft, false);
   });
 });

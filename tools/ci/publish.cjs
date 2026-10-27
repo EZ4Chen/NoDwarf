@@ -50,7 +50,9 @@ module.exports = async ({ github, context, core }) => {
     const old = existing.find(a => a.name === asset.name);
     if (old) await github.rest.repos.deleteReleaseAsset({ ...repo, asset_id: old.id });
     await github.rest.repos.uploadReleaseAsset({ ...repo, release_id: release.id,
-      name: asset.name, data: asset.data });
+      name: asset.name, data: asset.data,
+      headers: { 'content-type': asset.name.endsWith('.zip') ? 'application/zip' : 'text/plain',
+        'content-length': asset.data.length } });
   }
   await github.rest.repos.updateRelease({ ...repo, release_id: release.id, draft: false });
   core.info(`Published ${release.html_url}`);

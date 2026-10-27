@@ -14,4 +14,5 @@ macOS 包使用 ad-hoc 签名，尚未通过 Apple 公证；Windows 包尚未代
 第三方素材署名：
 Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net
 相关原始条款见同目录 PureBDcraft-terms.txt。
+中文字体 Noto Sans CJK SC Regular，许可证见 NotoSansCJK-LICENSE.txt。
 代码与第三方素材分别授权；当前尚未选择项目开源许可证。
