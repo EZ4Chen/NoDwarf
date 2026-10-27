@@ -32,6 +32,8 @@ public partial class Main
         public bool Orbit;
         public bool ReadRenderTimes;
         public bool RequireRenderWarmup;
+        public bool ResumeSimulation;
+        public bool FixedInitialState;
         public int RenderedFrames;
         public double FirstDrawAtMs;
         private long _allocated;
@@ -70,9 +72,11 @@ public partial class Main
             Name = $"{(interior ? "interior" : "cutaway")}-{(orbit ? "orbit" : "fixed")}-{(uncapped ? "unlimited" : "cap60")}-{(noVsync ? "vsyncoff" : "vsyncon")}{(args.Contains("--diag-no-gpu-timing") ? "-no-gpu-timing" : "")}{(args.Contains("--diag-hide-plans") ? "-hide-plans" : "")}{(args.Contains("--diag-hide-terrain") ? "-hide-terrain" : "")}" };
         _interiorView = interior;
         _cameraYaw = 0;
-        if (args.Contains("--diag-static"))
+        if (args.Contains("--diag-static") || args.Contains("--diag-fixed-workload"))
         {
-            _frameDiagnostic.Name += "-static";
+            _frameDiagnostic.FixedInitialState=true;
+            _frameDiagnostic.ResumeSimulation=args.Contains("--diag-fixed-workload");
+            _frameDiagnostic.Name += _frameDiagnostic.ResumeSimulation?"-fixed-workload":"-static";
             // Identical simulation state in every render-only A/B run.
             for (int i = 0; i < 150; i++)
             {
@@ -80,6 +84,7 @@ public partial class Main
                 _world.Update(1d / 30);
             }
             _clock.Paused = true;
+            if(_frameDiagnostic.ResumeSimulation)_tpsReview!.Ticks=150;
         }
         if (args.Contains("--diag-render-warmup"))
         {
@@ -111,6 +116,7 @@ public partial class Main
     private void BeginFrameDiagnostic(double delta)
     {
         if (_frameDiagnostic is not { } d) return;
+        if(d.FixedInitialState)_clock.Paused=!d.ResumeSimulation||_tpsReview?.Measuring!=true;
         d.Begin(delta, _tpsReview?.Measuring == true);
         d.Current!.reviewClockMs = _tpsReview?.Wall.Elapsed.TotalMilliseconds ?? 0;
         if (d.Orbit)
@@ -157,6 +163,8 @@ public partial class Main
             note = "Includes warmup. Frame timestamps use monotonic time. Renderer/physics monitor values may lag a frame; zero render timing can mean unavailable. Render signals do not fence GPU completion.",
             warmupCpuReadMs = _tpsReview?.CpuReadAtStartMs,
             d.FirstDrawAtMs, d.RenderedFrames, d.RequireRenderWarmup,
+            terrainPipeline = new { synchronous = _terrainView.SynchronousMeshing, pending = _terrainView.PendingMeshCount,
+                applied = _terrainView.AppliedMeshCount, discarded = _terrainView.DiscardedMeshCount, workers = _terrainView.MeshWorkerThreads.Order().ToArray() },
             frames = d.Frames.Where(f=>f.End != 0).ToArray() };
         File.WriteAllText(path, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true }));
         RenderingServer.FramePreDraw -= DiagnosticPreDraw;

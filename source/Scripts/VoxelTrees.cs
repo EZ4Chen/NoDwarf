@@ -14,22 +14,23 @@ public partial class TerrainView
         var holder=new Node3D();BlockTextures.Box(holder,Vector3.Zero,Vector3.One,id);
         mesh=holder.GetChild<MeshInstance3D>(0).Mesh;TreeMeshes[id]=mesh;holder.Free();return mesh;
     }
-    private static void TreeInstances(Node parent,string id,List<Transform3D> transforms)
+    private static MultiMesh TreeInstances(Node parent,string id,List<Transform3D> transforms)
     {
         var mesh=new MultiMesh{TransformFormat=MultiMesh.TransformFormatEnum.Transform3D,Mesh=TreeMesh(id),InstanceCount=transforms.Count};
         for(int i=0;i<transforms.Count;i++)mesh.SetInstanceTransform(i,transforms[i]);
-        parent.AddChild(new MultiMeshInstance3D{Multimesh=mesh});
+        parent.AddChild(new MultiMeshInstance3D{Multimesh=mesh});return mesh;
     }
     private void BuildVoxelTrees(DemoWorld world,float clip)
     {
+        _treeSlices.Clear();_treeBodies.Clear();_treeClip=float.NaN;
         var batches=new Dictionary<string,List<Transform3D>>();
         var cells=new Dictionary<Cell,(string Id,bool Leaf)>();
         foreach(var tree in world.Trees.Values)
         {
-            if(tree.Cell.Level>=clip)continue;
+
             foreach(var voxel in TreeShape.Generate(world.Terrain.Seed,tree))
             {
-                var c=tree.Cell+voxel.Offset;if(c.Level>=clip)continue;
+                var c=tree.Cell+voxel.Offset;
                 // A canopy never draws through later player construction or buried terrain.
                 if(world.Buildings.ContainsKey(c)||world.NaturalSolid(c))continue;
                 string id=TreeMaterial(tree,voxel.Leaf);
@@ -37,14 +38,16 @@ public partial class TerrainView
             }
             var body=new StaticBody3D{CollisionLayer=1,CollisionMask=0,Position=Point(tree.Cell.X,tree.Cell.Level+.5f,tree.Cell.Z)};
             body.SetMeta("cell",new Vector3I(tree.Cell.X,tree.Cell.Level,tree.Cell.Z));body.SetMeta("tree_root",true);
-            body.AddChild(new CollisionShape3D{Shape=new BoxShape3D{Size=Vector3.One}});_trees!.AddChild(body);
+            body.AddChild(new CollisionShape3D{Shape=new BoxShape3D{Size=Vector3.One}});_trees!.AddChild(body);_treeBodies.Add((body,tree.Cell.Level));
         }
-        foreach(var cell in cells)
+        foreach(var cell in cells.OrderBy(p=>p.Key.Level))
         {
             if(!batches.TryGetValue(cell.Value.Id,out var batch))batches[cell.Value.Id]=batch=new();
-            var c=cell.Key;float height=Math.Min(1,clip-c.Level);batch.Add(new(Basis.Identity.Scaled(new Vector3(1,height,1)),Point(c.X,c.Level+height/2,c.Z)));
+            var c=cell.Key;float height=1;batch.Add(new(Basis.Identity.Scaled(new Vector3(1,height,1)),Point(c.X,c.Level+height/2,c.Z)));
         }
-        foreach(var batch in batches)TreeInstances(_trees!,batch.Key,batch.Value);
+        foreach(var batch in batches)
+        {var mesh=TreeInstances(_trees!,batch.Key,batch.Value);_treeSlices.Add(new(mesh,batch.Value.Select(t=>t.Origin.Y+.5f).ToArray()));}
+        UpdateTreeClip(clip);
     }
     private void CaptureTreeFalls(DemoWorld world,WorldView view)
     {
@@ -63,6 +66,7 @@ public partial class TerrainView
     }
     public override void _Process(double delta)
     {
+        PumpMeshes();
         for(int i=_falls.Count-1;i>=0;i--)
         {
             var f=_falls[i];if(!IsInstanceValid(f.Root)){_falls.RemoveAt(i);continue;}

@@ -69,7 +69,8 @@ public sealed class FluidSimulation
     {_capacity=capacity;_passable=passable;_changed=changed;_log=log;}
     public int Amount(Cell c)=>_cells.TryGetValue(c,out var f)?f.Amount:0;
     public double Depth(Cell c)=>Amount(c)/1000d;
-    private double Surface(Cell c)=>c.Level+(1000-_capacity(c)+Amount(c))/1000d;
+    private int SurfaceUnits(Cell c)=>c.Level*1000+1000-_capacity(c)+Amount(c);
+    private double Surface(Cell c)=>SurfaceUnits(c)/1000d;
     public void Wake(Cell c)
     {
         if(TerrainMap.InBounds(c)&&_queued.Add(c))_active.Enqueue(c);
@@ -101,7 +102,7 @@ public sealed class FluidSimulation
     }
     public void AddSource(Aquifer source,bool initial=false)
     {
-        if(Sources.Count>=128||!TerrainMap.InBounds(source.Cell)||source.Capacity is <1 or >10000000||source.Stored<0||source.Stored>source.Capacity||source.Head<=source.Cell.Level||source.Head>TerrainMap.MaxLevel+1||source.Rate is <5 or >5000||source.Rate%5!=0||source.Recharge<0||source.Recharge>source.Rate||source.Recharge%5!=0||!double.IsFinite(source.Temperature)||source.Temperature< -273.15||source.Temperature>10000||Sources.Any(s=>s.Cell==source.Cell))throw new ArgumentException("含水层参数无效（流量为 5 的倍数）。");
+        if(source is null||Sources.Count>=128||!TerrainMap.InBounds(source.Cell)||source.Capacity is <1 or >10000000||source.Stored<0||source.Stored>source.Capacity||source.Head<=source.Cell.Level||source.Head>TerrainMap.MaxLevel+1||source.Rate is <5 or >5000||source.Rate%5!=0||source.Recharge<0||source.Recharge>source.Rate||source.Recharge%5!=0||!double.IsFinite(source.Temperature)||source.Temperature< -273.15||source.Temperature>10000||Sources.Any(s=>s.Cell==source.Cell))throw new ArgumentException("含水层参数无效（流量为 5 的倍数）。");
         Sources.Add(source);if(initial)Initial+=source.Stored;else Added+=source.Stored;
     }
     private void FeedSources()
@@ -125,25 +126,40 @@ public sealed class FluidSimulation
             }
         }
     }
-    private void BuildHeads()
+    private void PressureFlow()
     {
-        var previous=new Dictionary<Cell,double>(_heads);_heads.Clear();var seen=new HashSet<Cell>();
+        _heads.Clear();var seen=new HashSet<Cell>();int transfers=0;
         bool FullAt(Cell c)=>_passable(c)&&_capacity(c)>0&&Amount(c)>=_capacity(c);
-        foreach(var c in _cells.Keys)
+        // Full cells form hydraulic connections. Move volume between their boundaries,
+        // leaving the full pipe intact instead of creating artificial air gaps along it.
+        foreach(var c in _cells.Keys.ToArray())
         {
             if(!FullAt(c)||!seen.Add(c))continue;
-            var component=new List<Cell>{c};double head=Surface(c);
+            var component=new List<Cell>{c};var boundary=new HashSet<Cell>();double head=Surface(c);
             for(int i=0;i<component.Count;i++)
             {
                 var p=component[i];head=Math.Max(head,Math.Max(Surface(p),_sourceHeads.GetValueOrDefault(p)));
                 foreach(var d in Adjacent)
                 {
-                    var n=p+d;if(!TerrainMap.InBounds(n)||!_passable(n))continue;
+                    var n=p+d;if(!TerrainMap.InBounds(n)||!_passable(n)||_capacity(n)==0)continue;
                     if(FullAt(n)){if(seen.Add(n))component.Add(n);}
-                    else if(Amount(n)>0)head=Math.Max(head,Surface(n));
+                    else {boundary.Add(n);if(Amount(n)>0)head=Math.Max(head,Surface(n));}
                 }
             }
-            foreach(var p in component){_heads[p]=head;if(!previous.TryGetValue(p,out var old)||Math.Abs(old-head)>.0001)Wake(p);}
+            foreach(var p in component)_heads[p]=head;
+            if(transfers>=256)continue;
+            var targets=boundary.Where(n=>Space(n)>0&&head-Surface(n)>.001)
+                .OrderBy(SurfaceUnits).ThenBy(n=>n.X).ThenBy(n=>n.Z).ThenBy(n=>n.Level).ToArray();
+            if(targets.Length==0)continue;
+            var target=targets[0];
+            var donor=component.Concat(boundary.Where(n=>Amount(n)>0)).Where(n=>n!=target)
+                .OrderByDescending(SurfaceUnits).ThenBy(n=>n.X).ThenBy(n=>n.Z).ThenBy(n=>n.Level).FirstOrDefault();
+            if(Amount(donor)==0)continue;
+            // Limit to available head and to half the physical level difference when not externally pressurized.
+            double natural=Surface(donor)-Surface(target);
+            int desired=Math.Min(100,Math.Max(0,(int)((head-Surface(target))*1000)));
+            if(head<=Surface(donor)+.0001)desired=Math.Min(desired,Math.Max(0,(int)Math.Round(natural*500)));
+            if(Transfer(donor,target,desired)>0)transfers++;
         }
     }
     public void Advance(double dt)
@@ -156,7 +172,7 @@ public sealed class FluidSimulation
     private void Tick()
     {
         Step++;FeedSources();if(_active.Count==0)return;
-        BuildHeads();int count=Math.Min(WorkPerStep,_active.Count);
+        int count=Math.Min(WorkPerStep,_active.Count);
         for(int i=0;i<count;i++)
         {
             var c=_active.Dequeue();_queued.Remove(c);
@@ -165,13 +181,12 @@ public sealed class FluidSimulation
             for(int k=0;k<4;k++)
             {
                 var n=c+Adjacent[1+(k+(int)(Step%4))%4];if(!TerrainMap.InBounds(n)||Space(n)==0)continue;
-                int balance=(int)Math.Floor((Surface(c)-Surface(n))*500);
-                if(_heads.TryGetValue(c,out var head))balance=Math.Max(balance,Math.Min(200,(int)((head-Surface(n))*1000)));
+                int balance=(SurfaceUnits(c)-SurfaceUnits(n))/2;
                 Transfer(c,n,Math.Max(0,balance));
             }
-            var up=c+Adjacent[5];
-            if(_heads.TryGetValue(c,out var pressure)&&pressure>Surface(up))Transfer(c,up,Math.Min(100,(int)((pressure-Surface(up))*1000)));
+
         }
+        PressureFlow();
     }
     public FluidArchive Save(IEnumerable<Cell> gates)=>new(){Cells=_cells.Values.ToArray(),Sources=Sources.ToArray(),OpenGates=gates.ToArray(),Active=_active.ToArray(),Elapsed=Elapsed,Added=Added,Removed=Removed,Initial=Initial,Recharged=Recharged,Step=Step};
     public void Restore(FluidArchive s)
@@ -180,7 +195,7 @@ public sealed class FluidSimulation
         _cells.Clear();Sources.Clear();_active.Clear();_queued.Clear();
         foreach(var f in s.Cells)
         {
-            if(!TerrainMap.InBounds(f.Cell)||f.Material!=FluidMaterials.Water.Id||f.Amount<=0||f.Amount>_capacity(f.Cell)||!double.IsFinite(f.Heat)||f.Heat<0||!double.IsFinite(f.Temperature)||f.Temperature>10000||!_cells.TryAdd(f.Cell,f))throw new InvalidDataException("流体格无效。");
+            if(f is null||!TerrainMap.InBounds(f.Cell)||f.Material!=FluidMaterials.Water.Id||f.Amount<=0||f.Amount>_capacity(f.Cell)||!double.IsFinite(f.Heat)||f.Heat<0||!double.IsFinite(f.Temperature)||f.Temperature>10000||!_cells.TryAdd(f.Cell,f))throw new InvalidDataException("流体格无效。");
         }
         try{foreach(var source in s.Sources)AddSource(source);}catch(ArgumentException e){throw new InvalidDataException("含水层存档无效。",e);}
         foreach(var c in s.Active){if(!TerrainMap.InBounds(c)||_queued.Contains(c))throw new InvalidDataException("流体队列无效。");Wake(c);}

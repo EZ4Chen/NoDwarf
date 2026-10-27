@@ -6,24 +6,23 @@ public partial class Main
     private Godot.Environment _dayEnvironment=null!;
     private DirectionalLight3D _sun=null!;
     private Label _calendarLabel=null!;
-    private (DemoWorld? World,long Minute,string Weather) _lastSky;
+    private (DemoWorld? World,long Minute,string Weather,bool Underground) _lastSky;
     private void RefreshCalendar()
     {
         var date=_world.Calendar;var weather=_world.Weather;
         _timeStatus.Text=date.TimeText;
-        _calendarLabel.Text=date.DateText+$" · {weather.Name} · {_world.OutdoorTemperature:F1}°C";
+        _calendarLabel.Text=date.DateText+$" · {weather.Name} · 室外 {_world.OutdoorTemperature:F1}°C";
         string Hour(double h)=>$"{(int)h:00}:{(int)((h%1)*60):00}";
         string daylight=date.DaylightHours<.01?"极夜":date.DaylightHours>23.99?"极昼":$"{Hour(date.Sunrise)} 日出，{Hour(date.Sunset)} 日落";
         _calendarLabel.TooltipText=$"每季 30 天，一年 120 天。1× 约 10 分钟一天。\n纬度 {_world.Latitude:F1}° · {daylight} · 昼长 {date.DaylightHours:F1} 小时\n天气影响露天温度和作物光照。暂停停止日期与天气推进。";
-        var skyKey=(_world,date.TotalMinutes,weather.Id);
+        var skyKey=(_world,date.TotalMinutes,weather.Id,UndergroundView);
         if(_lastSky==skyKey)return;_lastSky=skyKey;
         float light=(float)date.Sunlight;
         var solar=_world.Sun;var direction=new Vector3((float)solar.East,(float)solar.Up,-(float)solar.North).Normalized();
         _sun.LookAt(_sun.GlobalPosition-direction,Math.Abs(direction.Y)>.999f?Vector3.Forward:Vector3.Up);
         _sun.LightColor=new Color("ffbd85").Lerp(new Color("fff0db"),Math.Clamp(light*2,0,1));
         _sun.LightEnergy=solar.Up<=0?0:.8f*light*(float)weather.Light;
-        _dayEnvironment.AmbientLightColor=new Color("9eafd0").Lerp(new Color("e1edda"),light);
-        _dayEnvironment.AmbientLightEnergy=.32f+.12f*light*(float)weather.Light;
+        RefreshDepthLighting(light,(float)weather.Light);
         if(_weatherSky is not null)
         {
             var haze=new Color("879297");

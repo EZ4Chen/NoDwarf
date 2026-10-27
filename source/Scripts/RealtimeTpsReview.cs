@@ -29,6 +29,9 @@ public partial class Main
         public double CpuSecondsAtStart;
         public double CpuReadAtStartMs;
         public bool Quiet;
+        public bool CurrentEnvironment;
+        public bool Canopy;
+        public double PeakResidentMB;
         public readonly List<double> PrintMs = new();
     }
 
@@ -37,17 +40,23 @@ public partial class Main
         var args = OS.GetCmdlineUserArgs();
         int speed = args.Contains("--tps-3x") ? 3 : 1;
         _tpsReview = new TpsReview { Speed = speed, Duration = args.Contains("--tps-quick") ? 10 : args.Contains("--diag-long") ? 60 : args.Contains("--frame-diagnostic") ? 20 : 60, Profiling = args.Contains("--tps-profile") };
+        _tpsReview.CurrentEnvironment=args.Contains("--tps-environment");
+        _tpsReview.Canopy=args.Contains("--tps-canopy");
+        if(_tpsReview.CurrentEnvironment)_tpsReview.Scenario.AddCurrentEnvironment();
         _tpsReview.Quiet = args.Contains("--diag-quiet");
         _world = _tpsReview.Scenario.World;
         _clock = new SimulationClock(); _clock.SetSpeed(speed);
         _developerMode = false; _creative = false; _selectedWorker = -1;
         _overview.World = _world; _overview.RefreshMap();
-        _foundation = new FoundationPlan(new Cell(70, 80), new Cell(132, 140));
+        _foundation = new FoundationPlan(_tpsReview.Scenario.ViewCenter+new Cell(-32,-25),_tpsReview.Scenario.ViewCenter+new Cell(30,35));
         _layerOffset = 0; _placement = 0; _cutaway = true; _interiorView = false;
         _focus = WorldPosition(_tpsReview.Scenario.ViewCenter); _camera.Size = 66; _cameraYaw = 0;
+        if(_tpsReview.Canopy){_cutaway=false;_camera.Size=95;}
         CreatePeople(); PositionCamera(); DrawFoundation(); SyncWorld(); RefreshUi();
         Engine.MaxFps = 60;
         StartFrameDiagnostic(args);
+        if(_tpsReview.CurrentEnvironment&&_frameDiagnostic is not null)_frameDiagnostic.Name+=$"-environment-{speed}x";
+        if(_tpsReview.Canopy&&_frameDiagnostic is not null)_frameDiagnostic.Name+="-canopy";
         GetWindow().Title = $"NoDwarf · 100 人实时性能测试 · {speed}× · 自动结束";
         _diagnosticsPanel.Show();
         if (_tpsReview.Profiling) _world.Probe = new PerformanceProbe();
@@ -76,6 +85,7 @@ public partial class Main
             (diagnostic.RenderedFrames >= 60 && diagnostic.Wall.Elapsed.TotalMilliseconds - diagnostic.FirstDrawAtMs >= 5000);
         if (!r.Measuring && elapsed >= 5 && renderWarmed)
         {
+            if(_frameDiagnostic is {ResumeSimulation:true})_clock.Paused=false;
             r.Measuring = true; r.Wall.Restart(); elapsed = 0;
             r.LastWindow = 0; r.LastFrame = 0; r.LastTicks = r.Ticks; r.LastFrames = r.Frames;
             r.AllocatedAtStart = GC.GetTotalAllocatedBytes();
@@ -99,6 +109,7 @@ public partial class Main
         r.PeakLag = Math.Max(r.PeakLag, lag);
         if (elapsed - r.LastWindow >= 1)
         {
+            using(var process=Process.GetCurrentProcess()){process.Refresh();r.PeakResidentMB=Math.Max(r.PeakResidentMB,process.WorkingSet64/1048576d);}
             double seconds = elapsed - r.LastWindow;
             double tps = (r.Ticks - r.LastTicks) / seconds, fps = (r.Frames - r.LastFrames) / seconds;
             r.WindowTps.Add(tps);
@@ -119,7 +130,9 @@ public partial class Main
         var result = new
         {
             mode = DisplayServer.GetName(), speed = r.Speed, targetTps = 30 * r.Speed,
-            mapSize = DemoWorld.Width, residents = _world.Workers.Count,
+            mapSize = DemoWorld.Width, residents = _world.Workers.Count, currentEnvironment=r.CurrentEnvironment,
+            canopy=r.Canopy,
+            trees=_world.Trees.Count,visibleGrass=_terrainView.VisibleCoverInstances,weather=_world.Weather.Id,waterCells=_world.Fluids.Cells.Count,peakResidentMB=r.PeakResidentMB,managedMB=GC.GetTotalMemory(false)/1048576d,
             wallSeconds = elapsed, gameSeconds = r.TickMs.Count / 30d,
             achievedTps = r.TickMs.Count / elapsed, observedFps = r.FrameMs.Count / elapsed,
             peakLagGameSeconds = r.PeakLag, endLagGameSeconds = lag,
@@ -145,6 +158,7 @@ public partial class Main
             : $"res://.local/frame-tps-{_frameDiagnostic.Name}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print($"TPS_REVIEW_OK: {path}; TPS={r.TickMs.Count / elapsed:F2}/{30 * r.Speed}; FPS={r.FrameMs.Count / elapsed:F2}; tick p99={Quantile(r.TickMs, .99):F2}ms; frame p99={Quantile(r.FrameMs, .99):F2}ms");
+        if(r.CurrentEnvironment)GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://.local/environment-perf-{r.Speed}x{(r.Canopy?"-canopy":"")}.png"));
         SaveFrameDiagnostic();
         GetTree().Quit();
     }

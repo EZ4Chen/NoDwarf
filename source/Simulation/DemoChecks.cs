@@ -12,14 +12,16 @@ public static class DemoChecks
         ResidentChecks.Run();
         LogisticsChecks.Run();
         ConstructionChecks.Run();
+        RoomEnvironmentChecks.Run();
         SettlementChecks.Run();
-        CropProductionChecks.Run();
+        CropProductionChecks.Run();ProductionOrderChecks.Run();
         TreeShapeChecks.Run();
         RegionChecks.Run();
         WorldGenerationChecks.Run();
         FarmingChecks.Run();
         CalendarChecks.Run();
         WeatherChecks.Run();
+        FluidChecks.Run();
         CropClimateChecks.Run();
         DeveloperChecks();
         CharacterChecks();

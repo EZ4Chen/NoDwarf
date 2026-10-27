@@ -33,12 +33,7 @@ public sealed partial class DemoWorld
     public CropClimate FarmClimate(FarmPlot p)
     {
         bool covered=FarmCovered(p.Cell);var date=Calendar;
-        double outside=ClimateRules.OutdoorTemperature(date,Terrain[p.Cell.X,p.Cell.Z].Level,Terrain.Region)+Weather.Temperature;
-        int depth=Math.Max(0,Terrain[p.Cell.X,p.Cell.Z].Level-p.Cell.Level);
-        // A simple depth-based cave buffer, not a per-voxel heat simulation.
-        double mean=Terrain.Region?.Mean??15;
-        double temperature=covered&&depth>0?mean+(outside-mean)*Math.Exp(-depth/6d):outside;
-        temperature+=HeatingAt(p.Cell);
+        double temperature=TemperatureAt(p.Cell);
         double light=covered?0:date.Sunlight*Weather.Light;
         double thermal=ClimateRules.TemperatureFactor(p.Crop,temperature);
         double lightFactor=p.Crop!="mushroom"?light:Math.Clamp(1-light/.2,0,1);

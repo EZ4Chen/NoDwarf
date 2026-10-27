@@ -17,6 +17,7 @@ public partial class Main
     private (DemoWorld,long,int)? _roomTopologyInputs;
     private readonly List<List<Cell>> _interiorRooms=new();
     private int _roomTopologyBuilds;
+    private static readonly float[] OcclusionSamples={-.4f,0f,.4f};
     private void PrepareInteriorWalls()
     {
         var inputs=(_world,_world.Navigation.Version,ActiveLevel,_foundation?.FloorHeight??3,_cameraYaw,_cameraPitch,_topDown,_interiorView,_cutaway);
@@ -63,25 +64,26 @@ public partial class Main
         }
         }
         var caps=new Dictionary<Cell,float>();
+        var cameraBack=CameraBack;
+        float ceiling=floor+(_foundation?.FloorHeight??3)-1;
+        float reach=(ceiling-floor+.5f)/Mathf.Tan(_cameraPitch);
         foreach(var room in _interiorRooms)
         {
             // Trace the screen-space footprint of known room floors towards the camera.
             // Unknown foreground solids may occlude too; suppress their geometry without discovering them.
             var roomCells=room.ToHashSet();
-            float ceiling=floor+(_foundation?.FloorHeight??3)-1;
-            float reach=(ceiling-floor+.5f)/Mathf.Tan(_cameraPitch);
             foreach(var c in room)
-            foreach(float ox in new[]{-.4f,0f,.4f})foreach(float oz in new[]{-.4f,0f,.4f})
+            foreach(float ox in OcclusionSamples)foreach(float oz in OcclusionSamples)
             for(float distance=0;distance<=reach;distance+=.2f)
             {
-                int x=(int)Math.Floor(c.X+ox+CameraBack.X*distance+.5f);
-                int z=(int)Math.Floor(c.Z+oz+CameraBack.Z*distance+.5f);
+                int x=(int)Math.Floor(c.X+ox+cameraBack.X*distance+.5f);
+                int z=(int)Math.Floor(c.Z+oz+cameraBack.Z*distance+.5f);
                 for(int y=floor;y<ceiling;y++)
                 {
                     var block=new Cell(x,z,y);
                     if(DemoWorld.Inside(block)&&_world.Solid(block))
                     {
-                        bool rim=y==floor&&dirs.Any(d=>roomCells.Contains(block+d));
+                        bool rim=y==floor&&(roomCells.Contains(block+dirs[0])||roomCells.Contains(block+dirs[1])||roomCells.Contains(block+dirs[2])||roomCells.Contains(block+dirs[3]));
                         caps[block]=floor+(rim?.2f:0f);
                     }
                 }

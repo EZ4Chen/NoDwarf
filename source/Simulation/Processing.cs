@@ -8,7 +8,13 @@ public static class ProcessingCatalog
         new("potato_meal","煮土豆：2 土豆 + 1 木料 → 2 口粮",BuildKind.Stove,new(){{"potato",2},{"wood",1}},"meal",2),
         new("mushroom_meal","蘑菇餐：2 蘑菇 + 1 木料 → 2 口粮",BuildKind.Stove,new(){{"mushroom",2},{"wood",1}},"meal",2),
         new("cloth","织布：4 棉絮 → 2 布",BuildKind.Loom,new(){{"cotton",4}},"cloth",2),
-        new("bandages","裁绷带：1 布 → 3 绷带",BuildKind.Loom,new(){{"cloth",1}},"bandage",3)};
+        new("bandages","裁绷带：1 布 → 3 绷带",BuildKind.Loom,new(){{"cloth",1}},"bandage",3),
+        new("shirt","裁布衣：2 布 → 布衣",BuildKind.Loom,new(){{"cloth",2}},"shirt",1),
+        new("trousers","裁布裤：2 布 → 布裤",BuildKind.Loom,new(){{"cloth",2}},"trousers",1),
+        new("shield","木盾：4 木料 → 木盾",BuildKind.Workbench,new(){{"wood",4}},"shield",1),
+        new("rubble","碎石整形：2 深板岩碎石 → 2 圆石",BuildKind.Workbench,new(){{"deep_rubble",2}},"cobblestone",2),
+        new("pickaxe","锻镐：2 铁锭 + 1 木料 → 矿镐",BuildKind.Anvil,new(){{"iron",2},{"wood",1}},"pickaxe",1),
+        new("hammer","锻锤：1 铁锭 + 1 木料 → 锻锤",BuildKind.Anvil,new(){{"iron",1},{"wood",1}},"hammer",1)};
     public static ProcessingRecipe? Find(string id)=>All.FirstOrDefault(r=>r.Id==id);
 }
 public sealed partial class DemoWorld

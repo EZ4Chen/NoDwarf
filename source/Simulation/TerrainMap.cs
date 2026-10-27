@@ -67,6 +67,17 @@ public sealed class TerrainMap
     public int GeneratorVersion => Generation is not null?3:Region is null ? 1 : 2;
     public Ground this[int x, int z] => _surface[x, z];
     public Cell At(int x, int z) => new(x, z, _surface[x, z].Level);
+    // Captured by the simulation owner, then read only by mesh workers. Ore layout
+    // is immutable after construction; surface/tree flags and excavation are not.
+    internal TerrainMap CaptureMeshSnapshot() => new(this);
+    private TerrainMap(TerrainMap source)
+    {
+        Seed=source.Seed;Flat=source.Flat;Region=source.Region;Generation=source.Generation;
+        EcologyVersion=source.EcologyVersion;Revision=source.Revision;
+        Array.Copy(source._surface,_surface,source._surface.Length);
+        _ores=source._ores;
+        _excavated.UnionWith(source._excavated);
+    }
     public TerrainMap(int seed, bool flat = false, string? region = null,WorldGenerationSettings? generation=null,int ecologyVersion=2)
     {
         Seed = seed; Flat = flat;

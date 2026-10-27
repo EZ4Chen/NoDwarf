@@ -51,6 +51,8 @@ public partial class Main
         Button(box,"移除居民",()=>RunCommand("residents off"));
         Button(box,"添加 / 恢复居民",()=>RunCommand("residents on"));
         Button(box,"立即完成现有施工规划",()=>RunCommand("finish"));
+        var waterTools=new HBoxContainer();box.AddChild(waterTools);
+        Button(waterTools,"选中格注水 1000 L",()=>EditSelectedWater(false));Button(waterTools,"选中格排水",()=>EditSelectedWater(true));
         Button(box,"查看寻路统计",()=>{RunCommand("navstats");ToggleConsole();});
         Button(box,"显示 / 隐藏未知岩层（开发模式）",()=>RunCommand(_revealUnknown?"fog on":"fog off"));
         var time=new HBoxContainer();box.AddChild(time);

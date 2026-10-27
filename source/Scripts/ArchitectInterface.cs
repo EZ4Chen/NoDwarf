@@ -62,9 +62,9 @@ public partial class Main
         _buildPages["区域"].AddChild(Text("划定范围后，右键退出工具 → 点击区域设置",12,Muted));
         var rows=new Dictionary<string,HBoxContainer>();
         foreach(var name in new[]{"结构","家具","楼梯","生产"}){var row=new HBoxContainer();_buildPages[name].AddChild(row);rows[name]=row;}
-        foreach(var kind in new[]{BuildKind.Wall,BuildKind.Door,BuildKind.Floodgate,BuildKind.Log,BuildKind.Planks,BuildKind.Cobblestone,BuildKind.StoneBricks,BuildKind.LogStairs,BuildKind.PlankStairs,BuildKind.CobbleStairs,BuildKind.BrickStairs,BuildKind.Furnace,BuildKind.Anvil,BuildKind.Stove,BuildKind.Bed,BuildKind.Campfire,BuildKind.Mill,BuildKind.Loom})
+        foreach(var kind in new[]{BuildKind.Wall,BuildKind.Door,BuildKind.Floodgate,BuildKind.Log,BuildKind.Planks,BuildKind.Cobblestone,BuildKind.StoneBricks,BuildKind.LogStairs,BuildKind.PlankStairs,BuildKind.CobbleStairs,BuildKind.BrickStairs,BuildKind.Furnace,BuildKind.Anvil,BuildKind.Stove,BuildKind.Bed,BuildKind.Campfire,BuildKind.Mill,BuildKind.Loom,BuildKind.Workbench})
         {
-            string id=kind.ToString(),category=BlockCatalog.IsStairs(kind)?"楼梯":kind is BuildKind.Bed or BuildKind.Campfire?"家具":kind is BuildKind.Furnace or BuildKind.Anvil or BuildKind.Stove or BuildKind.Mill or BuildKind.Loom?"生产":"结构";
+            string id=kind.ToString(),category=BlockCatalog.IsStairs(kind)?"楼梯":kind is BuildKind.Bed or BuildKind.Campfire?"家具":kind is BuildKind.Furnace or BuildKind.Anvil or BuildKind.Stove or BuildKind.Mill or BuildKind.Loom or BuildKind.Workbench?"生产":"结构";
             Tool(rows[category],id,DemoWorld.NameOf(kind),id,DemoWorld.NameOf(kind)+" · "+DemoWorld.CostOf(kind)+"\n点击规划，居民搬料施工。");
         }
         IconButton(rows["楼梯"],"rotate","旋转 [R]",RotateStairs,true);

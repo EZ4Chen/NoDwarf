@@ -54,7 +54,7 @@ public sealed partial class DemoWorld
         if(!Workers.Contains(worker))return; // Creative completion never creates character XP.
         worker.Person.Earn(skill,amount);TryAutoTalents(worker);
     }
-    private string JobSkill(DemoJob job)=>job.Processing?(ProcessingCatalog.Find(job.Recipe)?.Station==BuildKind.Stove?"cooking":"woodwork"):job.Farming||job.PlantTree?"growing":job.Chop?"woodwork":job.Demolish?"construction":job.Cook?"cooking":job.Dig?"mining":job.Smelt?"smelting":job.Forge?"smithing":
+    private string JobSkill(DemoJob job)=>job.Processing?(ProcessingCatalog.Find(job.Recipe)?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",_=>"woodwork"}):job.Farming||job.PlantTree?"growing":job.Chop?"woodwork":job.Demolish?"construction":job.Cook?"cooking":job.Dig?"mining":job.Smelt?"smelting":job.Forge?"smithing":
         job.Build is BuildKind.Log or BuildKind.Planks or BuildKind.PlankStairs or BuildKind.LogStairs?"woodwork":"construction";
     private double GearWorkBonus(DemoWorker worker,string skill)=>worker.Person.GearBonuses.GetValueOrDefault(skill);
     private void RefreshWeight(DemoWorker worker,IEnumerable<ItemStack>? owned=null)

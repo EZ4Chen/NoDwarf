@@ -5,6 +5,7 @@ public partial class Main
 {
     private MeshInstance3D _waterMesh=null!;
     private Button _gateAction=null!;
+    private StandardMaterial3D? _waterMaterial;
     private (DemoWorld? World,long Revision,float Top,int Stamp,int X,int Z,int Size) _waterKey;
     private void RefreshFluidVisuals()
     {
@@ -12,7 +13,13 @@ public partial class Main
         if(_waterMesh is not null&&_waterKey==key)return;_waterKey=key;
         if(_waterMesh is null){_waterMesh=new MeshInstance3D{CastShadow=GeometryInstance3D.ShadowCastingSetting.Off};AddChild(_waterMesh);}
         var st=new SurfaceTool();st.Begin(Mesh.PrimitiveType.Triangles);
-        st.SetMaterial(new StandardMaterial3D{AlbedoColor=new Color(.19f,.52f,.68f,.72f),Transparency=BaseMaterial3D.TransparencyEnum.Alpha,Roughness=.32f,CullMode=BaseMaterial3D.CullModeEnum.Disabled});
+        if(_waterMaterial is null)
+        {
+            _waterMaterial=(StandardMaterial3D)BlockTextures.Material("nodwarf:water").Duplicate();
+            var tint=_waterMaterial.AlbedoColor;tint.A=.72f;_waterMaterial.AlbedoColor=tint;
+            _waterMaterial.Transparency=BaseMaterial3D.TransparencyEnum.Alpha;_waterMaterial.Roughness=.32f;_waterMaterial.CullMode=BaseMaterial3D.CullModeEnum.Disabled;
+        }
+        st.SetMaterial(_waterMaterial);
         int faces=0;float radius=_camera.Size*1.5f+12;
         foreach(var f in _world.Fluids.Cells.Values)
         {
@@ -37,7 +44,7 @@ public partial class Main
     {
         _gateAction.Visible=false;
         if(_selectedWorker>=0||_selectedCell is not Cell c||!CurrentView.Known(_world,c))return;
-        var description=_world.FluidDescription(c);if(description!="")_selection.Text+="\n"+description;
+        var description=_world.FluidDescription(c);if(description!=""){_selection.Text+="\n"+description;BottomLeft(_selectionPanel,360,400);_selectionPanel.OffsetBottom=-76;}
         if(_world.Buildings.TryGetValue(c,out var b)&&b.Kind==BuildKind.Floodgate)
         {_gateAction.Visible=true;_gateAction.Text=_world.GateOpen(c)?"关闭闸门":"打开闸门";}
     }

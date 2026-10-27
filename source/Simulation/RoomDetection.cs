@@ -7,6 +7,8 @@ public sealed partial class DemoWorld
         public readonly HashSet<Cell> Cells = new();
         public bool Outside;
         public int Level, MinX, MaxX, MinZ, MaxZ;
+        public RoomEnvelope? Envelope;
+        public RoomHeat? Heat;
     }
     private readonly List<RoomRegion> _roomRegions = new();
     private readonly Stack<Cell> _roomFrontier = new();
@@ -15,9 +17,14 @@ public sealed partial class DemoWorld
     {
         // Include the boundary, floor and headroom dependencies of every visited cell.
         // An outdoor result is a connected witness to an opening, not a whole-map flood.
-        _roomRegions.RemoveAll(r => Math.Abs(changed.Level - r.Level) <= 1 &&
+        int removed=_roomRegions.RemoveAll(r => changed.Level >= r.Level - 1 &&
             changed.X >= r.MinX - 1 && changed.X <= r.MaxX + 1 &&
             changed.Z >= r.MinZ - 1 && changed.Z <= r.MaxZ + 1);
+        // A cached outdoor witness may become a new neighbouring room. Also watch the
+        // bounded wall scan, where excavating solid rock can expose an uncached room.
+        if(removed>0||_roomHeat.Any(h=>changed.Level>=h.Region.Level-1&&
+            changed.X>=h.Region.MinX-2&&changed.X<=h.Region.MaxX+2&&
+            changed.Z>=h.Region.MinZ-2&&changed.Z<=h.Region.MaxZ+2))_roomHeatLinksDirty=true;
     }
 
     private RoomRegion FindRoomRegion(Cell start)

@@ -13,9 +13,10 @@ public partial class TerrainView
     private readonly Dictionary<(int,int),int> _coverCounts=new();
     private void UpdateGroundCover(DemoWorld world,WorldView view)
     {
-        bool all=_coverWorld!=world||_coverTop!=view.Top;
-        if(!all&&_coverRevision==world.Terrain.Revision&&_coverWorldRevision==world.Revision)return;
-        if(_coverWorld!=world){foreach(var n in _coverChunks.Values)if(IsInstanceValid(n)){n.GetParent()?.RemoveChild(n);n.QueueFree();}_coverChunks.Clear();_coverCounts.Clear();_coverMeshes.Clear();}
+        bool all=_coverWorld!=world;
+        if(!all&&_coverRevision==world.Terrain.Revision&&_coverWorldRevision==world.Revision)
+        {if(_coverTop!=view.Top)UpdateCoverClip(view.Top);return;}
+        if(_coverWorld!=world){foreach(var n in _coverChunks.Values)if(IsInstanceValid(n)){n.GetParent()?.RemoveChild(n);n.QueueFree();}_coverChunks.Clear();_coverCounts.Clear();_coverMeshes.Clear();_coverSlices.Clear();}
         var occupied=world.Buildings.Keys.Concat(world.Farms.Keys).Concat(world.Stockpiles).ToHashSet();
         var dirty=new HashSet<(int,int)>();
         void Dirty(Cell c){if(DemoWorld.Inside(c))dirty.Add((c.X/32*32,c.Z/32*32));}
@@ -28,12 +29,12 @@ public partial class TerrainView
         foreach(var key in dirty)
         {
             if(_coverChunks.Remove(key,out var old)&&IsInstanceValid(old)){RemoveChild(old);old.QueueFree();}
-            _coverCounts[key]=0;
+            _coverCounts[key]=0;_coverSlices[key]=new();
             if(world.Terrain.Region?.Modern!=true)continue;
             var groups=new Dictionary<string,List<Transform3D>>();
             for(int x=key.Item1;x<Math.Min(key.Item1+32,TerrainMap.Size);x++)for(int z=key.Item2;z<Math.Min(key.Item2+32,TerrainMap.Size);z++)
             {
-                var c=world.Surface(x,z);if(c.Level+.85f>view.Top)continue;
+                var c=world.Surface(x,z);
                 string? type=GroundCover.At(world,c);if(type is null)continue;
                 if(!groups.TryGetValue(type,out var list))groups[type]=list=new();
                 float roll=(float)world.Terrain.Hash(x+211,z+997),height=type=="dead_bush"?.45f:.65f+roll*.35f;
@@ -54,13 +55,14 @@ public partial class TerrainView
                     BlockTextures.Quad(st,new(0,1,-.5f),new(0,1,.5f),new(0,0,.5f),new(0,0,-.5f));
                     st.GenerateNormals();mesh=st.Commit();_coverMeshes[group.Key]=mesh;
                 }
+                var sorted=group.Value.OrderBy(t=>t.Origin.Y).ToArray();
                 var mm=new MultiMesh{TransformFormat=MultiMesh.TransformFormatEnum.Transform3D,Mesh=mesh,InstanceCount=group.Value.Count};
-                for(int i=0;i<group.Value.Count;i++)mm.SetInstanceTransform(i,group.Value[i]);
+                for(int i=0;i<group.Value.Count;i++)mm.SetInstanceTransform(i,sorted[i]);
                 holder.AddChild(new MultiMeshInstance3D{Multimesh=mm,CastShadow=GeometryInstance3D.ShadowCastingSetting.Off});
-                _coverCounts[key]+=group.Value.Count;
+                _coverSlices[key].Add(new(mm,sorted.Select(t=>t.Origin.Y+.835f).ToArray()));
             }
         }
-        VisibleCoverInstances=_coverCounts.Values.Sum();_coverWorld=world;_coverTop=view.Top;
+        UpdateCoverClip(view.Top);_coverWorld=world;
         _coverRevision=world.Terrain.Revision;_coverWorldRevision=world.Revision;_coverOccupants=occupied;
     }
 }

@@ -7,6 +7,22 @@ namespace NoDwarf;
 public static class BlockTextures
 {
     private static readonly Dictionary<string, StandardMaterial3D> Cache = new();
+    private static readonly Dictionary<string,Texture2D> Textures = new();
+    private static Texture2D WorldTexture(string path)
+    {
+        if(Textures.TryGetValue(path,out var cached))return cached;
+        Texture2D texture=GD.Load<Texture2D>(path);
+        // Packs may arrive with 2D import defaults. A mipmap sampler alone cannot
+        // reduce distant aliasing unless the texture actually contains mip levels.
+        using var image=texture.GetImage();
+        if(!image.HasMipmaps())
+        {
+            if(image.IsCompressed()&&image.Decompress()!=Error.Ok)throw new IOException("Cannot decompress world texture: "+path);
+            if(image.GenerateMipmaps()!=Error.Ok)throw new IOException("Cannot generate world texture mipmaps: "+path);
+            texture=ImageTexture.CreateFromImage(image);
+        }
+        return Textures[path]=texture;
+    }
     public sealed class Entry
     {
         public bool Cutout {get;set;}
@@ -35,7 +51,7 @@ public static class BlockTextures
         string tint=top?(e.TopTint??e.Tint):e.Tint;string path=Pack.Root+file;string key=path+":"+tint+":"+e.Cutout;
         if(Cache.TryGetValue(key,out var cached))return cached;
         var mat=new StandardMaterial3D{Roughness=1,TextureFilter=BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,CullMode=BaseMaterial3D.CullModeEnum.Disabled};
-        if(ResourceLoader.Exists(path)){mat.AlbedoTexture=GD.Load<Texture2D>(path);mat.AlbedoColor=new Color(tint);}
+        if(ResourceLoader.Exists(path)){mat.AlbedoTexture=WorldTexture(path);mat.AlbedoColor=new Color(tint);}
         else mat.AlbedoColor=new Color(BlockCatalog.Get(id).Color);
         if(e.Cutout){mat.Transparency=BaseMaterial3D.TransparencyEnum.AlphaScissor;mat.AlphaScissorThreshold=.4f;}
         Cache[key]=mat;return mat;
@@ -49,6 +65,8 @@ public static class BlockTextures
         return map.GetPixel((int)((1-heat)*(map.GetWidth()-1)),(int)((1-wet)*(map.GetHeight()-1)));
     }
     public static StandardMaterial3D TerrainMaterial(string id,bool top,RegionProfile? profile)
+        => TerrainTextureStyle.Apply(BiomeTerrainMaterial(id,top,profile));
+    private static StandardMaterial3D BiomeTerrainMaterial(string id,bool top,RegionProfile? profile)
     {
         if(profile?.Modern!=true||id is not ("nodwarf:grass" or "nodwarf:dry_grass" or "nodwarf:dry_grass_ramp"))return Material(id,top);
         var tint=BiomeGrassColor(profile);string key=$"biome:{id}:{top}:{tint.ToHtml()}";
@@ -129,8 +147,12 @@ public static class BlockTextures
     }
     public static void Quad(SurfaceTool s, Vector3 a, Vector3 b, Vector3 c, Vector3 d, float width=1, float height=1)
     {
-        var points=new[]{a,b,c,d}; var uv=new[]{new Vector2(0,0),new Vector2(width,0),new Vector2(width,height),new Vector2(0,height)};
-        foreach(int i in new[]{0,2,1,0,3,2}) { s.SetUV(uv[i]); s.AddVertex(points[i]); }
+        s.SetUV(new(0,0));s.AddVertex(a);
+        s.SetUV(new(width,height));s.AddVertex(c);
+        s.SetUV(new(width,0));s.AddVertex(b);
+        s.SetUV(new(0,0));s.AddVertex(a);
+        s.SetUV(new(0,height));s.AddVertex(d);
+        s.SetUV(new(width,height));s.AddVertex(c);
     }
     public static void Box(Node parent, Vector3 position, Vector3 size, string id)
     {

@@ -32,6 +32,7 @@ public static class SettlementChecks
         {
             var c=origin+new Cell(x,z);
             if(x==0||z==0||x==5||z==5)home.Buildings[c]=new(c,x==2&&z==5?BuildKind.Door:BuildKind.Wall);
+            if((x==0||z==0||x==5||z==5)&&!(x==2&&z==5))home.Buildings[c+new Cell(0,0,1)]=new(c+new Cell(0,0,1),BuildKind.Wall);
             var roof=c+new Cell(0,0,2);home.Buildings[roof]=new(roof,BuildKind.Planks);
         }
         var stove=origin+new Cell(1,1);var bed=origin+new Cell(4,1);var fire=origin+new Cell(1,4);var stand=origin+new Cell(2,2);

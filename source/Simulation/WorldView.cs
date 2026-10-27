@@ -7,22 +7,24 @@ public readonly record struct WorldView(int? Level, bool RevealAll = false, IRea
     public float Top => Level is int level ? level + 1 : float.PositiveInfinity;
     public float CellTop(Cell c)=>WallCaps is not null && WallCaps.TryGetValue(c,out var cap)?Math.Min(Top,cap):Top;
     public bool InSlice(Cell c) => c.Level < CellTop(c);
-    public bool Known(DemoWorld world, Cell c)
+    public bool Known(DemoWorld world, Cell c) => Known(world.Terrain,c);
+    public bool Known(TerrainMap terrain, Cell c)
     {
         if(RevealAll) return true;
-        bool Open(Cell p) => DemoWorld.Inside(p) && !world.Terrain.Solid(p) && !world.Terrain.Ramp(p);
-        if(Open(c) || world.Terrain.Ramp(c)) return true;
+        bool Open(Cell p) => DemoWorld.Inside(p) && !terrain.Solid(p) && !terrain.Ramp(p);
+        if(Open(c) || terrain.Ramp(c)) return true;
         foreach(var d in Neighbors) if(Open(c+d)) return true;
         return false;
     }
     // A diagonal rim is a silhouette, not discovery: never reveal its actual material or contents.
-    public bool CornerRim(DemoWorld world,Cell c)
+    public bool CornerRim(DemoWorld world,Cell c) => CornerRim(world.Terrain,c);
+    public bool CornerRim(TerrainMap terrain,Cell c)
     {
-        if(!world.Terrain.Solid(c))return false;
+        if(!terrain.Solid(c))return false;
         foreach(var delta in Diagonals)
         {
             var p=c+delta;
-            if(DemoWorld.Inside(p)&&!world.Terrain.Solid(p)&&!world.Terrain.Ramp(p))return !Known(world,c);
+            if(DemoWorld.Inside(p)&&!terrain.Solid(p)&&!terrain.Ramp(p))return !Known(terrain,c);
         }
         return false;
     }

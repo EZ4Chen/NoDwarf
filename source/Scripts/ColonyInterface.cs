@@ -31,6 +31,7 @@ public partial class Main
     private void RefreshOrders()
     {
         if(_orderList is null||!_inspector.Visible)return;
+        RefreshProductionTargets();
         if(_orderWorld!=_world){Clear(_orderList);_orderRows.Clear();_orderWorld=_world;}
         var orders=_world.Jobs.Where(j=>j.Production).ToArray();
         foreach(int id in _orderRows.Keys.Where(id=>!orders.Any(j=>j.Id==id)).ToArray())

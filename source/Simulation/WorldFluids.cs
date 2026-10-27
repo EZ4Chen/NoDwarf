@@ -34,7 +34,7 @@ public sealed partial class DemoWorld
     {
         if(!Buildings.TryGetValue(c,out var b)||b.Kind!=BuildKind.Floodgate)return false;
         if(!_openFloodgates.Remove(c))_openFloodgates.Add(c);
-        Navigation.Invalidate(c);Fluids.GeometryChanged(c);Revision++;
+        Navigation.Invalidate(c);InvalidateRooms(c);Fluids.GeometryChanged(c);Revision++;
         Log(GateOpen(c)?"闸门已打开。":"闸门已关闭，格中水量保留。");return true;
     }
     public void RestoreFluids(FluidArchive? archive)
@@ -48,7 +48,7 @@ public sealed partial class DemoWorld
     public string FluidDescription(Cell c)
     {
         string text="";
-        if(Fluids.Cells.TryGetValue(c,out var f))text=$"水 {f.Amount} L · 水深 {Fluids.Depth(c):F2} m · {f.Temperature:F1}°C";
+        if(Fluids.Cells.TryGetValue(c,out var f))text=$"水 {f.Amount} L · 本格水深 {Fluids.Depth(c):F2} m · {f.Temperature:F1}°C";
         var source=Fluids.Sources.FirstOrDefault(s=>s.Discovered&&(s.Cell==c||FluidSimulation.Adjacent.Any(d=>s.Cell+d==c)));
         if(source is not null)text+=(text==""?"":"\n")+$"含水层 {source.Stored}/{source.Capacity} L · 水头 {source.CurrentHead:F1} m";
         if(Buildings.TryGetValue(c,out var b)&&b.Kind==BuildKind.Floodgate)text+=(text==""?"":"\n")+(GateOpen(c)?"闸门：开启":"闸门：关闭");

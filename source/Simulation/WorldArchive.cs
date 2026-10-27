@@ -13,7 +13,11 @@ public sealed class WorkerState
 }
 public sealed class WorldSnapshot
 {
-    public int Version {get;set;}=12;
+    public int Version {get;set;}=14;
+    public ProductionOrder[] ProductionOrders {get;set;}=Array.Empty<ProductionOrder>();
+    public double ProductionElapsed {get;set;}
+    public RoomClimateState[] RoomClimates {get;set;}=Array.Empty<RoomClimateState>();
+    public double RoomTemperatureUpdatedAt {get;set;}
     public FluidArchive? Fluids {get;set;}
     public int ClimateVersion {get;set;}
     public string? WeatherOverride {get;set;}
@@ -46,6 +50,7 @@ public sealed partial class DemoWorld
     public static readonly JsonSerializerOptions SaveOptions=new(){WriteIndented=true,Converters={new JsonStringEnumConverter()}};
     private static WorkerState SaveWorker(DemoWorker w)=>new(){Id=w.Id,Name=w.Name,Appearance=w.Appearance,Person=w.Person,X=w.X,Z=w.Z,Level=w.Level,TravelFrom=w.TravelFrom,Path=w.Path.ToArray(),JobId=w.Job?.Id,Status=w.Status};
     public string SaveJson()=>JsonSerializer.Serialize(new WorldSnapshot{
+        ProductionOrders=ProductionOrders.ToArray(),ProductionElapsed=_productionElapsed,RoomClimates=SaveRoomClimates(),RoomTemperatureUpdatedAt=_lastRoomTemperatureUpdate,
         Fluids=Fluids.Save(_openFloodgates),ClimateVersion=ClimateVersion,WeatherOverride=WeatherOverride,EcologyVersion=Terrain.EcologyVersion,Seed=Terrain.Seed,Flat=Terrain.Flat,Region=Terrain.Region?.Id,GeneratorVersion=Terrain.GeneratorVersion,Trees=Trees.Values.ToArray(),StorageZones=StorageZones.ToArray(),Fires=FireFuel.Where(f=>Buildings.TryGetValue(f.Key,out var b)&&b.Kind==BuildKind.Campfire).Select(f=>new FireState(f.Key,f.Value)).ToArray(),Farms=Farms.Values.ToArray(),FarmElapsed=_farmElapsed,Damage=_blockDamage.Values.Where(d=>d.Block==BlockAt(d.Cell)).ToArray(),Excavated=Terrain.Excavated.ToArray(),Buildings=Buildings.Values.ToArray(),Items=Items.ToArray(),Stockpiles=Stockpiles.ToArray(),Jobs=Jobs.ToArray(),
         Generation=Terrain.Generation,GrowingZones=GrowingZones.Values.ToArray(),Workers=Workers.Select(SaveWorker).ToArray(),RemovedWorkers=_removedResidents?.Select(SaveWorker).ToArray(),Blueprint=Blueprint.ToArray(),DemoStage=Demo?.Stage,UndergroundStage=Underground?.Stage,SimulationTime=_simulationTime,ResidentElapsed=_residentElapsed,Research=Research},SaveOptions);
     public static DemoWorld LoadJson(string json)
@@ -55,7 +60,7 @@ public sealed partial class DemoWorld
         if(s.EcologyVersion is not (1 or 2)||(s.Version<10&&s.EcologyVersion!=1)||
            (s.Generation is not null&&s.Generation.EcologyVersion!=s.EcologyVersion)||
            (s.Region is not null&&!(s.EcologyVersion==1?RegionProfile.Legacy:RegionProfile.All).Any(p=>p.Id==s.Region))||
-           s.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12)||s.GeneratorVersion is not (1 or 2 or 3)||
+           s.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14)||s.GeneratorVersion is not (1 or 2 or 3)||
            (s.GeneratorVersion==3&&(s.Version<9||s.Generation is null||s.Flat||s.Region!=s.Generation.Site.Region||s.Seed!=s.Generation.LocalSeed))||
            (s.GeneratorVersion!=3&&s.Generation is not null)||
            (s.GeneratorVersion==2&&(s.Version<8||s.Flat||!RegionProfile.All.Any(p=>p.Id==s.Region)))||
@@ -190,11 +195,13 @@ public sealed partial class DemoWorld
         if(s.UndergroundStage is int us){if(us is <0 or >8)throw new InvalidDataException("地下示例阶段无效。");w.Underground=new UndergroundDemo(w.Camp);w.Underground.RestoreStage(us);}
         w._nextItem=w.Items.Select(i=>i.Id).DefaultIfEmpty().Max();w._nextJob=w.Jobs.Select(j=>j.Id).DefaultIfEmpty().Max();
         w._nextConstructionGroup=w.Jobs.Select(j=>j.ConstructionGroup).DefaultIfEmpty().Max();w._simulationTime=s.SimulationTime;
+        w.RestoreRoomClimates(s.RoomClimates,s.RoomTemperatureUpdatedAt);
         if(s.Version<4)
             foreach(string seed in new[]{"grain_seed","mushroom_spawn"})
                 if(w.Total(seed)==0)w.SpawnItem(seed,12,w.Camp+new Cell(5,8));
         if(s.Version<5&&w.Total("sapling")==0)w.SpawnItem("sapling",12,w.Camp+new Cell(5,8));
         if(s.Version<7)foreach(string seed in new[]{"potato_seed","cotton_seed","birch_sapling","pine_sapling"})if(w.Total(seed)==0)w.SpawnItem(seed,12,w.Camp+new Cell(5,8));
+        w.RestoreProductionOrders(s.ProductionOrders,s.ProductionElapsed);
         w.ValidateWorkshop();w.Revision++;w.Log("已读取营地，材料与在途任务已恢复。");return w;
     }
 }

@@ -1,6 +1,6 @@
 namespace NoDwarf.Simulation;
 
-public enum BuildKind { Wall, Door, Furnace, Anvil, Log, Planks, Cobblestone, StoneBricks, LogStairs, PlankStairs, CobbleStairs, BrickStairs, Stove, Bed, Campfire, Mill, Loom, Floodgate }
+public enum BuildKind { Wall, Door, Furnace, Anvil, Log, Planks, Cobblestone, StoneBricks, LogStairs, PlankStairs, CobbleStairs, BrickStairs, Stove, Bed, Campfire, Mill, Loom, Floodgate, Workbench }
 public readonly record struct Cell(int X, int Z, int Level = 0)
 {
     public static Cell operator +(Cell a, Cell b) => new(a.X + b.X, a.Z + b.Z, a.Level + b.Level);
@@ -317,8 +317,8 @@ public sealed partial class DemoWorld
         _orderedJobs = null;
         _simulationTime += dt;
         Fluids.Advance(dt);
-        UpdateHomes(dt);UpdateTrees(dt);
-        UpdateFarming(dt);
+        UpdateHomes(dt);UpdateRoomTemperatures();UpdateTrees(dt);
+        UpdateFarming(dt);UpdateProductionOrders(dt);
         _residentElapsed += dt;
         if(_residentElapsed>=2){UpdateResidentNeeds(_residentElapsed);_residentElapsed=0;}
         _assignElapsed += dt;
@@ -634,7 +634,7 @@ public sealed partial class DemoWorld
             }
     }
 
-    private bool Boundary(Cell c) => NaturalSolid(c) || Buildings.TryGetValue(c, out var b) && (BlockCatalog.IsWall(b.Kind) || b.Kind == BuildKind.Door);
+    private bool Boundary(Cell c) => NaturalSolid(c) || Buildings.TryGetValue(c, out var b) && (BlockCatalog.IsWall(b.Kind) || b.Kind == BuildKind.Door || b.Kind==BuildKind.Floodgate&&!GateOpen(c));
     public event Action<string>? Logged;
     public void Log(string message)
     {

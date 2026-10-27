@@ -4,8 +4,10 @@ namespace NoDwarf.Simulation;
 // Keeps real work/material/needs/navigation rules; setup edits are outside timing.
 public sealed class RealtimeStressScenario
 {
-    public DemoWorld World { get; } = new(flat: true);
-    public Cell ViewCenter => new(102, 105, 0);
+    public DemoWorld World { get; private set; } = new(flat: true);
+    private Cell _offset;
+    private Cell P(Cell c)=>c+_offset;
+    public Cell ViewCenter => P(new(102, 105, 0));
     public int GateChanges { get; private set; }
     public int QueuedConstruction { get; private set; }
     public int CompletedConstruction { get; private set; }
@@ -17,7 +19,7 @@ public sealed class RealtimeStressScenario
     private readonly HashSet<int> _tracked = new();
     private readonly Dictionary<string, int> _levels = new();
     private readonly Queue<Cell> _buildSites = new();
-    private readonly Cell _gate = new(100, 100);
+    private Cell _gate = new(100, 100);
 
     public RealtimeStressScenario()
     {
@@ -89,6 +91,33 @@ public sealed class RealtimeStressScenario
         if (w.FindPath(new Cell(85, 104, -3), new Cell(120, 104, 3)) is null)
             throw new InvalidOperationException("Stress floors must connect via real stairs");
         Sample();
+    }
+
+    public void AddCurrentEnvironment()
+    {
+        var previous=World;var next=new DemoWorld(region:"temperate");_offset=new(25,22,next.Camp.Level);
+        // Preserve the identical 100-person workload, transplant it into a regional map.
+        // Flatten only the test yard; surrounding region trees/grass remain rendered.
+        foreach(var tree in next.Trees.Values.Where(t=>t.Cell.X>=90&&t.Cell.X<166&&t.Cell.Z>=100&&t.Cell.Z<165).ToArray())
+        {next.Trees.Remove(tree.Cell);next.Terrain.SetTree(tree.Cell,false);}
+        for(int x=65;x<141;x++)for(int z=78;z<143;z++)
+        {
+            var p=P(new(x,z));for(int y=p.Level;y<=next.Terrain[p.X,p.Z].Level;y++)next.Terrain.Excavate(new(p.X,p.Z,y));
+            var floor=p+new Cell(0,0,-1);if(!next.Solid(floor))next.Buildings[floor]=new(floor,BuildKind.Cobblestone);
+        }
+        foreach(var cell in previous.Terrain.Excavated)next.Terrain.Excavate(P(cell));
+        foreach(var b in previous.Buildings.Values)next.Buildings[P(b.Cell)]=b with {Cell=P(b.Cell)};
+        next.Workers.Clear();foreach(var worker in previous.Workers){worker.X+=_offset.X;worker.Z+=_offset.Z;worker.Level+=_offset.Level;next.Workers.Add(worker);_levels[worker.Id]=worker.Level;}
+        next.Items.Clear();foreach(var item in previous.Items){item.Cell=P(item.Cell);next.Items.Add(item);}
+        next.Jobs.Clear();foreach(var job in previous.Jobs){job.Cell=P(job.Cell);next.Jobs.Add(job);}
+        next.Stockpiles.Clear();foreach(var cell in previous.Stockpiles)next.Stockpiles.Add(P(cell));
+        next.StorageZones.Clear();foreach(var zone in previous.StorageZones){zone.Cells=zone.Cells.Select(P).ToHashSet();next.StorageZones.Add(zone);}
+        var sites=_buildSites.Select(P).ToArray();_buildSites.Clear();foreach(var cell in sites)_buildSites.Enqueue(cell);_gate=P(_gate);
+        var basin=new Cell(147,94,_offset.Level-2);
+        for(int x=0;x<6;x++)for(int z=0;z<6;z++)for(int y=0;y<3;y++)next.Terrain.Excavate(basin+new Cell(x,z,y));
+        next.Fluids.AddSource(new Aquifer{Cell=basin+new Cell(-1,3),Capacity=80000,Stored=80000,Head=basin.Level+3,Rate=500},true);
+        next.SetWeather("rain");World=DemoWorld.LoadJson(next.SaveJson());
+        foreach(var worker in World.Workers)if(!World.Walkable(worker.Tile))throw new InvalidOperationException("Regional benchmark spawn blocked");
     }
 
     private void Put(Cell c, BuildKind kind) => World.Buildings[c] = new Building(c, kind, 0);

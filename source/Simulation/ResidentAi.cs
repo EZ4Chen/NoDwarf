@@ -26,6 +26,7 @@ public sealed partial class DemoWorld
         var p=w.Person;var owned=Inventory(w).OrderBy(i=>i.Id).ToArray();int offset=Math.Clamp(inventoryOffset,0,owned.Length);
         var nearby=NearbyItems(w).OrderBy(i=>Math.Abs(i.Cell.X-w.Tile.X)+Math.Abs(i.Cell.Z-w.Tile.Z)).Take(8).ToArray();
         var others=Workers.Where(o=>o!=w).OrderBy(o=>Math.Abs(o.Tile.X-w.Tile.X)+Math.Abs(o.Tile.Z-w.Tile.Z)).Take(8);
+        var room=RoomAt(w.Tile);
         return JsonSerializer.Serialize(new
         {
             ok=true,contractVersion=1,resident=w.Id,name=w.Name,expectedVersion=p.DecisionVersion,expectedResearch=Research.Version,
@@ -33,6 +34,7 @@ public sealed partial class DemoWorld
             schedule=p.Schedule,currentHour=Calendar.Hour,currentSchedule=ScheduledMode(w),workPriorities=p.WorkPriorities,
             workTypes=ResidentWork.Types.Select(t=>new{id=t.Id,name=t.Name,available=t.Available}),
             needs=new{food=(int)p.Hunger,rest=(int)p.Rest,recreation=(int)p.Recreation,mood=(int)p.Mood},
+            environment=new{indoors=room.Enclosed,temperature=Math.Round(room.Temperature,1),quality=room.Enclosed?(int?)room.Quality:null},
             health=new{dead=p.Dead,incapacitated=p.Incapacitated,mobility=Math.Round(p.Mobility,2),manipulation=Math.Round(p.Manipulation,2),
                 untreated=p.Injuries.Count(i=>!i.Treated&&i.Kind!="missing")},
             points=p.Points,route=p.AutoSkill,traits=p.Traits,

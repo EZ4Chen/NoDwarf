@@ -74,6 +74,7 @@ public static class BlockCatalog
         new("nodwarf:floodgate", "闸门", BlockShape.Fixture, "637f87", new(Stone: 3)),
         new("nodwarf:water", "水", BlockShape.Empty, "3d92bb"),
         new("nodwarf:wood_door", "木门", BlockShape.Fixture, "a37a50", new(Wood: 2)),
+        new("nodwarf:workbench","加工台",BlockShape.Fixture,"aa8b62",new(Wood:6)),
         new("nodwarf:mill","石磨",BlockShape.Fixture,"898b80",new(Stone:6,Wood:2)),
         new("nodwarf:loom","织机",BlockShape.Fixture,"b18e60",new(Wood:6)),
         new("nodwarf:stove", "炊炉", BlockShape.Fixture, "888278", new(Stone: 4)),
@@ -104,7 +105,7 @@ public static class BlockCatalog
     public static string Id(BuildKind kind) => kind switch
     {
         BuildKind.Floodgate=>"nodwarf:floodgate", BuildKind.Wall => "nodwarf:stone_wall", BuildKind.Door => "nodwarf:wood_door",
-        BuildKind.Mill=>"nodwarf:mill",BuildKind.Loom=>"nodwarf:loom",BuildKind.Stove=>"nodwarf:stove",BuildKind.Bed=>"nodwarf:bed",BuildKind.Campfire=>"nodwarf:campfire",
+        BuildKind.Workbench=>"nodwarf:workbench",BuildKind.Mill=>"nodwarf:mill",BuildKind.Loom=>"nodwarf:loom",BuildKind.Stove=>"nodwarf:stove",BuildKind.Bed=>"nodwarf:bed",BuildKind.Campfire=>"nodwarf:campfire",
         BuildKind.Furnace => "nodwarf:furnace", BuildKind.Anvil => "nodwarf:anvil",
         BuildKind.Log => "nodwarf:log", BuildKind.Planks => "nodwarf:planks",
         BuildKind.Cobblestone => "nodwarf:cobblestone", BuildKind.StoneBricks => "nodwarf:stone_bricks",

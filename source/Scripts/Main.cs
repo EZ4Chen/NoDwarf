@@ -98,16 +98,26 @@ public partial class Main : Node3D
         if (OS.GetCmdlineUserArgs().Contains("--voxel-tree-preview-test")) CaptureVoxelTreePreview();
         if (OS.GetCmdlineUserArgs().Contains("--settlement-preview-test")) CaptureSettlementPreview();
         if (OS.GetCmdlineUserArgs().Contains("--crop-climate-preview-test")) CaptureCropClimatePreview();
-        if (OS.GetCmdlineUserArgs().Contains("--weather-test")) { try { WeatherChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
+        if (OS.GetCmdlineUserArgs().Contains("--fluid-preview-test")) CaptureFluidPreview();
+        if (OS.GetCmdlineUserArgs().Contains("--production-target-preview-test")) CaptureProductionTargets();
+        if (OS.GetCmdlineUserArgs().Contains("--production-target-test")) { try { ProductionOrderChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
+        if (OS.GetCmdlineUserArgs().Contains("--fluid-test")) { try { FluidChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
+        if (OS.GetCmdlineUserArgs().Contains("--weather-test")) { try { WeatherChecks.Run(); CropClimateChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
         if (OS.GetCmdlineUserArgs().Contains("--weather-preview-test")) CaptureWeatherPreview();
         if (OS.GetCmdlineUserArgs().Contains("--calendar-preview-test")) CaptureCalendarPreview();
         if (OS.GetCmdlineUserArgs().Contains("--crop-production-preview-test")) CaptureCropProductionPreview();
         if (OS.GetCmdlineUserArgs().Contains("--farm-preview-test")) CaptureFarmPreview();
         if (OS.GetCmdlineUserArgs().Contains("--colony-preview-test")) CaptureColonyPreview();
         if (OS.GetCmdlineUserArgs().Contains("--construction-preview-test")) CaptureConstructionPreview();
+        if (OS.GetCmdlineUserArgs().Contains("--room-preview-test")) CaptureRoomPreview();
+        if (OS.GetCmdlineUserArgs().Contains("--distant-view-test")) CheckDistantView();
+        if (OS.GetCmdlineUserArgs().Contains("--room-test"))
+        {try{RoomEnvironmentChecks.Run();GetTree().Quit();}catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}}
         if (OS.GetCmdlineUserArgs().Contains("--interior-preview-test")) CaptureInteriorPreview();
         if (OS.GetCmdlineUserArgs().Contains("--interaction-test")) RunInteractionCheck();
         if (OS.GetCmdlineUserArgs().Contains("--tps-test")) StartTpsReview();
+        if (OS.GetCmdlineUserArgs().Contains("--depth-review")) RunDepthReview();
+        if (OS.GetCmdlineUserArgs().Contains("--terrain-pipeline-test")) CheckTerrainPipeline();
         if(OS.GetCmdlineUserArgs().Contains("--logistics-test"))
         {try{LogisticsChecks.Run();GetTree().Quit();}catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}}
         if (OS.GetCmdlineUserArgs().Contains("--smoke-test"))
@@ -370,7 +380,7 @@ public partial class Main : Node3D
         var profileFrame = _world.Probe?.Measure("frame.main-callback") ?? default;
         int quadrant=Mathf.FloorToInt(Mathf.RadToDeg(Mathf.PosMod(_cameraYaw,Mathf.Tau))/5);
         if(_interiorView&&quadrant!=_viewQuadrant){_viewQuadrant=quadrant;_revision=-1;}
-        MoveCamera(delta);
+        if(!_depthReviewActive)MoveCamera(delta);
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
         int ticks = _clock.Advance(delta);
         try { for (int i = 0; i < ticks; i++) { if (_tpsReview is null) _world.Update(1.0 / SimulationClock.BaseTicksPerSecond); else ReviewTick(); } }
@@ -400,6 +410,12 @@ public partial class Main : Node3D
 
     public override void _Input(InputEvent input)
     {
+        if(_depthReviewActive){GetViewport().SetInputAsHandled();return;}
+        // Benchmarks own their camera/clock; incidental keyboard or GUI input must
+        // not resume a frozen scene or change the workload being compared.
+        if(_tpsReview is not null){GetViewport().SetInputAsHandled();return;}
+        // Benchmark camera and workload must not be changed by desktop input.
+        if (_tpsReview is not null) { GetViewport().SetInputAsHandled(); return; }
         if(_titleDialog?.Visible==true)return;
         if(DossierOpen)
         {
@@ -433,6 +449,7 @@ public partial class Main : Node3D
 
     public override void _UnhandledInput(InputEvent input)
     {
+        if (_tpsReview is not null) return;
         if(_titleDialog?.Visible==true)return;
         if(DossierOpen)return;
         if (_characterEditor.Visible || _consolePanel.Visible || _developerPanel.Visible) return;
@@ -518,7 +535,7 @@ public partial class Main : Node3D
         Godot.Collections.Dictionary Cast(Vector2 point)
         {
             var origin = _camera.ProjectRayOrigin(point);
-            return GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(origin, origin + _camera.ProjectRayNormal(point) * 500, mask));
+            return GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(origin, origin + _camera.ProjectRayNormal(point) * _camera.Far, mask));
         }
         var hit = Cast(screen);
         if (hit.Count > 0) return hit;
@@ -538,7 +555,7 @@ public partial class Main : Node3D
         var point=hit["position"].AsVector3()-hit["normal"].AsVector3()*.01f;
         var cell=new Cell((int)Math.Floor(point.X+DemoWorld.Width/2f),(int)Math.Floor(point.Z+DemoWorld.Depth/2f),(int)Math.Floor(point.Y));
         var above=cell+new Cell(0,0,1);
-        if(hit["normal"].AsVector3().Y>.5f&&(_world.Farms.ContainsKey(above)||_world.Stockpiles.Contains(above)))return above;
+        if(hit["normal"].AsVector3().Y>.5f&&(_world.Farms.ContainsKey(above)||_world.Stockpiles.Contains(above)||_world.Fluids.Amount(above)>0))return above;
         return DemoWorld.Inside(cell)?cell:null;
     }
     private int? PickResident(Vector2 screen)
@@ -573,11 +590,20 @@ public partial class Main : Node3D
     private void PositionCamera()
     {
         _focus.X = Math.Clamp(_focus.X, -(TerrainMap.Size-1)/2f, (TerrainMap.Size-1)/2f); _focus.Z = Math.Clamp(_focus.Z, -(TerrainMap.Size-1)/2f, (TerrainMap.Size-1)/2f);
-        _camera.Position = _focus + (new Vector3(.6f,0,.8f)*Mathf.Cos(_cameraPitch)+Vector3.Up*Mathf.Sin(_cameraPitch)).Rotated(Vector3.Up,_cameraYaw)*Mathf.Sqrt(3944); _camera.LookAt(_focus,_topDown?-CameraBack:Vector3.Up);
+        var back=(new Vector3(.6f,0,.8f)*Mathf.Cos(_cameraPitch)+Vector3.Up*Mathf.Sin(_cameraPitch)).Rotated(Vector3.Up,_cameraYaw);
+        // Orthographic size changes coverage, not distance. Keep the entire world
+        // between the clipping planes, including at shallow pitch and map edges.
+        var center=new Vector3(0,(TerrainMap.MinLevel+TerrainMap.MaxLevel+1)/2f,0);
+        var half=new Vector3(TerrainMap.Size/2f,TerrainMap.VerticalSize/2f+16,TerrainMap.Size/2f);
+        float projectedCenter=(center-_focus).Dot(back),extent=half.Dot(back.Abs());
+        float distance=Math.Max(64,projectedCenter+extent+16);
+        _camera.Near=.5f;_camera.Far=Math.Max(128,distance-projectedCenter+extent+16);
+        _camera.Position=_focus+back*distance;_camera.LookAt(_focus,_topDown?-CameraBack:Vector3.Up);
     }
     private void FocusCamp() { _focus = WorldPosition(_world.Camp); PositionCamera(); }
     private void MoveCamera(double delta)
     {
+        if (_tpsReview is not null) return;
         if (_consolePanel.Visible || _developerPanel.Visible) return;
         if (DossierOpen || _characterEditor is not null && _characterEditor.Visible) return;
         if (!GetWindow().HasFocus()) { _dragging = false; return; }
@@ -620,9 +646,10 @@ public partial class Main : Node3D
         };
         AddChild(new WorldEnvironment{Environment=_dayEnvironment});
         _sun=new DirectionalLight3D{RotationDegrees=new Vector3(-55,-25,0),LightColor=new Color("ffe7bb"),LightEnergy=.7f,ShadowEnabled=true,DirectionalShadowMaxDistance=90};AddChild(_sun);
+        ConfigureDepthLighting();
         _camera = new Camera3D { Projection = Camera3D.ProjectionType.Orthogonal, Size = 38, Far = 500, Current = true };
         AddChild(_camera); FocusCamp();BuildWeatherVisuals();
-        _terrainView = new TerrainView(); AddChild(_terrainView); _terrainView.Generate(_world,CurrentView);
+        _terrainView = new TerrainView { SynchronousMeshing = OS.GetCmdlineUserArgs().Contains("--terrain-sync") }; AddChild(_terrainView); _terrainView.Generate(_world,CurrentView);
         _structures = new Node3D(); _ghosts = new Node3D(); _hover = new Node3D();
         AddChild(_structures); AddChild(_ghosts); AddChild(_hover);
         _foundationOutline = new Node3D(); AddChild(_foundationOutline); CreatePeople();
@@ -663,7 +690,7 @@ public partial class Main : Node3D
         }
         else if(kind==BuildKind.Floodgate)
         {
-            bool open=_world.GateOpen(cell);var metal=Mat("77939c");
+            bool open=_world.GateOpen(cell);var metal=BlockTextures.Material("nodwarf:floodgate");
             Box(parent,p+new Vector3(-.43f,.5f,0),new Vector3(.12f,1,.25f),metal);
             Box(parent,p+new Vector3(.43f,.5f,0),new Vector3(.12f,1,.25f),metal);
             Box(parent,p+Vector3.Up*(open?.92f:.45f),new Vector3(.8f,open?.16f:.9f,.22f),Mat("497b8c"));
@@ -678,6 +705,11 @@ public partial class Main : Node3D
         else if (kind is BuildKind.Furnace or BuildKind.Stove)
         {
             BlockTextures.Box(parent,p+Vector3.Up*.5f,Vector3.One,BlockCatalog.Id(kind));
+        }
+        else if(kind==BuildKind.Workbench)
+        {
+            foreach(float x in new[]{-.32f,.32f})foreach(float z in new[]{-.28f,.28f})BlockTextures.Box(parent,p+new Vector3(x,.3f,z),new Vector3(.13f,.6f,.13f),"nodwarf:workbench");
+            BlockTextures.Box(parent,p+Vector3.Up*.65f,new Vector3(.95f,.16f,.85f),"nodwarf:workbench");
         }
         else if(kind==BuildKind.Mill)
         {
@@ -825,7 +857,10 @@ public partial class Main : Node3D
         using var timing = _world.Probe?.Measure("view.sync-world") ?? default;
         PrepareInteriorWalls();
         BindWorldLog();
-        _terrainView.Generate(_world,CurrentView); _overview.Slice=CurrentView;
+        _terrainView.PriorityCell=new(_focus.X+(TerrainMap.Size-1)/2f,_focus.Z+(TerrainMap.Size-1)/2f);
+        _terrainView.Generate(_world,CurrentView);
+        if(OS.GetCmdlineUserArgs().Any(a=>a is "--smoke-test" or "--interaction-test"))_terrainView.FlushMeshes();
+        _overview.Slice=CurrentView;
         if(_visualWorld!=_world||_terrainRevision!=_world.Terrain.Revision){_terrainRevision=_world.Terrain.Revision;_overview.RefreshMap();}
         SyncStructuresAndPlans();
         DrawItems();DrawFarms();
@@ -858,6 +893,7 @@ public partial class Main : Node3D
             body.SetMeta("resident", i); node.AddChild(body);
             body.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = .27f, Height = WorldScale.DwarfHeightMeters } });
             node.AddChild(new Label3D{Name="Cargo",Position=new Vector3(0,1.7f,0),FontSize=28,PixelSize=.004f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Font=GameFont.Regular,OutlineSize=8});
+            AddResidentContact(node);
         }
         for (int i = 0; i < _residentButtons.Count; i++) { _residentButtons[i].Visible=i<_people.Count; if(i<_people.Count) _residentButtons[i].Icon = _people[i].GetChild<Sprite3D>(0).Texture; }
         AnimatePeople();
@@ -1030,6 +1066,7 @@ public partial class Main : Node3D
         _forge = Button(content, "下单：铁剑 · 2 铁 + 1 煤", () => { _world.QueueSword(); RefreshUi(); });
         Button(content,"熔炼：2 粗铁 + 1 煤 → 2 铁锭",()=>{_world.QueueSmelt();RefreshUi();});
         Button(content,"烹饪：2 食材 + 1 木料 → 2 口粮",()=>{_world.QueueCook();RefreshUi();});
+        BuildProductionTargets(content);
         foreach(var recipe in ProcessingCatalog.All){string id=recipe.Id;Button(content,recipe.Name,()=>{_world.QueueProcessing(id);RefreshUi();});}
         content.AddChild(Text("种植区选择作物；石磨磨粉、炊炉烹饪、织机加工棉布。",12,Muted,true));
         _orderList=new VBoxContainer();content.AddChild(_orderList);
@@ -1164,7 +1201,7 @@ public partial class Main : Node3D
         }
         if (tool != "select") { _selectionPanel.Hide(); _selectedCell = null; _selectedWorker = -1; }
         if (tool != "foundation") _foundationStart = null;
-        if(tool is "select" or "erase" or "foundation" || tool is "Floodgate" or "Door" or "Furnace" or "Anvil" or "Stove" or "Bed" or "Campfire" or "Mill" or "Loom" or "chop" or "planttree" || (Enum.TryParse<BuildKind>(tool,out var chosen)&&BlockCatalog.IsStairs(chosen))) _placement=0;
+        if(tool is "select" or "erase" or "foundation" || tool is "Floodgate" or "Door" or "Furnace" or "Anvil" or "Stove" or "Bed" or "Campfire" or "Mill" or "Loom" or "Workbench" or "chop" or "planttree" || (Enum.TryParse<BuildKind>(tool,out var chosen)&&BlockCatalog.IsStairs(chosen))) _placement=0;
         if(_foundation is not null && Enum.TryParse<BuildKind>(tool,out _)) _cutaway=true;
         if(tool!="select"){_interiorView=false;_floorWalls=false;_wallCaps=null;}
         _revision=-1; _tool = tool; _hoverCell = null; Clear(_hover);
@@ -1213,7 +1250,7 @@ public partial class Main : Node3D
         {
             var building = _world.Buildings.GetValueOrDefault(selected);
             var plan = _world.Jobs.FirstOrDefault(j => j.Construction && j.Cell == selected);
-            string name = plan?.Build is BuildKind plannedKind ? DemoWorld.NameOf(plannedKind)+"（建设中）" : building is not null ? DemoWorld.NameOf(building.Kind) : plan is not null ? "挖掘规划" : _world.Items.Any(s=>s.Owner==""&&s.Cell==selected)?"物资堆":BlockCatalog.Get(_world.BlockAt(selected)).Name;
+            string name = plan?.Build is BuildKind plannedKind ? DemoWorld.NameOf(plannedKind)+"（建设中）" : building is not null ? DemoWorld.NameOf(building.Kind) : _world.Fluids.Amount(selected)>0?"积水":plan is not null ? "挖掘规划" : _world.Items.Any(s=>s.Owner==""&&s.Cell==selected)?"物资堆":BlockCatalog.Get(_world.BlockAt(selected)).Name;
             string id = building?.BlockId ?? (plan is not null ? (plan.Dig ? _world.BlockAt(selected) : BlockCatalog.Id(plan.Build!.Value)) : _world.BlockAt(selected));
             _selection.Text = CurrentView.Known(_world,selected) ? $"{name}\n位置 {selected.X}, {selected.Z} · 第 {selected.Level} 层\n{id}" : $"未探索区域\n位置 {selected.X}, {selected.Z} · 第 {selected.Level} 层";
             if(plan?.Build is not null)_selection.Text=$"{name}\n位置 {selected.X}, {selected.Z} · 第 {selected.Level} 层\n施工 {plan.BuildFraction:P0} · {ConstructionStatus(plan)}";
@@ -1228,6 +1265,7 @@ public partial class Main : Node3D
         {
             var stacks=_world.Items.Where(s=>s.Owner==""&&(s.Cell==itemCell||s.Cell==itemCell+new Cell(0,0,1)));
             string room=_world.RoomDescription(itemCell);if(room!="")_selection.Text+="\n"+room;
+            if(CurrentView.Known(_world,itemCell))_selection.Text+="\n"+_world.EnvironmentDescription(itemCell);
             if(_world.Trees.TryGetValue(itemCell,out var tree))_selection.Text+=$"\n树木 {tree.Height} m · 成长 {tree.Age/DemoWorld.GrowTime(tree.Species):P0}";
             if(_world.StorageAt(itemCell) is {} zone)_selection.Text+=$"\n堆场 #{zone.Id} · 优先级 {zone.Priority}/5";
             foreach(var stack in stacks)_selection.Text+=$"\n{ItemCatalog.Get(stack.Item).Name} ×{stack.Count}";
@@ -1272,6 +1310,7 @@ public partial class Main : Node3D
         _selectedWorker = -1; _selectedCell = null; _selectionPanel.Hide();
         _foundation = null; _heightSelected=false; _interiorView=false;_foundationStart = null; _layerOffset=0; _placement=0; Clear(_foundationOutline);
         _terrainRevision=-1; _world = new DemoWorld(_pendingSeed,region:_pendingRegion); LoadCharacters(); _clock = new SimulationClock(); _revision = -1;
+        _terrainView.PriorityCell=new(_focus.X+(TerrainMap.Size-1)/2f,_focus.Z+(TerrainMap.Size-1)/2f);
         _terrainView.Generate(_world,CurrentView); _overview.World = _world; _overview.RefreshMap();
         CreatePeople(); FocusCamp(); SelectTool("select"); ApplyDefaultEditor();
     }

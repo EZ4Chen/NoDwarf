@@ -22,6 +22,7 @@ public static class UiIcons
             "potato" or "potato_seed" => "<path fill='#b99869' d='M8 15Q22 1 37 13q16 17-3 28Q5 49 8 15Z'/><path d='m15 21 3 1m12-8 2 2m-5 15 3 1'/>",
             "cloth" or "flour" => "<path fill='#e5d9bd' d='M10 7h30l-4 34H6Z'/><path d='M13 15h21m-23 9h22m-24 9h22'/>",
             "mill" => "<ellipse fill='#a6a89e' cx='24' cy='30' rx='19' ry='12'/><ellipse fill='#c2c1b1' cx='24' cy='19' rx='19' ry='10'/><path stroke='#a78652' stroke-width='5' d='M31 18V5'/>",
+            "workbench" => "<path fill='#b99a6a' d='M4 13h40v9H4ZM8 22h6v22H8Zm26 0h6v22h-6Z'/><path stroke='#bac8ca' stroke-width='5' d='m18 10 12-6'/>",
             "loom" => "<path fill='#b99a6a' d='M6 5h6v38H6zm30 0h6v38h-6ZM6 5h36v6H6Z'/><path fill='#e6d9bb' d='M14 13h20v24H14Z'/><path d='M19 14v21m5-21v21m5-21v21'/>",
             "select" => "<path fill='#d8e3e5' d='m10 5 29 21-15 2-8 15Z'/>",
             "stone" or "wall" or "cobblestone" => "<path fill='#9fa9ae' d='M7 23 14 10 31 6 44 17 41 37 22 43 6 35Z'/><path d='m14 10 9 13 21-6M23 23l-1 20M7 23l16 0'/>",
