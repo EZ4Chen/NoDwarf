@@ -1,0 +1,119 @@
+{
+  "axe": {
+    "Name": "铁斧",
+    "Texture": "res://Assets/Textures/Items/iron_axe.png",
+    "Source": "assets/minecraft/textures/item/iron_axe.png",
+    "Grip": [
+      20,
+      44
+    ],
+    "PlaneSize": 0.7,
+    "Thickness": 0.055,
+    "Playable": true,
+    "Scene": "res://Assets/Equipment/axe.tscn"
+  },
+  "battleaxe": {
+    "Name": "双刃战斧",
+    "Texture": "res://Assets/Textures/Items/iron_battleaxe.png",
+    "Source": "assets/minecraft/textures/item_alt/iron_axe/battleaxe/iron_axe.png",
+    "Grip": [
+      20,
+      44
+    ],
+    "PlaneSize": 0.86,
+    "Thickness": 0.065,
+    "Playable": true,
+    "Scene": "res://Assets/Equipment/battleaxe.tscn"
+  },
+  "hammer": {
+    "Name": "锻锤",
+    "Texture": "res://Assets/Textures/Items/warhammer.png",
+    "Source": "assets/minecraft/textures/item_alt/iron_sword/warhammer/iron_sword.png",
+    "Grip": [
+      20,
+      44
+    ],
+    "PlaneSize": 0.56,
+    "Thickness": 0.07,
+    "Playable": true,
+    "Scene": "res://Assets/Equipment/hammer.tscn"
+  },
+  "shovel": {
+    "Name": "铁铲",
+    "Texture": "res://Assets/Textures/Items/iron_shovel.png",
+    "Source": "assets/minecraft/textures/item/iron_shovel.png",
+    "Grip": [
+      20,
+      44
+    ],
+    "PlaneSize": 0.84,
+    "Thickness": 0.045,
+    "Playable": true,
+    "Scene": "res://Assets/Equipment/shovel.tscn"
+  },
+  "hoe": {
+    "Name": "铁锄",
+    "Texture": "res://Assets/Textures/Items/iron_hoe.png",
+    "Source": "assets/minecraft/textures/item/iron_hoe.png",
+    "Grip": [
+      20,
+      44
+    ],
+    "PlaneSize": 0.82,
+    "Thickness": 0.055,
+    "Playable": true,
+    "Scene": "res://Assets/Equipment/hoe.tscn"
+  },
+  "bow": {
+    "Name": "弓",
+    "Texture": "res://Assets/Textures/Items/bow.png",
+    "Source": "assets/minecraft/textures/item/bow.png",
+    "Grip": [
+      32,
+      32
+    ],
+    "PlaneSize": 0.78,
+    "Thickness": 0.045,
+    "Playable": false,
+    "Scene": "res://Assets/Equipment/bow.tscn"
+  },
+  "crossbow": {
+    "Name": "弩",
+    "Texture": "res://Assets/Textures/Items/crossbow_standby.png",
+    "Source": "assets/minecraft/textures/item/crossbow_standby.png",
+    "Grip": [
+      32,
+      40
+    ],
+    "PlaneSize": 0.7,
+    "Thickness": 0.07,
+    "Playable": false,
+    "Scene": "res://Assets/Equipment/crossbow.tscn"
+  },
+  "shears": {
+    "Name": "剪刀",
+    "Texture": "res://Assets/Textures/Items/shears.png",
+    "Source": "assets/minecraft/textures/item/shears.png",
+    "Grip": [
+      22,
+      42
+    ],
+    "PlaneSize": 0.34,
+    "Thickness": 0.025,
+    "Playable": false,
+    "Scene": "res://Assets/Equipment/shears.tscn"
+  },
+  "fishing_rod": {
+    "Name": "钓鱼竿",
+    "Texture": "res://Assets/Textures/Items/fishing_rod.png",
+    "Source": "assets/minecraft/textures/item/fishing_rod.png",
+    "Grip": [
+      17,
+      47
+    ],
+    "PlaneSize": 1.05,
+    "Thickness": 0.025,
+    "Playable": false,
+    "Scene": "res://Assets/Equipment/fishing_rod.tscn"
+  }
+}

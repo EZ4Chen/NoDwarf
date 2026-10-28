@@ -3,7 +3,7 @@ using NoDwarf.Simulation;
 
 internal static class NavigationBenchmarks
 {
-    // Frozen copies of the old point-to-point A* and nearest-work BFS kernels.
+    // Independent live-geometry A* and Dijkstra reference kernels.
     // They query live geometry, exactly as the original implementation did.
     internal static Queue<Cell>? LegacyPath(DemoWorld world, Cell start, Cell end)
     {
@@ -18,7 +18,7 @@ internal static class NavigationBenchmarks
             foreach (var next in world.Neighbors(current))
             {
                 if (!world.Walkable(next) || !world.Connected(current, next)) continue;
-                int cost = costs[current] + 1;
+                int cost = costs[current] + world.TraversalCost(current,next);
                 if (costs.TryGetValue(next, out int old) && old <= cost) continue;
                 previous[next] = current; costs[next] = cost;
                 frontier.Enqueue(next, cost + Math.Abs(next.X - end.X) + Math.Abs(next.Z - end.Z));
@@ -32,13 +32,19 @@ internal static class NavigationBenchmarks
         if (!world.Walkable(start)) return null;
         var targets = candidates.ToHashSet();
         var previous = new Dictionary<Cell, Cell> { [start] = start };
-        var queue = new Queue<Cell>(); queue.Enqueue(start);
-        while (queue.TryDequeue(out var current))
+        var costs=new Dictionary<Cell,int>{{start,0}};
+        var queue=new PriorityQueue<Cell,int>();queue.Enqueue(start,0);
+        while(queue.TryDequeue(out var current,out var cost))
         {
-            if (targets.Contains(current)) return Trace(previous, start, current);
-            foreach (var next in world.Neighbors(current))
-                if (!previous.ContainsKey(next) && world.Connected(current, next))
-                { previous[next] = current; queue.Enqueue(next); }
+            if(cost!=costs[current])continue;
+            if(targets.Contains(current))return Trace(previous,start,current);
+            foreach(var next in world.Neighbors(current))
+            {
+                if(!world.Connected(current,next))continue;
+                int nextCost=cost+world.TraversalCost(current,next);
+                if(costs.TryGetValue(next,out var old)&&old<=nextCost)continue;
+                costs[next]=nextCost;previous[next]=current;queue.Enqueue(next,nextCost);
+            }
         }
         return null;
     }
@@ -53,7 +59,7 @@ internal static class NavigationBenchmarks
     public static void Run()
     {
         Console.WriteLine($"Map {DemoWorld.Width}x{DemoWorld.Depth}, minimum level {TerrainMap.MinLevel}; Release; 100 queries/case; median of 3 runs; milliseconds. Cold graph preparation listed separately.");
-        Console.WriteLine("case | legacy | cached exact | hierarchical | cold build | rebuilt chunks | mean/max path ratio");
+        Console.WriteLine("case | legacy | cached exact | hierarchical | cold build | rebuilt chunks | mean/max path cost ratio");
         Case("flat-independent", () => new DemoWorld(flat: true));
         Case("terrain-independent", () => new DemoWorld(74219));
         Case("sealed-wall", Barrier);
@@ -67,7 +73,7 @@ internal static class NavigationBenchmarks
     {
         var world = new DemoWorld(flat: true);
         for (int z = 0; z < DemoWorld.Depth; z++)
-        { var c = new Cell(DemoWorld.Width / 2, z); world.Buildings[c] = new Building(c, BuildKind.Wall); }
+        { for(int y=0;y<2;y++){var c = new Cell(DemoWorld.Width / 2, z,y); world.Buildings[c] = new Building(c, BuildKind.Wall);} }
         return world;
     }
 
@@ -115,7 +121,9 @@ internal static class NavigationBenchmarks
                         1 => world.Navigation.FindExactPath(q.Start, q.End),
                         _ => world.Navigation.FindHierarchicalPath(q.Start, q.End)
                     };
-                    lengths[mode][i] = path?.Count ?? -1;
+                    int cost=0;var previous=q.Start;
+                    if(path is not null)foreach(var step in path){cost+=world.TraversalCost(previous,step);previous=step;}
+                    lengths[mode][i] = path is null?-1:cost;
                 }
                 times[mode, repeat] = watch.Elapsed.TotalMilliseconds;
                 if (mode == 2) rebuilt = world.Navigation.RebuiltChunks - before;
@@ -123,7 +131,7 @@ internal static class NavigationBenchmarks
         var ratios = new List<double>();
         for (int i = 0; i < queries.Length; i++)
         {
-            if (lengths[0][i] != lengths[1][i]) throw new Exception("Exact cached A* changed path length");
+            if (lengths[0][i] != lengths[1][i]) throw new Exception("Exact cached A* changed traversal cost");
             if ((lengths[0][i] < 0) != (lengths[2][i] < 0)) throw new Exception("Hierarchy changed reachability");
             if (lengths[0][i] > 0) ratios.Add((double)lengths[2][i] / lengths[0][i]);
         }
@@ -152,7 +160,7 @@ internal static class NavigationBenchmarks
                     times[mode, repeat] = watch.Elapsed.TotalMilliseconds;
                 }
             double Median(int mode) => Enumerable.Range(0, 3).Select(r => times[mode, r]).Order().ElementAt(1);
-            Console.WriteLine($"nearest-work-{(blocked ? "blocked" : "reachable")} | {Median(0):F2} | {Median(1):F2} | exact BFS; shared graph (legacy per-worker failure cache excluded)");
+            Console.WriteLine($"nearest-work-{(blocked ? "blocked" : "reachable")} | {Median(0):F2} | {Median(1):F2} | weighted Dijkstra; shared graph (legacy per-worker failure cache excluded)");
         }
     }
 }

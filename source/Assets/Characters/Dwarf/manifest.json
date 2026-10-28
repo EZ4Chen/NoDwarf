@@ -1,0 +1,383 @@
+{
+  "version": 1,
+  "units": "meters",
+  "height_m": 1.625,
+  "body_height_m": 1.6,
+  "forward_godot": "+Z",
+  "blender_forward": "-Y",
+  "fps": 24,
+  "bones": [
+    "root",
+    "pelvis",
+    "spine",
+    "chest",
+    "neck",
+    "head",
+    "upper_arm.L",
+    "forearm.L",
+    "hand.L",
+    "thigh.L",
+    "shin.L",
+    "foot.L",
+    "slot_hand_l",
+    "upper_arm.R",
+    "forearm.R",
+    "hand.R",
+    "thigh.R",
+    "shin.R",
+    "foot.R",
+    "slot_hand_r",
+    "slot_head",
+    "slot_back",
+    "slot_belt"
+  ],
+  "animations": {
+    "Idle": {
+      "frames": 49,
+      "seconds": 2.0,
+      "loop": true
+    },
+    "Walk": {
+      "frames": 25,
+      "seconds": 1.0,
+      "loop": true
+    },
+    "Mine": {
+      "frames": 37,
+      "seconds": 1.5,
+      "loop": true
+    },
+    "Attack": {
+      "frames": 25,
+      "seconds": 1.0,
+      "loop": false
+    },
+    "Carry": {
+      "frames": 25,
+      "seconds": 1.0,
+      "loop": true
+    }
+  },
+  "equipment": {
+    "cosmetic_beard": {
+      "file": "cosmetic_beard.glb",
+      "mode": "skinned",
+      "skeleton": "DwarfRig/Skeleton3D"
+    },
+    "shirt": {
+      "file": "shirt.glb",
+      "mode": "skinned",
+      "skeleton": "DwarfRig/Skeleton3D"
+    },
+    "trousers": {
+      "file": "trousers.glb",
+      "mode": "skinned",
+      "skeleton": "DwarfRig/Skeleton3D"
+    },
+    "boots": {
+      "file": "boots.glb",
+      "mode": "skinned",
+      "skeleton": "DwarfRig/Skeleton3D"
+    },
+    "armor": {
+      "file": "armor.glb",
+      "mode": "skinned",
+      "skeleton": "DwarfRig/Skeleton3D"
+    },
+    "helmet": {
+      "file": "helmet.glb",
+      "mode": "skinned",
+      "skeleton": "DwarfRig/Skeleton3D"
+    },
+    "pickaxe": {
+      "file": "pickaxe.glb",
+      "mode": "attachment",
+      "socket": "slot_hand_r"
+    },
+    "sword": {
+      "file": "sword.glb",
+      "mode": "attachment",
+      "socket": "slot_hand_r"
+    },
+    "shield": {
+      "file": "shield.glb",
+      "mode": "attachment",
+      "socket": "slot_hand_l"
+    }
+  },
+  "geometry": {
+    "base": {
+      "vertices": 1292,
+      "triangles": 2400,
+      "materials": 1
+    },
+    "cosmetic_beard": {
+      "vertices": 188,
+      "triangles": 348,
+      "materials": 1
+    },
+    "shirt": {
+      "vertices": 264,
+      "triangles": 420,
+      "materials": 2
+    },
+    "trousers": {
+      "vertices": 192,
+      "triangles": 344,
+      "materials": 2
+    },
+    "boots": {
+      "vertices": 244,
+      "triangles": 416,
+      "materials": 2
+    },
+    "armor": {
+      "vertices": 368,
+      "triangles": 648,
+      "materials": 2
+    },
+    "helmet": {
+      "vertices": 148,
+      "triangles": 240,
+      "materials": 1
+    },
+    "pickaxe": {
+      "vertices": 72,
+      "triangles": 132,
+      "materials": 2
+    },
+    "sword": {
+      "vertices": 86,
+      "triangles": 156,
+      "materials": 2
+    },
+    "shield": {
+      "vertices": 164,
+      "triangles": 288,
+      "materials": 2
+    }
+  },
+  "body_masks": {
+    "bits": [
+      "shirt_or_armor",
+      "trousers",
+      "boots"
+    ],
+    "files": "body_mask_ABC.glb; 1 = hide covered body region"
+  },
+  "presets": {
+    "base": [
+      "cosmetic_beard"
+    ],
+    "casual": [
+      "cosmetic_beard",
+      "shirt",
+      "trousers",
+      "boots"
+    ],
+    "miner": [
+      "cosmetic_beard",
+      "shirt",
+      "trousers",
+      "boots",
+      "helmet",
+      "pickaxe"
+    ],
+    "guard": [
+      "cosmetic_beard",
+      "armor",
+      "trousers",
+      "boots",
+      "helmet",
+      "sword",
+      "shield"
+    ]
+  },
+  "reference_poses": [
+    {
+      "clip": "Walk",
+      "fraction": 0.25,
+      "positions": {
+        "hand.R": [
+          -0.5651969909667969,
+          0.6743731498718262,
+          -0.09789793193340302
+        ],
+        "forearm.R": [
+          -0.5017239451408386,
+          0.8847205638885498,
+          -0.09081471711397171
+        ],
+        "head": [
+          0.0,
+          1.2200000286102295,
+          0.02800000086426735
+        ],
+        "thigh.L": [
+          0.1550000011920929,
+          0.6600000262260437,
+          0.02800000086426735
+        ],
+        "slot_hand_r": [
+          -0.5731784701347351,
+          0.6061429977416992,
+          -0.07903142273426056
+        ]
+      }
+    },
+    {
+      "clip": "Mine",
+      "fraction": 0.3611111111111111,
+      "positions": {
+        "hand.R": [
+          -0.5312551856040955,
+          1.4888492822647095,
+          0.09590717405080795
+        ],
+        "forearm.R": [
+          -0.5543549656867981,
+          1.2836241722106934,
+          0.020580610260367393
+        ],
+        "head": [
+          -0.0030206895899027586,
+          1.2176796197891235,
+          0.03452664241194725
+        ],
+        "thigh.L": [
+          0.1550000011920929,
+          0.6600000262260437,
+          -0.0
+        ],
+        "slot_hand_r": [
+          -0.5462552309036255,
+          1.4238492250442505,
+          0.12090716511011124
+        ]
+      },
+      "tip_local": [
+        -8.22358359187092e-09,
+        6.692020093623796e-08,
+        0.34999996423721313
+      ],
+      "tip_expected": [
+        -0.5462551116943359,
+        1.7738492488861084,
+        0.1209072470664978
+      ]
+    },
+    {
+      "clip": "Mine",
+      "fraction": 0.6388888888888888,
+      "positions": {
+        "hand.R": [
+          -0.48531192541122437,
+          0.9331139922142029,
+          0.38828861713409424
+        ],
+        "forearm.R": [
+          -0.5041680335998535,
+          1.02037513256073,
+          0.18740315735340118
+        ],
+        "head": [
+          0.0030206895899027586,
+          1.2176796197891235,
+          -0.03452664241194725
+        ],
+        "thigh.L": [
+          0.1550000011920929,
+          0.6600000262260437,
+          -0.0
+        ],
+        "slot_hand_r": [
+          -0.5003119111061096,
+          0.8844544887542725,
+          0.33846646547317505
+        ]
+      },
+      "tip_local": [
+        -8.22358359187092e-09,
+        6.692020093623796e-08,
+        0.34999996423721313
+      ],
+      "tip_expected": [
+        -0.5003119111061096,
+        1.0228174924850464,
+        0.6599560976028442
+      ]
+    },
+    {
+      "clip": "Attack",
+      "fraction": 0.5,
+      "positions": {
+        "hand.R": [
+          -0.4903254508972168,
+          1.3149206638336182,
+          0.28029167652130127
+        ],
+        "forearm.R": [
+          -0.5826830863952637,
+          1.1942461729049683,
+          0.12144339084625244
+        ],
+        "head": [
+          1.664122861062976e-19,
+          1.2198834419250488,
+          0.0077856904827058315
+        ],
+        "thigh.L": [
+          0.1550000011920929,
+          0.6600000262260437,
+          -0.0
+        ],
+        "slot_hand_r": [
+          -0.505325436592102,
+          1.246590256690979,
+          0.2668398916721344
+        ]
+      },
+      "tip_local": [
+        -2.578833502298039e-08,
+        9.283891699851665e-08,
+        0.5799999833106995
+      ],
+      "tip_expected": [
+        -0.5053253173828125,
+        1.7375192642211914,
+        0.5756900906562805
+      ]
+    },
+    {
+      "clip": "Carry",
+      "fraction": 0.20833333333333334,
+      "positions": {
+        "hand.R": [
+          -0.17308568954467773,
+          0.8292139172554016,
+          0.3732520043849945
+        ],
+        "forearm.R": [
+          -0.2993994355201721,
+          0.8245517611503601,
+          0.19339609146118164
+        ],
+        "head": [
+          0.0,
+          1.2200000286102295,
+          0.02612435631453991
+        ],
+        "thigh.L": [
+          0.1550000011920929,
+          0.6600000262260437,
+          0.02612435631453991
+        ],
+        "slot_hand_r": [
+          -0.131308451294899,
+          0.854483962059021,
+          0.42512771487236023
+        ]
+      }
+    }
+  ]
+}

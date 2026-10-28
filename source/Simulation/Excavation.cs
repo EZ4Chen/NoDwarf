@@ -28,13 +28,14 @@ public sealed partial class DemoWorld
         : j.Cell==c);
     private bool DigSafe(DemoJob job, HashSet<Cell>? residentFeet = null)
     {
+        if(job.Demolish&&RemovalEndangersResident(job.Cell,residentFeet))return false;
         if(job.Demolish)return residentFeet is not null ? !residentFeet.Contains(job.Cell+new Cell(0,0,1)) : !Workers.Any(w=>w.Tile==job.Cell+new Cell(0,0,1)||(w.Path.TryPeek(out var next)&&next==job.Cell+new Cell(0,0,1)));
-        // Never excavate a resident's support, or a placed structure's foundation.
+        // Protect residents; removing a building foundation now triggers gravity.
         for(int y=0;y<job.DigHeight;y++)
         {
             var c=job.Cell+new Cell(0,0,y);
             if(!NaturalSolid(c)&&!NaturalRamp(c))continue;
-            if(Buildings.ContainsKey(c)||Buildings.ContainsKey(c+new Cell(0,0,1)))return false;
+            if(Buildings.ContainsKey(c)||RemovalEndangersResident(c,residentFeet))return false;
             if(residentFeet is not null ? residentFeet.Contains(c+new Cell(0,0,1)) : Workers.Any(w=>w.Tile==c+new Cell(0,0,1)||(w.Path.TryPeek(out var next)&&next==c+new Cell(0,0,1))))return false;
         }
         return job.DigHeight==1 || Solid(job.Cell+new Cell(0,0,-1));

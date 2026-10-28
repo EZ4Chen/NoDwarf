@@ -26,6 +26,7 @@ public sealed partial class DemoWorld
         if(remaining<=0||double.IsPositiveInfinity(remaining))return false;
         if(Buildings.ContainsKey(c)&&Workers.Any(w=>w.Tile==c+new Cell(0,0,1)))return false;
         if(amount<remaining){_blockDamage[c]=new(c,id,BlockCatalog.Get(id).Durability-remaining+amount);return false;}
+        _supportSafety.Clear();if(RemovalEndangersResident(c))return false;
         _blockDamage.Remove(c);
         if(Buildings.Remove(c,out var building)){Refund(building.Kind,c);ValidateWorkshop();Revision++;}
         else if(Trees.ContainsKey(c))FellTree(c);

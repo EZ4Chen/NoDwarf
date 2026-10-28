@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Godot;
+using NoDwarf.Simulation;
 
 namespace NoDwarf;
 
@@ -71,6 +72,7 @@ public partial class Main
         _frameDiagnostic = new FrameDiagnostic { Orbit = orbit, ReadRenderTimes = !args.Contains("--diag-no-gpu-timing"),
             Name = $"{(interior ? "interior" : "cutaway")}-{(orbit ? "orbit" : "fixed")}-{(uncapped ? "unlimited" : "cap60")}-{(noVsync ? "vsyncoff" : "vsyncon")}{(args.Contains("--diag-no-gpu-timing") ? "-no-gpu-timing" : "")}{(args.Contains("--diag-hide-plans") ? "-hide-plans" : "")}{(args.Contains("--diag-hide-terrain") ? "-hide-terrain" : "")}" };
         _interiorView = interior;
+        if(args.Contains("--diag-hide-forest"))_frameDiagnostic.Name+="-no-forest";
         _cameraYaw = 0;
         if (args.Contains("--diag-static") || args.Contains("--diag-fixed-workload"))
         {
@@ -156,7 +158,7 @@ public partial class Main
     private void SaveFrameDiagnostic()
     {
         if (_frameDiagnostic is not { } d) return;
-        string path = ProjectSettings.GlobalizePath($"res://.local/frame-diagnostic-{d.Name}.json");
+        string path = DiagnosticTrace.OutputPath(ProjectSettings.GlobalizePath($"res://.local/frame-diagnostic-{d.Name}.json"));
         var result = new { d.Name, d.SceneStateHash, maxFps = Engine.MaxFps, vsync = DisplayServer.WindowGetVsyncMode().ToString(),
             renderTimingEnabled = d.ReadRenderTimes, viewportSize = GetViewport().GetVisibleRect().Size.ToString(),
             windowSize = GetWindow().Size.ToString(), cameraSize = _camera.Size, shadows = _sun.ShadowEnabled,
@@ -164,7 +166,12 @@ public partial class Main
             warmupCpuReadMs = _tpsReview?.CpuReadAtStartMs,
             d.FirstDrawAtMs, d.RenderedFrames, d.RequireRenderWarmup,
             terrainPipeline = new { synchronous = _terrainView.SynchronousMeshing, pending = _terrainView.PendingMeshCount,
-                applied = _terrainView.AppliedMeshCount, discarded = _terrainView.DiscardedMeshCount, workers = _terrainView.MeshWorkerThreads.Order().ToArray() },
+                applied = _terrainView.AppliedMeshCount, discarded = _terrainView.DiscardedMeshCount, workers = _terrainView.MeshWorkerThreads.Order().ToArray(),
+                cacheHits = _terrainView.SliceCacheHits, cachedSlices = _terrainView.CachedSliceCount, estimatedCacheBytes = _terrainView.CachedSliceBytes },
+            interiorCache = new { hits = _interiorCacheHits, builds = _interiorOcclusionBuilds, topologyBuilds = _roomTopologyBuilds,
+                cachedViews = _interiorCuts.Count, cachedCapEntries = _cachedInteriorCaps, cachedFloors = _interiorTopologies.Count,
+                background = _backgroundInterior, pending = InteriorPending, applied = _interiorApplied, discarded = _interiorDiscarded,
+                workerComputeMs = _interiorWorkerMs, workers = _interiorWorkerThreads.Order().ToArray() },
             frames = d.Frames.Where(f=>f.End != 0).ToArray() };
         File.WriteAllText(path, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true }));
         RenderingServer.FramePreDraw -= DiagnosticPreDraw;

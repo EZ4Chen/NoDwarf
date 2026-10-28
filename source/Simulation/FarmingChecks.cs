@@ -27,7 +27,10 @@ public static class FarmingChecks
         Until(saved,()=>saved.Farms[c].Planted);Check(saved.Total("grain_seed")==0,"Planting consumes physical seed");
         saved=DemoWorld.LoadJson(saved.SaveJson());
         var roof=c+new Cell(0,0,2);saved.Buildings[roof]=new(roof,BuildKind.Planks);
-        double growth=saved.Farms[c].Growth;Advance(saved,10);Check(saved.Farms[c].Growth==growth,"Roof pauses sunlight crop");saved.Buildings.Remove(roof);
+        // The shade roof needs a real pillar now that unsupported structures fall.
+        var pillar=Enumerable.Range(0,3).Select(y=>c+new Cell(1,0,y)).ToArray();
+        foreach(var post in pillar)saved.Buildings[post]=new(post,BuildKind.Planks);
+        double growth=saved.Farms[c].Growth;Advance(saved,10);Check(saved.Farms[c].Growth==growth,"Roof pauses sunlight crop");saved.Buildings.Remove(roof);foreach(var post in pillar)saved.Buildings.Remove(post);
         Until(saved,()=>saved.Farms[c].Harvests==1);Check(saved.Total("wheat")==3&&saved.Total("grain_seed")==1,"Harvest yields food and exactly one replacement seed");
         var matureRound=DemoWorld.LoadJson(saved.SaveJson());
         Until(matureRound,()=>matureRound.Farms[c].Harvests==2);
@@ -48,7 +51,7 @@ public static class FarmingChecks
         Check(cave.Total("mushroom")==6&&cave.Total("mushroom_spawn")==1&&cave.Farms[p].Prepared,"Cave mushrooms repeat with retained bed and harvested spawn");
         var noPath=new DemoWorld();noPath.Items.Clear();noPath.Stockpiles.Clear();var source=c+new Cell(5,5);
         for(int x=-2;x<=2;x++)for(int z=-2;z<=2;z++)if(Math.Abs(x)==2||Math.Abs(z)==2)
-        {var wall=source+new Cell(x,z);noPath.Buildings[wall]=new(wall,BuildKind.Wall);}
+        {var wall=source+new Cell(x,z);noPath.Buildings[wall]=new(wall,BuildKind.Wall);var top=wall+new Cell(0,0,1);noPath.Buildings[top]=new(top,BuildKind.Wall);}
         noPath.SpawnItem("grain_seed",1,source);Check(noPath.SetFarm(c,c,"grain"),"Unreachable-seed farm created");Advance(noPath,20);
         Check(!noPath.Farms[c].Planted&&noPath.Total("grain_seed")==1,"Sealed seeds cannot be consumed remotely");
         noPath.SetFarm(c,c,"grain",true);Check(noPath.Available("grain_seed")==1,"Removing unplanted farm releases reserved seeds");

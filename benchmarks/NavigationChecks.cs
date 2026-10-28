@@ -15,6 +15,7 @@ internal static class NavigationChecks
 
     public static void Run()
     {
+        DirectedComponentEdits();
         var world = new DemoWorld(flat: true);
         var start = new Cell(2, 40); var end = new Cell(85, 40);
         Valid(world, start, end, world.FindPath(start, end));
@@ -36,19 +37,20 @@ internal static class NavigationChecks
         Check(world.Navigation.RebuiltChunks - built == 4, "Corner edit invalidates adjacent chunk dependencies");
 
         for (int z = 0; z < DemoWorld.Depth; z++)
-        { var c = new Cell(47, z); world.Buildings[c] = new Building(c, BuildKind.Wall); }
+        { for(int y=0;y<2;y++){var c = new Cell(47, z,y); world.Buildings[c] = new Building(c, BuildKind.Wall);} }
         Check(world.FindPath(start, end) is null, "Barrier splits global connectivity");
         long expanded = world.Navigation.ExpandedNodes;
         Check(world.Navigation.FindNearest(start, new[] { end }, out _) is null, "Unreachable work rejected");
         Check(world.Navigation.ExpandedNodes == expanded, "Unreachable work must not flood the voxel map");
-        world.Buildings.Remove(new Cell(47, 40));
+        world.Buildings.Remove(new Cell(47, 40));world.Buildings.Remove(new Cell(47,40,1));
         Valid(world, start, end, world.FindPath(start, end));
         Valid(world, start, end, world.Navigation.FindNearest(start, new[] { end }, out _));
         world.Buildings[new Cell(47, 40, 1)] = new Building(new Cell(47, 40, 1), BuildKind.Wall);
         Check(world.FindPath(start, end) is null, "Headroom change closes the gate below");
         world.Buildings.Remove(new Cell(47, 40, 1));
         Check(world.Terrain.Excavate(new Cell(47, 40, -1)), "Excavate support directly");
-        Check(world.FindPath(start, end) is null, "Direct terrain edits invalidate support and connectivity");
+        world.Terrain.Excavate(new Cell(47,40,-2));
+        Check(world.FindPath(start, end) is null, "Two-metre trench invalidates connectivity");
         world.Buildings[new Cell(47, 40, -1)] = new Building(new Cell(47, 40, -1), BuildKind.Wall);
         Valid(world, start, end, world.FindPath(start, end));
         world.Buildings.Clear();
@@ -58,6 +60,22 @@ internal static class NavigationChecks
         ReplanningBudgetChecks();
         AssignmentChecks();
         DifferentialChecks();
+    }
+
+    private static void DirectedComponentEdits()
+    {
+        var world=new DemoWorld(flat:true);var high=new Cell(63,80,2);var low=new Cell(64,80);
+        for(int y=0;y<2;y++){var c=new Cell(63,80,y);world.Buildings[c]=new(c,BuildKind.Wall);}
+        var step=new Cell(62,80);
+        for(int i=0;i<12;i++)
+        {
+            Check(world.Navigation.CanReach(high,low)&&!world.Navigation.CanReach(low,high),"Directed chunk-boundary drop must retain its direction after cache invalidation");
+            Check(world.Navigation.FindNearest(low,new[]{high},out _) is null,"Nearest target cannot use a reversed drop");
+            world.Buildings[step]=new(step,BuildKind.Wall);
+            Valid(world,low,high,world.FindPath(low,high));
+            Check(world.Navigation.CanReach(high,low)&&world.Navigation.CanReach(low,high),"Adding return route must merge directed components");
+            world.Buildings.Remove(step);
+        }
     }
 
     private static void ReplanningChecks()
@@ -85,11 +103,11 @@ internal static class NavigationChecks
     {
         var world = new DemoWorld(flat: true);
         for (int z = 0; z < DemoWorld.Depth; z++)
-        { var c = new Cell(47, z); world.Buildings[c] = new Building(c, BuildKind.Wall); }
+        { for(int y=0;y<2;y++){var c = new Cell(47, z,y); world.Buildings[c] = new Building(c, BuildKind.Wall);} }
         Check(world.QueueBuild(new Cell(80, 40), BuildKind.Wall), "Unreachable task planned");
         for (int i = 0; i < 30; i++) world.Update(1.0 / 30);
         Check(world.Workers.All(w => w.Job is null), "No job through sealed barrier");
-        world.Buildings.Remove(new Cell(47, 40));
+        world.Buildings.Remove(new Cell(47, 40));world.Buildings.Remove(new Cell(47,40,1));
         for (int i = 0; i < 30; i++) world.Update(1.0 / 30);
         Check(world.Workers.Any(w => w.Job is not null), "New opening wakes previously unreachable work");
 
@@ -126,7 +144,7 @@ internal static class NavigationChecks
         }
         Check(world.QueueBuild(new Cell(80, 60), BuildKind.Wall), "Idle residents have a task to search for");
         for (int z = 0; z < DemoWorld.Depth; z++)
-        { var c = new Cell(47, z); world.Buildings[c] = new Building(c, BuildKind.Wall); }
+        { for(int y=0;y<2;y++){var c = new Cell(47, z,y); world.Buildings[c] = new Building(c, BuildKind.Wall);} }
         for (int i = 0; i < 12; i++) world.Update(1.0 / 30);
         Check(world.Workers.All(w => w.Path.Count == 0), "Idle work searches must not starve broken-route replanning");
         Check(world.Workers.All(w => w.X == 2), "No movement along a pending invalid route");
@@ -156,7 +174,8 @@ internal static class NavigationChecks
                 if (nearest is not null)
                 {
                     Valid(world, start, endpoint, nearest);
-                    Check(nearest.Count == expected!.Count, "Work assignment no longer chooses nearest reachable stand");
+                    int Cost(IEnumerable<Cell> path){int total=0;var previous=start;foreach(var cell in path){total+=world.TraversalCost(previous,cell);previous=cell;}return total;}
+                    Check(Cost(nearest) == Cost(expected!), "Work assignment chooses minimum traversal cost");
                 }
                 if (i % 10 == 0)
                 {

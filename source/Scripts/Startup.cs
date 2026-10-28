@@ -57,7 +57,7 @@ public partial class Startup : Control
     {
         var button=new Button{Text=text,CustomMinimumSize=new(180,46),MouseDefaultCursorShape=CursorShape.PointingHand};
         button.AddThemeStyleboxOverride("normal",Style(primary?"625a42":"27383f",10));button.AddThemeStyleboxOverride("hover",Style(primary?"7b7051":"3a5058",10));
-        button.AddThemeStyleboxOverride("focus",Style("43565c",10));button.AddThemeStyleboxOverride("disabled",Style("1d282e",10));
+        button.AddThemeStyleboxOverride("focus",UiAccess.FocusRing());button.AddThemeStyleboxOverride("disabled",Style("1d282e",10));
         button.AddThemeColorOverride("font_color",Ink);button.Pressed+=()=>{if(!_busy)action();};parent.AddChild(button);_actions[id]=button;return button;
     }
     private void ClearPage(string step)
@@ -87,38 +87,37 @@ public partial class Startup : Control
         var row=new HBoxContainer{SizeFlagsVertical=SizeFlags.ExpandFill};row.AddThemeConstantOverride("separation",24);_content.AddChild(row);
         var form=Card(row,520);form.AddChild(Label("世界参数",20,Gold));
         var seedRow=new HBoxContainer();form.AddChild(seedRow);seedRow.AddChild(Label("世界种子",16,Ink));
-        _seedInput=new LineEdit{Text=_settings.Seed.ToString(),CustomMinimumSize=new(180,40),SizeFlagsHorizontal=SizeFlags.ExpandFill,PlaceholderText="输入整数种子"};seedRow.AddChild(_seedInput);
-        Action(seedRow,"random","随机",()=>{_seedInput.Text=unchecked((int)GD.Randi()).ToString();_seedInput.EmitSignal(LineEdit.SignalName.TextChanged,_seedInput.Text);}).CustomMinimumSize=new(80,40);
+        _seedInput=new LineEdit{Text=_settings.Seed.ToString(),CustomMinimumSize=new(180,40),SizeFlagsHorizontal=SizeFlags.ExpandFill,PlaceholderText="输入整数种子"};seedRow.AddChild(_seedInput);UiAccess.Name(_seedInput,"世界种子","整数；相同种子与参数生成相同世界。");
+        Action(seedRow,"random","随机种子",()=>{_seedInput.Text=unchecked((int)GD.Randi()).ToString();_seedInput.EmitSignal(LineEdit.SignalName.TextChanged,_seedInput.Text);}).CustomMinimumSize=new(100,40);
         AddSetting(form,"temperature","总体温度",new[]{"严寒","偏冷","适中","偏热","炎热"},_settings.Temperature,v=>_settings=_settings with {Temperature=v},"影响各地区气温和作物的生长速度。");
         AddSetting(form,"moisture","总体湿度",new[]{"干旱","偏干","适中","湿润","潮湿"},_settings.Moisture,v=>_settings=_settings with {Moisture=v},"影响森林、草原分布，土壤表层和树木密度。");
         AddSetting(form,"elevation","总体海拔",new[]{"低地","偏低","适中","偏高","高地"},_settings.Elevation,v=>_settings=_settings with {Elevation=v},"影响陆地面积、地区高度及山地分布。");
         var preview=Card(row,400);preview.AddChild(Label("世界预览",20,Gold));
         _atlas=new WorldAtlas{Interactive=false,CustomMinimumSize=new(380,250),SizeFlagsVertical=SizeFlags.ExpandFill};preview.AddChild(_atlas);_atlas.SetWorld(_settings);
-        preview.AddChild(Label("相同种子与参数会生成相同世界。\n下一步可以在大地图上选择落脚点。",14,Muted,true));
-        _message=Label("营地大小：255 × 255 格。当前先保持固定大小。",14,Muted);_content.AddChild(_message);
+        _message=Label("营地：255 × 255 格",14,Muted);_content.AddChild(_message);
         var footer=new HBoxContainer{Alignment=BoxContainer.AlignmentMode.End};_content.AddChild(footer);Action(footer,"back","返回",ShowHome);
-        _next=Action(footer,"next","生成世界 →",()=>{var identity=_settings with {SiteX=0,SiteY=0};
+        _next=Action(footer,"next","下一步：选择落脚点",()=>{var identity=_settings with {SiteX=0,SiteY=0};
             if(_atlasIdentity!=identity){_settings=_settings.WithRecommendedSite();_atlasIdentity=identity;}
             ShowAtlas();},true);
-        _seedInput.TextChanged+=text=>{bool valid=int.TryParse(text,out int seed);_next.Disabled=!valid;_message.Text=valid?"营地大小：255 × 255 格。当前先保持固定大小。":"种子需要是 -2147483648 至 2147483647 之间的整数。";if(valid){_settings=_settings with {Seed=seed};_atlas.SetWorld(_settings);}};
+        _seedInput.TextChanged+=text=>{bool valid=int.TryParse(text,out int seed);_next.Disabled=!valid;_message.Text=valid?"营地：255 × 255 格":"种子需要是 -2147483648 至 2147483647 之间的整数。";if(valid){_settings=_settings with {Seed=seed};_atlas.SetWorld(_settings);}};
     }
     private void AddSetting(Node parent,string id,string title,string[] choices,int value,Action<int> change,string help)
     {
         var row=new HBoxContainer();parent.AddChild(row);var label=Label(title,16,Ink);label.SizeFlagsHorizontal=SizeFlags.ExpandFill;row.AddChild(label);
         var option=new OptionButton{CustomMinimumSize=new(220,38)};foreach(var choice in choices)option.AddItem(choice);option.Select(value+2);row.AddChild(option);_options[id]=option;
         option.ItemSelected+=index=>{change((int)index-2);_atlas.SetWorld(_settings);};
-        parent.AddChild(Label(help,13,Muted,true));
+        option.TooltipText=help;UiAccess.Name(option,title,help);
     }
     private void ShowAtlas()
     {
         ClearPage("01  世界参数   /   02  选择落脚点");_content.AddChild(Label("选择落脚之地",32,Ink));
         var row=new HBoxContainer{SizeFlagsVertical=SizeFlags.ExpandFill};row.AddThemeConstantOverride("separation",24);_content.AddChild(row);
-        var map=Card(row,720);map.AddChild(Label("世界总览  ·  点击陆地选择地区",17,Gold));
+        var map=Card(row,720);map.AddChild(Label("点击陆地或用方向键选择地区",17,Gold));
         _atlas=new WorldAtlas{CustomMinimumSize=new(640,370),SizeFlagsVertical=SizeFlags.ExpandFill};map.AddChild(_atlas);_atlas.SetWorld(_settings);
         map.AddChild(Label("蓝色 海洋   绿色 林地与草原   青色 针叶林   沙黄 干旱地区   灰色 山地",13,Muted));
-        var details=Card(row,340);details.AddChild(Label("落脚点信息",20,Gold));_siteInfo=Label("",17,Ink,true);_siteInfo.SizeFlagsVertical=SizeFlags.ExpandFill;details.AddChild(_siteInfo);
+        var details=Card(row,340);details.AddChild(Label("落脚点信息",20,Gold));_siteInfo=Label("",17,Ink,true);_siteInfo.AccessibilityLive=AccessibilityServer.AccessibilityLiveMode.Polite;_siteInfo.SizeFlagsVertical=SizeFlags.ExpandFill;details.AddChild(_siteInfo);
         Action(details,"recommend","推荐落脚点",()=>{_settings=_settings.WithRecommendedSite();UpdateSite();});
-        details.AddChild(Label("开局 3 位居民，携带基础物资。\n只生成选中的营地，其他地区保留为总览。",14,Muted,true));
+        details.AddChild(Label("开局 3 位居民，携带基础物资。",14,Muted,true));
         var footer=new HBoxContainer{Alignment=BoxContainer.AlignmentMode.End};_content.AddChild(footer);Action(footer,"back","返回参数",ShowSettings);
         _enter=Action(footer,"enter","建立营地 →",()=>_ = EnterWorld(),true);
         _atlas.Selected=(x,y)=>{_settings=_settings with {SiteX=x,SiteY=y};UpdateSite();};UpdateSite();

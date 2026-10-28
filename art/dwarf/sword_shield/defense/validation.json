@@ -1,0 +1,59 @@
+{
+  "actions": {
+    "block_raise": {
+      "seconds": 0.5,
+      "frames": 13,
+      "fps": 24,
+      "loop": false,
+      "root_motion": false
+    },
+    "block_hold": {
+      "seconds": 1.0,
+      "frames": 25,
+      "fps": 24,
+      "loop": true,
+      "root_motion": false
+    },
+    "block_hit": {
+      "seconds": 0.5,
+      "frames": 13,
+      "fps": 24,
+      "loop": false,
+      "root_motion": false
+    },
+    "hit": {
+      "seconds": 0.625,
+      "frames": 16,
+      "fps": 24,
+      "loop": false,
+      "root_motion": false
+    },
+    "down": {
+      "seconds": 1.25,
+      "frames": 31,
+      "fps": 24,
+      "loop": false,
+      "root_motion": false
+    },
+    "block_lower": {
+      "seconds": 0.5,
+      "frames": 13,
+      "fps": 24,
+      "loop": false,
+      "root_motion": false
+    },
+    "block_break": {
+      "seconds": 0.75,
+      "frames": 19,
+      "fps": 24,
+      "loop": false,
+      "root_motion": false
+    }
+  },
+  "samples": 175,
+  "root_motion": false,
+  "rest_unchanged": true,
+  "shield_forward_dot_min": 1,
+  "seams_max": 0.0,
+  "combat_idle_start_error": 0.0
+}

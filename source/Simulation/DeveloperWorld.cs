@@ -4,13 +4,13 @@ public sealed partial class DemoWorld
 {
     private List<DemoWorker>? _removedResidents;
     public IEnumerable<Cell> StairObstructions(Cell c)=>Enumerable.Range(0,3).Select(h=>c+new Cell(0,0,h)).Where(Occupied);
-    public bool CanDeveloperPlace(Cell c,BuildKind kind) =>
-        Inside(c)&&c.Level>TerrainMap.MinLevel&&c.Level<=TerrainMap.MaxLevel&&!Occupied(c)&&Fluids.Amount(c)==0&&
+    public bool CanDeveloperPlace(Cell c,BuildKind kind,int facing=0) =>
+        (kind!=BuildKind.Ladder||Solid(c+StairDirection(facing)))&&Inside(c)&&c.Level>TerrainMap.MinLevel&&c.Level<=TerrainMap.MaxLevel&&!Occupied(c)&&Fluids.Amount(c)==0&&
         !(TallFixture(kind)&&Occupied(c+new Cell(0,0,1)))&&
-        !(BlockCatalog.IsStairs(kind)&&(Occupied(c+new Cell(0,0,1))||Occupied(c+new Cell(0,0,2))))&&!Jobs.Any(j=>j.Construction&&j.Cell==c)&&!Workers.Any(w=>IntersectsWorker(c,kind,w));
+        !(BlockCatalog.IsStairs(kind)&&(Occupied(c+new Cell(0,0,1))||Occupied(c+new Cell(0,0,2))))&&!Jobs.Any(j=>j.Construction&&j.Cell==c)&&!Actors.Any(w=>IntersectsWorker(c,kind,w));
     public bool DeveloperPlace(Cell c, BuildKind kind, int facing=0)
     {
-        if(!CanDeveloperPlace(c,kind))
+        if(!CanDeveloperPlace(c,kind,facing))
         {Log("立即建造失败：位置被占用、超出边界或与居民重叠。");return false;}
         var nearby=Directions.Select(d=>c+d).FirstOrDefault(Walkable);
         if(Inside(nearby)&&Walkable(nearby))DisplaceItems(c,nearby,TallFixture(kind)?2:1);
@@ -19,6 +19,7 @@ public sealed partial class DemoWorld
     }
     public bool DeveloperDig(Cell c,bool stairs=false,int facing=0,int height=1)
     {
+        _supportSafety.Clear();
         if(Trees.ContainsKey(c))return DamageBlock(c,double.MaxValue);
         if(!CanDig(c,stairs,height)) {Log("立即挖掘失败：没有可挖岩土或与现有物件重叠。");return false;}
         var job=new DemoJob{Cell=c,Dig=true,DigHeight=stairs?3:height,Facing=facing};
@@ -33,6 +34,7 @@ public sealed partial class DemoWorld
         if(!Buildings.TryGetValue(c,out var b))return false;
         if(BlockCatalog.IsWall(b.Kind)&&Workers.Any(w=>(w.Tile==c+new Cell(0,0,1)||(w.Path.Count>0&&w.Path.Peek()==c+new Cell(0,0,1)))))
         {Log("先移开楼板上的居民再拆除。");return false;}
+        _supportSafety.Clear();if(RemovalEndangersResident(c)){Log("先移开受支撑建筑上的居民再拆除。");return false;}
         _blockDamage.Remove(c);Buildings.Remove(c);SettleItems();Revision++;ValidateWorkshop();Log($"[开发] 移除 {b.BlockId} @ {c}，未增加库存。");return true;
     }
     public bool DeveloperResidents(bool present)
@@ -64,7 +66,7 @@ public sealed partial class DemoWorld
         while(completed<512)
         {
             Demo?.Advance(this);Underground?.Advance(this);
-            var job=Jobs.FirstOrDefault(j=>j.Construction && (j.Dig?DigSafe(j):Fluids.Amount(j.Cell)==0&&Supported(j.Cell)&&!Workers.Any(w=>IntersectsWorker(j.Cell,j.Build!.Value,w))));
+            var job=Jobs.FirstOrDefault(j=>j.Construction && (j.Build!=BuildKind.Ladder||Solid(j.Cell+StairDirection(j.Facing))) && (j.Dig?DigSafe(j):Fluids.Amount(j.Cell)==0&&Supported(j.Cell)&&!Actors.Any(w=>IntersectsWorker(j.Cell,j.Build!.Value,w))));
             if(job is null)break;
             Complete(job,new DemoWorker{Name="开发者"});completed++;
         }

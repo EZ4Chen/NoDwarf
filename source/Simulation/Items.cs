@@ -15,6 +15,8 @@ public static class ItemCatalog
         new("boots","皮靴","nodwarf:log","876b50"),new("gloves","手套","nodwarf:planks","c3b393"),
         new("cap","皮帽","nodwarf:log","947b53"),new("pickaxe","矿镐","nodwarf:anvil","aab8c0"),
         new("hammer","锻锤","nodwarf:anvil","8e969c"),new("shield","木盾","nodwarf:log","b49a75"),
+        new("axe","铁斧","nodwarf:anvil","aab8c0"),new("battleaxe","双刃战斧","nodwarf:anvil","aab8c0"),
+        new("shovel","铁铲","nodwarf:anvil","aab8c0"),new("hoe","铁锄","nodwarf:anvil","aab8c0"),
         new("potato_seed","土豆种薯","nodwarf:soil","b48e60"),new("cotton_seed","棉花种子","nodwarf:soil","9b8f6d"),
         new("birch_sapling","桦树苗","nodwarf:log","c3c99f"),new("pine_sapling","松树苗","nodwarf:log","4d7756"),
         new("wheat","小麦","nodwarf:planks","d9bd69"),new("flour","面粉","nodwarf:planks","eee4be"),
@@ -33,6 +35,8 @@ public static class ItemCatalog
 }
 public sealed class ItemStack
 {
+    public ItemProperties Properties {get;set;}=new();
+    [System.Text.Json.Serialization.JsonIgnore] public string EffectiveMaterial=>Properties.MaterialId!=""?Properties.MaterialId:EquipmentPhysicalCatalog.Find(Item)?.MaterialId??"";
     public int Id {get;set;}
     public string Item {get;set;}="cobblestone";
     public Cell Cell {get;set;}
@@ -42,6 +46,7 @@ public sealed class ItemStack
 }
 public sealed class MaterialReservation
 {
+    public ItemProperties Properties {get;set;}=new();
     public int StackId {get;set;}
     public string Item {get;set;}="cobblestone";
     public int Count {get;set;}
@@ -57,18 +62,19 @@ public sealed partial class DemoWorld
     public int Total(string item)=>Items.Where(s=>s.Item==item).Sum(s=>s.Count)+Jobs.SelectMany(j=>j.Materials).Where(r=>r.Stage==1&&r.Item==item).Sum(r=>r.Count);
     private int Reserved(int stack)
     {
-        int total = 0;
+        int total = Workers.Count(w=>w.Person.Activity is {Kind:"care_supply"} a&&a.ItemId==stack);
         foreach (var job in Jobs) foreach (var r in job.Materials)
             if (r.StackId == stack && r.Stage != 1) total += r.Count;
         return total;
     }
-    public ItemStack SpawnItem(string item,int count,Cell cell)
+    public ItemStack SpawnItem(string item,int count,Cell cell,ItemProperties? properties=null)
     {
         ItemCatalog.Get(item);
+        properties??=new();properties.Validate();
         if(count<=0||!Inside(cell))throw new ArgumentOutOfRangeException(nameof(count));
-        var existing=Items.FirstOrDefault(s=>s.Item==item&&s.Cell==cell&&s.Owner==""&&Reserved(s.Id)==0);
+        var existing=Items.FirstOrDefault(s=>s.Item==item&&s.Cell==cell&&s.Owner==""&&Reserved(s.Id)==0&&s.Properties==properties);
         if(existing is not null){existing.Count+=count;Revision++;return existing;}
-        var stack=new ItemStack{Id=++_nextItem,Item=item,Count=count,Cell=cell};Items.Add(stack);Revision++;return stack;
+        var stack=new ItemStack{Id=++_nextItem,Item=item,Count=count,Cell=cell,Properties=properties};Items.Add(stack);Revision++;return stack;
     }
     private void SeedItems()
     {
@@ -115,14 +121,15 @@ public sealed partial class DemoWorld
     private bool PrepareMaterials(DemoWorker worker,DemoJob job)
     {
         using var timing = Probe?.Measure("materials.prepare") ?? default;
-        if (!CanReachAny(worker.Tile, JobAccess(job))) return false;
+        var access=JobAccess(job);
+        if (!CanReachAny(worker.Tile, access)) return false;
         bool sourcesReachable = true;
         foreach (var reservation in job.Materials)
         {
             if (reservation.Stage != 0) continue;
             ItemStack? source = null;
             foreach (var stack in Items) if (stack.Id == reservation.StackId) { source = stack; break; }
-            if (source is null || !CanReachAny(worker.Tile, ItemAccess(source.Cell))) { sourcesReachable = false; break; }
+            if (source is null || !CanSupplyFrom(worker.Tile,source.Cell,access)) { sourcesReachable = false; break; }
         }
         if (sourcesReachable) return true;
         if (job.Haul) return false;
@@ -136,13 +143,19 @@ public sealed partial class DemoWorld
                 .OrderBy(s=>Math.Abs(s.Cell.X-job.Cell.X)+Math.Abs(s.Cell.Z-job.Cell.Z)+Math.Abs(s.Cell.Level-job.Cell.Level)))
             {
                 int free=stack.Count-Reserved(stack.Id)+pending.Where(r=>r.StackId==stack.Id).Sum(r=>r.Count);
-                if(free<=0||!CanReachAny(worker.Tile,ItemAccess(stack.Cell)))continue;
+                if(free<=0||!CanSupplyFrom(worker.Tile,stack.Cell,access))continue;
                 int n=Math.Min(left,free);replacement.Add(new(){StackId=stack.Id,Item=stack.Item,Count=n});left-=n;
                 if(left==0)break;
             }
             if(left>0)return false;
         }
         job.Materials.RemoveAll(r=>r.Stage==0);job.Materials.AddRange(replacement);return true;
+    }
+    private bool CanSupplyFrom(Cell resident,Cell source,Cell[] destination)
+    {
+        foreach(var access in ItemAccess(source))
+            if(Navigation.CanReach(resident,access)&&CanReachAny(access,destination))return true;
+        return false;
     }
     public string OrderStatus(DemoJob job)
     {
@@ -180,7 +193,7 @@ public sealed partial class DemoWorld
     }
     private bool RouteJob(DemoWorker worker,DemoJob job)
     {
-        var route=Navigation.FindNearest(worker.Tile,WorkPositions(job).Where(Walkable),out _);
+        var route=Navigation.FindNearest(worker.Tile,WorkPositions(job).Where(c=>Walkable(c)&&Navigation.CanReach(c,worker.Tile)),out _);
         if(route is null){Release(job);worker.Status="搬运路线受阻";return false;}
         foreach(var c in route)worker.Path.Enqueue(c);worker.CheckedNavigationVersion=Navigation.Version;return true;
     }
@@ -201,14 +214,17 @@ public sealed partial class DemoWorld
             if(next.Count>capacity)
             {
                 int remainder=next.Count-capacity;next.Count=capacity;
-                job.Materials.Insert(job.Materials.IndexOf(next)+1,new(){StackId=stack.Id,Item=next.Item,Count=remainder});
+                job.Materials.Insert(job.Materials.IndexOf(next)+1,new(){StackId=stack.Id,Item=next.Item,Count=remainder,Properties=stack.Properties});
             }
+            next.Properties=stack.Properties;
             stack.Count-=next.Count;if(stack.Count==0)Items.Remove(stack);
             next.Stage=1;next.StackId=0;RefreshWeight(worker);Revision++;worker.Status="搬运"+ItemCatalog.Get(next.Item).Name;
             RouteJob(worker,job);return true;
         }
+        // Install a ladder from carried wood: a rung is not a floor for staging materials.
+        if(job.Build==BuildKind.Ladder&&next.Stage==1)return false;
         if(job.Haul&&StoragePriority(job.Cell,next.Item)==0){CancelJob(job);return true;}
-        var placed=SpawnItem(next.Item,next.Count,job.Haul?job.Cell:worker.Tile);
+        var placed=SpawnItem(next.Item,next.Count,job.Haul?job.Cell:worker.Tile,next.Properties);
         next.StackId=placed.Id;next.Stage=2;RefreshWeight(worker);Revision++;
         if(job.Haul){job.Materials.Clear();Release(job);Jobs.Remove(job);return true;}
         RouteJob(worker,job);return true;
@@ -216,7 +232,7 @@ public sealed partial class DemoWorld
     private void DropCargo(DemoJob job,Cell cell)
     {
         foreach(var r in job.Materials.Where(r=>r.Stage==1))
-        {var stack=SpawnItem(r.Item,r.Count,cell);r.StackId=stack.Id;r.Stage=0;}
+        {var stack=SpawnItem(r.Item,r.Count,cell,r.Properties);r.StackId=stack.Id;r.Stage=0;}
     }
     private void ConsumeMaterials(DemoJob job)
     {
@@ -237,7 +253,7 @@ public sealed partial class DemoWorld
         // Reachability is shared by residents in the same connected component.
         // These snapshots live for this batch only; mutable reservations stay authoritative.
         var haulers=Workers.Where(w=>w.Person.WorkPriorities["hauling"]>0&&!w.Person.Dead&&!w.Person.Incapacitated&&w.Person.Mobility>=.05&&w.Person.Manipulation>=.05).ToArray();
-        var representatives = haulers.GroupBy(w => Navigation.ComponentAt(w.Tile)).Where(g => g.Key != 0).Select(g => g.First()).ToArray();
+        var representatives = haulers.GroupBy(w => Navigation.TravelRegionAt(w.Tile)).Where(g => g.Key != 0).Select(g => g.First()).ToArray();
         foreach(var stale in Jobs.Where(j=>j.Haul&&j.Worker<0&&(j.Materials.Any(r=>StoragePriority(j.Cell,r.Item)==0)||!representatives.Any(w=>PrepareMaterials(w,j)))).ToArray())
         {Jobs.Remove(stale);Revision++;}
         if(haulers.Length==0||Stockpiles.Count==0)return;
@@ -268,6 +284,7 @@ public sealed partial class DemoWorld
             foreach(var candidate in destinations)
             {
                 if(used.Contains(candidate.Cell)||!sourceComponents.Contains(candidate.Component))continue;
+                if(!ItemAccess(stack.Cell).Any(a=>representatives.Any(w=>Navigation.CanReach(w.Tile,a))&&Navigation.CanReach(a,candidate.Cell)))continue;
                 int priority=StoragePriority(candidate.Cell,stack.Item);
                 if(priority<=currentPriority||priority<bestPriority)continue;
                 int rank=stock.TryGetValue(candidate.Cell,out var items)?items.Contains(stack.Item)?0:2:1;

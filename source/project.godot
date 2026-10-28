@@ -7,6 +7,9 @@ run/main_scene="res://Scenes/Startup.tscn"
 config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+Diagnostics="*res://Scripts/AppDiagnostics.cs"
+
 [dotnet]
 project/assembly_name="NoDwarf"
 

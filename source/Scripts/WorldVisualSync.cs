@@ -5,17 +5,42 @@ namespace NoDwarf;
 
 public partial class Main
 {
-    private readonly Dictionary<Cell, (Building Data, Node3D Root)> _buildingVisuals = new();
+    private readonly Dictionary<Cell, (Building Data, Node3D Root, int Faces, float Height, bool GateOpen)> _buildingVisuals = new();
     private readonly Dictionary<int, (Cell Cell, BuildKind? Build, bool Dig, int Height, int Facing, Node3D Root)> _planVisuals = new();
+    private int _faceTerrainRevision=-1;
 
     private void SyncStructuresAndPlans()
     {
-        bool reset = _visualWorld != _world || _visualView != CurrentView;
+        bool reset = _visualWorld != _world;
+        BeginFallVisuals(reset);
+        var view=CurrentView;
+        bool wholeSliceChanged=reset||_visualView.Top!=view.Top||_visualView.RevealAll!=view.RevealAll;
+        var dirtyFaces=new HashSet<Cell>();
+        void Dirty(Cell c){dirtyFaces.Add(c);foreach(var (_,d) in BlockExposure.Neighbors)dirtyFaces.Add(c+d);}
+        if(!reset)
+        {
+            foreach(var old in _buildingVisuals)
+                if(!_world.Buildings.TryGetValue(old.Key,out var current)||current!=old.Value.Data)Dirty(old.Key);
+            foreach(var current in _world.Buildings)
+                if(!_buildingVisuals.ContainsKey(current.Key))Dirty(current.Key);
+            foreach(var c in _world.Terrain.ChangesSince(_faceTerrainRevision))Dirty(c);
+            // A view stamp alone does not change geometry. Local cuts affect only
+            // their own shapes and neighboring exposed faces.
+            if(!wholeSliceChanged&&!ReferenceEquals(_visualView.WallCaps,view.WallCaps))
+            {
+                if(_visualView.WallCaps is not null)foreach(var c in _visualView.WallCaps.Keys)
+                    if(_visualView.CellTop(c)!=view.CellTop(c))Dirty(c);
+                if(view.WallCaps is not null)foreach(var c in view.WallCaps.Keys)
+                    if(_visualView.CellTop(c)!=view.CellTop(c))Dirty(c);
+            }
+        }
+        _faceTerrainRevision=_world.Terrain.Revision;
         if (reset)
         {
             Clear(_structures); Clear(_ghosts);
             _buildingVisuals.Clear(); _planVisuals.Clear();
             _constructionVisuals.Clear();
+            ResetConstructionOutlines();
         }
         using (var timing = _world.Probe?.Measure("view.sync-buildings") ?? default)
         {
@@ -25,9 +50,13 @@ public partial class Main
             foreach (var building in _world.Buildings.Values)
             {
                 if (!VisibleAt(building.Cell)) continue;
+                bool wall=BlockCatalog.IsWall(building.Kind),gateOpen=_world.GateOpen(building.Cell);
+                float height=wall?Math.Clamp(view.CellTop(building.Cell)-building.Cell.Level,0,1):1;
+                int faces=!wholeSliceChanged&&!dirtyFaces.Contains(building.Cell)&&_buildingVisuals.TryGetValue(building.Cell,out var cached)
+                    ?cached.Faces:wall?(int)BlockExposure.BuildingFaces(_world,view,building.Cell):(int)BlockFaces.All;
                 if (_buildingVisuals.TryGetValue(building.Cell, out var old))
                 {
-                    if (old.Data == building && (building.Kind!=BuildKind.Floodgate||old.Root.GetMeta("gate_open",false).AsBool()==_world.GateOpen(building.Cell)))
+                    if (old.Data == building && old.Faces==faces && old.Height==height && (building.Kind!=BuildKind.Floodgate||old.GateOpen==gateOpen))
                     {
                         if(building.Kind==BuildKind.Campfire&&old.Root.FindChild("Flame",true,false) is Node3D flame)flame.Visible=_world.FireFuel.GetValueOrDefault(building.Cell)>0;
                         continue;
@@ -35,9 +64,9 @@ public partial class Main
                     RemoveVisual(old.Root);
                 }
                 var root = new Node3D(); _structures.AddChild(root);
-                root.SetMeta("gate_open",_world.GateOpen(building.Cell));
+                root.SetMeta("gate_open",gateOpen);
                 AddBuildingVisual(root, building.Cell, building.Kind, facing: building.Facing);
-                _buildingVisuals[building.Cell] = (building, root);
+                _buildingVisuals[building.Cell] = (building, root, faces, height, gateOpen);
                 _world.Probe?.Count("view.buildings-created");
             }
         }
@@ -46,7 +75,7 @@ public partial class Main
             var plans = _world.Jobs.Where(j => j.Construction).ToDictionary(j => j.Id);
             foreach (int id in _planVisuals.Keys.ToArray())
                 if (!plans.TryGetValue(id, out var job) || !VisibleAt(job.Cell))
-                { RemoveVisual(_planVisuals[id].Root); _planVisuals.Remove(id); _constructionVisuals.Remove(id); }
+                { RemoveVisual(_planVisuals[id].Root); _planVisuals.Remove(id); RemoveConstructionVisual(id); }
             foreach (var job in plans.Values)
             {
                 if (!VisibleAt(job.Cell)) continue;
@@ -54,7 +83,7 @@ public partial class Main
                 {
                     if (old.Cell == job.Cell && old.Build == job.Build && old.Dig == job.Dig && old.Height == job.DigHeight && old.Facing == job.Facing) continue;
                     RemoveVisual(old.Root);
-                    _constructionVisuals.Remove(job.Id);
+                    RemoveConstructionVisual(job.Id);
                 }
                 var root = new Node3D(); _ghosts.AddChild(root);
                 if (job.Dig) DrawDig(root, job.Cell, job.DigHeight == 3, job.Facing);
@@ -63,6 +92,7 @@ public partial class Main
                 _world.Probe?.Count("view.plans-created");
             }
         }
+        SyncConstructionOutlines();
         _visualWorld = _world; _visualView = CurrentView;
     }
 
@@ -82,6 +112,7 @@ public partial class Main
         _world.Buildings[first] = new(first, BuildKind.Wall); _world.Buildings[second] = new(second, BuildKind.Wall);
         if (!_world.QueueBuild(new Cell(22,22), BuildKind.Wall, announce:false)) throw new InvalidOperationException("Visual test plan");
         SyncWorld();
+        CheckConstructionOutlines();
         ulong firstId = _buildingVisuals[first].Root.GetInstanceId();
         ulong secondId = _buildingVisuals[second].Root.GetInstanceId();
         int jobId = _world.Jobs.Single().Id; ulong planId = _planVisuals[jobId].Root.GetInstanceId();
@@ -99,6 +130,7 @@ public partial class Main
         _world.Buildings.Remove(second); _world.CancelJob(_world.Jobs.Single(j=>j.Id==jobId)); SyncWorld();
         if (_buildingVisuals.ContainsKey(second) || _planVisuals.ContainsKey(jobId)) throw new InvalidOperationException("Removed visuals retained");
         _layerOffset = -3; SyncWorld();
+        CheckConstructionOutlines();
         if (_buildingVisuals.ContainsKey(first) || !_buildingVisuals.ContainsKey(buried)) throw new InvalidOperationException("Floor change failed to update cached visuals");
         GD.Print("VISUAL_CACHE_OK: retained nodes, changed materials, new/deleted plans, terrain discovery and floor changes");
     }

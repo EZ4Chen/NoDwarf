@@ -46,6 +46,8 @@ public static class BlockTextures
         throw new InvalidOperationException("Material alias cycle: "+id);
     }
     public static StandardMaterial3D Material(string id,bool top=false,bool bottom=false,bool front=false)
+        => WorldMaterialStyle.Apply(RawMaterial(id,top,bottom,front),id);
+    private static StandardMaterial3D RawMaterial(string id,bool top=false,bool bottom=false,bool front=false)
     {
         var e=Resolve(id);string file=(top?e.Top:bottom?e.Bottom:front?e.Front:null)??e.Side??id.Replace("nodwarf:","")+".png";
         string tint=top?(e.TopTint??e.Tint):e.Tint;string path=Pack.Root+file;string key=path+":"+tint+":"+e.Cutout;
@@ -65,13 +67,13 @@ public static class BlockTextures
         return map.GetPixel((int)((1-heat)*(map.GetWidth()-1)),(int)((1-wet)*(map.GetHeight()-1)));
     }
     public static StandardMaterial3D TerrainMaterial(string id,bool top,RegionProfile? profile)
-        => TerrainTextureStyle.Apply(BiomeTerrainMaterial(id,top,profile));
+        => TerrainTextureStyle.Apply(BiomeTerrainMaterial(id,top,profile),id,top);
     private static StandardMaterial3D BiomeTerrainMaterial(string id,bool top,RegionProfile? profile)
     {
-        if(profile?.Modern!=true||id is not ("nodwarf:grass" or "nodwarf:dry_grass" or "nodwarf:dry_grass_ramp"))return Material(id,top);
+        if(profile?.Modern!=true||id is not ("nodwarf:grass" or "nodwarf:dry_grass" or "nodwarf:dry_grass_ramp"))return RawMaterial(id,top);
         var tint=BiomeGrassColor(profile);string key=$"biome:{id}:{top}:{tint.ToHtml()}";
         if(Cache.TryGetValue(key,out var found))return found;
-        var basis=Material(id,top);
+        var basis=RawMaterial(id,top);
         if(basis.AlbedoTexture is null)return basis;
         var material=(StandardMaterial3D)basis.Duplicate();material.AlbedoColor=Colors.White;
         if(top)material.AlbedoColor=tint;
@@ -154,17 +156,29 @@ public static class BlockTextures
         s.SetUV(new(0,height));s.AddVertex(d);
         s.SetUV(new(width,height));s.AddVertex(c);
     }
-    public static void Box(Node parent, Vector3 position, Vector3 size, string id)
+    public static void Box(Node parent, Vector3 position, Vector3 size, string id, BlockFaces faces=BlockFaces.All)
     {
+        if(faces==BlockFaces.None)return;
         var mesh=new ArrayMesh(); var h=size/2;
+        var surfaces=new Dictionary<ulong,SurfaceTool>();
         void Face(Vector3 a,Vector3 b,Vector3 c,Vector3 d,Material mat,float w,float v)
-        { var s=new SurfaceTool();s.Begin(Mesh.PrimitiveType.Triangles);s.SetMaterial(mat);Quad(s,a,b,c,d,w,v);s.GenerateNormals();s.Commit(mesh); }
-        Face(new(-h.X,h.Y,-h.Z),new(-h.X,h.Y,h.Z),new(h.X,h.Y,h.Z),new(h.X,h.Y,-h.Z),Material(id,true),size.Z,size.X);
-        Face(new(-h.X,-h.Y,h.Z),new(-h.X,-h.Y,-h.Z),new(h.X,-h.Y,-h.Z),new(h.X,-h.Y,h.Z),Material(id,bottom:true),size.Z,size.X);
-        Face(new(-h.X,h.Y,-h.Z),new(h.X,h.Y,-h.Z),new(h.X,-h.Y,-h.Z),new(-h.X,-h.Y,-h.Z),Material(id),size.X,size.Y);
-        Face(new(h.X,h.Y,h.Z),new(-h.X,h.Y,h.Z),new(-h.X,-h.Y,h.Z),new(h.X,-h.Y,h.Z),Material(id,front:true),size.X,size.Y);
-        Face(new(h.X,h.Y,-h.Z),new(h.X,h.Y,h.Z),new(h.X,-h.Y,h.Z),new(h.X,-h.Y,-h.Z),Material(id),size.Z,size.Y);
-        Face(new(-h.X,h.Y,h.Z),new(-h.X,h.Y,-h.Z),new(-h.X,-h.Y,-h.Z),new(-h.X,-h.Y,h.Z),Material(id),size.Z,size.Y);
-        parent.AddChild(new MeshInstance3D { Position=position,Mesh=mesh });
+        {
+            if(!surfaces.TryGetValue(mat.GetInstanceId(),out var s))
+            {
+                s=new SurfaceTool();s.Begin(Mesh.PrimitiveType.Triangles);s.SetMaterial(mat);
+                // Keep hard cube edges when sharing a draw surface across faces.
+                s.SetSmoothGroup(uint.MaxValue);surfaces[mat.GetInstanceId()]=s;
+            }
+            Quad(s,a,b,c,d,w,v);
+        }
+        if((faces&BlockFaces.Top)!=0)Face(new(-h.X,h.Y,-h.Z),new(-h.X,h.Y,h.Z),new(h.X,h.Y,h.Z),new(h.X,h.Y,-h.Z),Material(id,true),size.Z,size.X);
+        if((faces&BlockFaces.Bottom)!=0)Face(new(-h.X,-h.Y,h.Z),new(-h.X,-h.Y,-h.Z),new(h.X,-h.Y,-h.Z),new(h.X,-h.Y,h.Z),Material(id,bottom:true),size.Z,size.X);
+        if((faces&BlockFaces.North)!=0)Face(new(-h.X,h.Y,-h.Z),new(h.X,h.Y,-h.Z),new(h.X,-h.Y,-h.Z),new(-h.X,-h.Y,-h.Z),Material(id),size.X,size.Y);
+        if((faces&BlockFaces.South)!=0)Face(new(h.X,h.Y,h.Z),new(-h.X,h.Y,h.Z),new(-h.X,-h.Y,h.Z),new(h.X,-h.Y,h.Z),Material(id,front:true),size.X,size.Y);
+        if((faces&BlockFaces.East)!=0)Face(new(h.X,h.Y,-h.Z),new(h.X,h.Y,h.Z),new(h.X,-h.Y,h.Z),new(h.X,-h.Y,-h.Z),Material(id),size.Z,size.Y);
+        if((faces&BlockFaces.West)!=0)Face(new(-h.X,h.Y,h.Z),new(-h.X,h.Y,-h.Z),new(-h.X,-h.Y,-h.Z),new(-h.X,-h.Y,h.Z),Material(id),size.Z,size.Y);
+        foreach(var surface in surfaces.Values){surface.GenerateNormals();surface.Commit(mesh);surface.Dispose();}
+        var instance=new MeshInstance3D { Position=position,Mesh=mesh };
+        instance.SetMeta("voxel_bounds",new Aabb(-h,size));parent.AddChild(instance);
     }
 }

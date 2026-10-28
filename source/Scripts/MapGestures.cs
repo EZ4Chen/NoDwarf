@@ -18,6 +18,16 @@ public partial class Main
     }
     private void RightClick(Vector2 position)
     {
+        if(_tool=="select"&&SelectedResidents().Length>1){OrderSelectedResidents(position);return;}
+        if(_tool=="select"&&_selectedWorker>=0&&_world.Workers[_selectedWorker].Combat.Drafted)
+        {
+            var w=_world.Workers[_selectedWorker];var hit=PickObject(position,16);
+            if(hit.Count>0&&hit["collider"].AsGodotObject() is {} body&&body.HasMeta("enemy"))CombatNotice(_world.MilitaryAttack(w.Id,body.GetMeta("enemy").AsString()));
+            else if(Pick(position) is Cell c)CombatNotice(_world.MilitaryMove(w.Id,c));
+            return;
+        }
+        if(_world.CivilianAlert&&_selectedWorker>=0){_world.Log("集合警报期间请先征召居民，或解除警报。");return;}
+
                 if (_tool == "select" && _selectedWorker >= 0 && Pick(position) is Cell destination)
                 {
                     var worker = _world.Workers[_selectedWorker];
@@ -32,10 +42,11 @@ public partial class Main
     }
     private bool HandleMapGesture(InputEvent input)
     {
-        if(!GetWindow().HasFocus() && !OS.GetCmdlineUserArgs().Contains("--interaction-test"))
-        { _orbitHeld=false;_digStart=null;_digEnd=null;return false; }
-        if((_consolePanel is not null&&_consolePanel.Visible)||(_developerPanel is not null&&_developerPanel.Visible)||(_characterEditor is not null&&_characterEditor.Visible))
-        { _orbitHeld=false;_digStart=null;_digEnd=null;return false; }
+        if(!GetWindow().HasFocus() && !GestureTest)
+        { CancelLeftSelection();_orbitHeld=false;_digStart=null;_digEnd=null;return false; }
+        if((_consolePanel is not null&&_consolePanel.Visible)||(_characterEditor is not null&&_characterEditor.Visible))
+        { CancelLeftSelection();_orbitHeld=false;_digStart=null;_digEnd=null;return false; }
+        if(HandleLeftSelection(input))return true;
         if(_orbitHeld)
         {
             if(input is InputEventMouseMotion motion)

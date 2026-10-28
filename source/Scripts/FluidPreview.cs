@@ -44,10 +44,10 @@ public partial class Main
         }
         catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}
     }
-    private void EditSelectedWater(bool drain)
+    private void EditSelectedWater(bool drain,int amount=1000)
     {
-        if(!_developerMode||_selectedCell is not Cell c){RecordWorldEvent("先开启开发者模式并选中一个地格。");return;}
+        if(!_developerMode||_selectedCell is not Cell c){throw new ArgumentException("先开启开发者模式并选中一个地格。");}
         if(_world.Solid(c))c+=new Cell(0,0,1);
-        RecordWorldEvent(drain?$"开发排水 {_world.Fluids.Drain(c)} L。":$"开发注水 {_world.Fluids.Add(c,1000)} L。");RefreshUi();RefreshFluidVisuals();
+        RecordWorldEvent(drain?$"开发排水 {_world.Fluids.Drain(c)} L。":$"开发注水 {_world.Fluids.Add(c,amount)} L。");RefreshUi();RefreshFluidVisuals();
     }
 }

@@ -55,9 +55,7 @@ public partial class TerrainView : Node3D
                     if(DemoWorld.Inside(c+new Cell(dx,dz)))dirty.Add(((c.X+dx)/16*16,(c.Z+dz)/16*16));
             }
         }
-        LastRebuiltChunks=dirty.Count;
         // Only exposed candidates need meshing; buried rock is implicit.
-        world.Probe?.Count("view.terrain-chunks-rebuilt", dirty.Count);
         QueueMeshes(world,view,dirty,all);
         if(_trees is null||_lastTrees!=world.TreeRevision)
         {

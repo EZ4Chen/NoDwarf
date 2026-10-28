@@ -1,0 +1,160 @@
+{
+  "sources": {
+    "male": "/Users/ez4chen/NoDwarf/art/dwarf/v3/male/dwarf.blend",
+    "female": "/Users/ez4chen/NoDwarf/art/dwarf/v3/female/dwarf.blend"
+  },
+  "rendered": [
+    "male-front.png",
+    "male-side.png",
+    "male-back.png",
+    "male-guard.png",
+    "male-walk.png",
+    "male-slash_windup.png",
+    "male-slash_contact.png",
+    "male-block_hold.png",
+    "male-block_hit.png",
+    "male-mine_raise.png",
+    "male-mine_strike.png",
+    "male-down.png",
+    "female-front.png",
+    "female-side.png",
+    "female-back.png",
+    "female-guard.png",
+    "female-walk.png",
+    "female-slash_windup.png",
+    "female-slash_contact.png",
+    "female-block_hold.png",
+    "female-block_hit.png",
+    "female-mine_raise.png",
+    "female-mine_strike.png",
+    "female-down.png",
+    "old-male-front.png",
+    "old-female-front.png"
+  ],
+  "missing_actions": [],
+  "missing_categories": {
+    "male-body": [],
+    "male-guard": [],
+    "male-walk": [],
+    "male-slash_windup": [],
+    "male-slash_contact": [],
+    "male-block_hold": [],
+    "male-block_hit": [],
+    "male-mine_raise": [],
+    "male-mine_strike": [],
+    "male-down": [],
+    "female-body": [],
+    "female-guard": [],
+    "female-walk": [],
+    "female-slash_windup": [],
+    "female-slash_contact": [],
+    "female-block_hold": [],
+    "female-block_hit": [],
+    "female-mine_raise": [],
+    "female-mine_strike": [],
+    "female-down": [],
+    "old-male": [
+      "hair"
+    ],
+    "old-female": [
+      "hair"
+    ]
+  },
+  "tool_axes": {
+    "male": {
+      "slot_hand_r": {
+        "rest_local_forward": [
+          -2.980233659855003e-08,
+          1.000000238418579,
+          1.4901166522918174e-08
+        ],
+        "rest_local_up": [
+          -1.0803344707710494e-07,
+          9.685756907629184e-08,
+          1.000000238418579
+        ]
+      },
+      "slot_hand_l": {
+        "rest_local_forward": [
+          2.980233659855003e-08,
+          1.000000238418579,
+          1.4901166522918174e-08
+        ],
+        "rest_local_up": [
+          1.0803344707710494e-07,
+          9.685756907629184e-08,
+          1.000000238418579
+        ]
+      },
+      "sword": {
+        "rest_span_xyz": [
+          0.06657397747039795,
+          0.2200000211596489,
+          0.7450000643730164
+        ]
+      },
+      "pickaxe": {
+        "rest_span_xyz": [
+          0.08799993991851807,
+          0.588589996099472,
+          0.6470000147819519
+        ]
+      },
+      "shield": {
+        "rest_span_xyz": [
+          0.4281729459762573,
+          0.2023143582046032,
+          0.4888134002685547
+        ]
+      }
+    },
+    "female": {
+      "slot_hand_r": {
+        "rest_local_forward": [
+          -2.980233659855003e-08,
+          1.000000238418579,
+          1.4901166522918174e-08
+        ],
+        "rest_local_up": [
+          -1.0803344707710494e-07,
+          9.685756907629184e-08,
+          1.000000238418579
+        ]
+      },
+      "slot_hand_l": {
+        "rest_local_forward": [
+          2.980233659855003e-08,
+          1.000000238418579,
+          1.4901166522918174e-08
+        ],
+        "rest_local_up": [
+          1.0803344707710494e-07,
+          9.685756907629184e-08,
+          1.000000238418579
+        ]
+      },
+      "sword": {
+        "rest_span_xyz": [
+          0.06657397747039795,
+          0.2200000211596489,
+          0.7450000643730164
+        ]
+      },
+      "pickaxe": {
+        "rest_span_xyz": [
+          0.08799993991851807,
+          0.588589996099472,
+          0.6470000147819519
+        ]
+      },
+      "shield": {
+        "rest_span_xyz": [
+          0.4281729459762573,
+          0.2023143582046032,
+          0.4888134002685547
+        ]
+      }
+    }
+  },
+  "missing_body_masks": []
+}

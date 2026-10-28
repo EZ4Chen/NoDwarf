@@ -5,7 +5,7 @@ public sealed record ResidentSkill(string Id, string Name, bool HasWork);
 public sealed record TalentNode(string Id, string Skill, int Rank, int Level, int Cost, string Research)
 {
     public string Name => $"{ResidentCatalog.Skill(Skill).Name}专长 {Rank}";
-    public string Effect => $"对应工作效率 +{Rank * 15}%（总计）";
+    public string Effect => Skill=="combat"?$"近战伤害 +{Rank * 15}%（总计）":$"对应工作效率 +{Rank * 15}%（总计）";
 }
 public sealed record ResearchDefinition(string Id, string Name, int Cost, string[] Prerequisites);
 public static class ResidentCatalog
@@ -14,7 +14,7 @@ public static class ResidentCatalog
     public static readonly ResidentSkill[] Skills = [
         new("mining","采矿",true), new("construction","建造",true), new("smelting","冶炼",true),
         new("smithing","锻造",true), new("woodwork","木工",true), new("growing","种植",true),
-        new("cooking","烹饪",true), new("medicine","医疗",true), new("combat","战斗",false),
+        new("cooking","烹饪",true), new("medicine","医疗",true), new("combat","战斗",true),
         new("social","交涉",true), new("research","研究",true)];
     public static readonly ResearchDefinition[] Research = [
         new("foundations","基础研究方法",80,[]), new("industry","工艺改良",150,["foundations"]),
@@ -175,7 +175,7 @@ public sealed class ResidentProfile
             Relations is null||Relations.Count>32||Relations.Any(r=>r is null||string.IsNullOrWhiteSpace(r.Target)||r.Kind is null||r.Kind.Length>30||r.Opinion is <-100 or >100||!double.IsFinite(r.LastSocial))||Relations.Select(r=>r.Target).Distinct().Count()!=Relations.Count||
             MoodEffects is null||MoodEffects.Count>8||MoodEffects.Any(m=>m is null||m.Key is null||m.Text is null||m.Key.Length>100||m.Text.Length>200||m.Amount is <-100 or >100||!Valid(m.Until,double.MaxValue)) ||
             PausedResearch is not null && (PausedResearch.Kind!="research"||!ValidOrigin(PausedResearch.Origin)||PausedResearch.Target!=""||PausedResearch.ItemId!=0||!Valid(PausedResearch.Progress,1)||PausedResearch.Progress>=1||!TerrainMap.InBounds(PausedResearch.Destination)) ||
-            Activity is not null && (Activity.Kind is not ("rest" or "relax" or "research" or "pickup" or "eat" or "treat" or "social")||!ValidOrigin(Activity.Origin)||Activity.Target is null||Activity.Target.Length>100||!Valid(Activity.Progress,100000)||!TerrainMap.InBounds(Activity.Destination)))
+            Activity is not null && (Activity.Kind is not ("rest" or "relax" or "research" or "pickup" or "eat" or "treat" or "care_supply" or "social")||!ValidOrigin(Activity.Origin)||Activity.Target is null||Activity.Target.Length>100||!Valid(Activity.Progress,100000)||!TerrainMap.InBounds(Activity.Destination)))
             throw new InvalidDataException("人物资料无效。");
     }
 }

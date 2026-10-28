@@ -7,7 +7,7 @@ namespace NoDwarf;
 
 public partial class TerrainView
 {
-    private sealed record MeshRequest((int,int) Key,long Version,TerrainMeshSnapshot Snapshot,int CacheGeneration);
+    private sealed record MeshRequest((int,int) Key,long Version,TerrainMeshSnapshot Snapshot,int CacheGeneration,SliceKey Slice,long TraceId);
     private sealed record MeshWork(MeshRequest Request,CancellationTokenSource Cancellation,Task<TerrainMeshResult> Task);
     private readonly Dictionary<(int,int),MeshRequest> _pendingMeshes=new();
     private readonly Dictionary<(int,int),long> _meshVersions=new();
@@ -27,8 +27,9 @@ public partial class TerrainView
     public int DiscardedMeshCount {get;private set;}
     public HashSet<int> MeshWorkerThreads {get;}=new();
     private const int MeshConcurrency=2;
-    private TerrainMeshSnapshot CaptureMeshInput(DemoWorld world,WorldView view)
+    private TerrainMeshSnapshot CaptureMeshInput(DemoWorld world,WorldView view,HashSet<Cell>? walls=null)
     {
+        using var trace=DiagnosticTrace.Span("terrain.snapshot",revision:world.Terrain.Revision);
         using var timing=world.Probe?.Measure("view.terrain-snapshot")??default;
         if(_snapshotSource!=world.Terrain||_snapshotRevision!=world.Terrain.Revision)
         {
@@ -36,30 +37,39 @@ public partial class TerrainView
             _snapshotTerrain=world.Terrain.CaptureMeshSnapshot();
         }
         var frozenView=view with {WallCaps=view.WallCaps?.ToDictionary(p=>p.Key,p=>p.Value)};
-        return new(_snapshotTerrain!,frozenView,world.Buildings.Values.Where(b=>BlockCatalog.IsWall(b.Kind)).Select(b=>b.Cell).ToHashSet());
+        return new(_snapshotTerrain!,frozenView,walls??world.Buildings.Values.Where(b=>BlockCatalog.IsWall(b.Kind)).Select(b=>b.Cell).ToHashSet());
     }
     private void QueueMeshes(DemoWorld world,WorldView view,HashSet<(int,int)> dirty,bool all)
     {
         _meshProbe=world.Probe;
+        LastRebuiltChunks=0;
         if(dirty.Count==0)return;
-        var snapshot=CaptureMeshInput(world,view);
-        PrepareSliceCache(snapshot);
+        var walls=world.Buildings.Values.Where(b=>BlockCatalog.IsWall(b.Kind)).Select(b=>b.Cell).ToHashSet();
+        PrepareSliceCache(world,walls);
+        TerrainMeshSnapshot? snapshot=null;
+        var caps=SliceCaps(view);
         foreach(var key in dirty.OrderBy(ChunkDistance))
         {
             long version=++_nextMeshVersion;_meshVersions[key]=version;
             foreach(var work in _meshWorkers)if(work.Request.Key==key)work.Cancellation.Cancel();
-            _pendingMeshes.Remove(key);
-            var request=new MeshRequest(key,version,snapshot,_sliceGeneration);
-            if(RestoreSlice(request))continue;
+            if(_pendingMeshes.Remove(key,out var pending))DiagnosticTrace.Mark("terrain","superseded",pending.TraceId,pending.Version);
+            var slice=new SliceKey(key,view.Top,view.RevealAll,caps.GetValueOrDefault(key,CapProfile.Empty));
+            int generation=ChunkGeneration(key);
+            if(RestoreSlice(key,generation,slice)){_meshProbe?.Count("view.terrain-cache-hit");continue;}
+            // Fully cached switches never copy terrain or rebuild candidate-level maps.
+            snapshot??=CaptureMeshInput(world,view,walls);
+            var request=new MeshRequest(key,version,snapshot,generation,slice,DiagnosticTrace.Queued("terrain",version));
             _pendingMeshes[key]=request;
+            LastRebuiltChunks++;
             // Old geometry must never expose a hidden layer or intercept a ray after
             // a terrain edit. Local visual meshes remain until their replacement arrives.
             if(_chunks.TryGetValue(key,out var old))
             {
                 if(all)old.Visible=false;
-                foreach(var child in old.GetChildren())if(child is StaticBody3D body)body.CollisionLayer=0;
+                foreach(var child in old.GetChildren())if(child is StaticBody3D body){body.CollisionLayer=0;body.CollisionMask=0;}
             }
         }
+        _meshProbe?.Count("view.terrain-chunks-rebuilt",LastRebuiltChunks);
         if(SynchronousMeshing)FlushMeshes();else PumpMeshes();
     }
     private void StartMeshWorkers()
@@ -68,15 +78,27 @@ public partial class TerrainView
         {
             var request=_pendingMeshes.Values.MinBy(r=>ChunkDistance(r.Key))!;_pendingMeshes.Remove(request.Key);
             var cancellation=new CancellationTokenSource();var token=cancellation.Token;
-            var task=Task.Run(()=>TerrainMeshBuilder.Build(request.Snapshot,request.Key,token),token);
+            var task=Task.Run(()=>
+            {
+                DiagnosticTrace.Mark("terrain","started",request.TraceId,request.Version);
+                using var trace=DiagnosticTrace.Span("terrain.compute",request.TraceId,request.Version);
+                try
+                {
+                    var result=TerrainMeshBuilder.Build(request.Snapshot,request.Key,token);
+                    DiagnosticTrace.Mark("terrain","computed",request.TraceId,request.Version);return result;
+                }
+                catch(OperationCanceledException){DiagnosticTrace.Mark("terrain","canceled",request.TraceId,request.Version);throw;}
+                catch{DiagnosticTrace.Mark("terrain","faulted",request.TraceId,request.Version);throw;}
+            },token);
             _meshWorkers.Add(new(request,cancellation,task));
         }
     }
     private bool Current(MeshRequest request)=>_meshVersions.GetValueOrDefault(request.Key)==request.Version;
     private void CompleteMesh(MeshWork work)
     {
+        DiagnosticTrace.Mark("terrain","collected",work.Request.TraceId,work.Request.Version);
         _meshWorkers.Remove(work);work.Cancellation.Dispose();
-        if(work.Task.IsCanceled){DiscardedMeshCount++;return;}
+        if(work.Task.IsCanceled){DiagnosticTrace.Mark("terrain","discarded",work.Request.TraceId,work.Request.Version);DiscardedMeshCount++;return;}
         if(work.Task.IsFaulted)
         {
             var error=work.Task.Exception!; // Observe every exception, including obsolete work.
@@ -84,7 +106,7 @@ public partial class TerrainView
             DiscardedMeshCount++;return;
         }
         var result=work.Task.GetAwaiter().GetResult();MeshWorkerThreads.Add(result.WorkerThread);
-        if(!Current(work.Request)){DiscardedMeshCount++;return;}
+        if(!Current(work.Request)){DiagnosticTrace.Mark("terrain","discarded",work.Request.TraceId,work.Request.Version);DiscardedMeshCount++;return;}
         ApplyMesh(work.Request,result);
     }
     // Called every rendered frame, even if the world itself has not changed.
@@ -148,6 +170,7 @@ public partial class TerrainView
     private static readonly StandardMaterial3D ContactLineMaterial=new(){AlbedoColor=new("20272e"),ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,CullMode=BaseMaterial3D.CullModeEnum.Disabled};
     private void ApplyMesh(MeshRequest request,TerrainMeshResult result)
     {
+        using var trace=DiagnosticTrace.Span("terrain.apply",request.TraceId,request.Version);
         using var timing=_meshProbe?.Measure("view.terrain-submit")??default;
         var holder=new Node3D();
         if(result.Edges.Vertices.Length>0)holder.AddChild(new MeshInstance3D{Mesh=Upload(result.Edges,ContactLineMaterial),CastShadow=GeometryInstance3D.ShadowCastingSetting.Off});
@@ -162,11 +185,13 @@ public partial class TerrainView
         }
         RetireChunk(request.Key);
         AddChild(holder);_chunks[request.Key]=holder;AppliedMeshCount++;
-        _chunkState[request.Key]=new(request.CacheGeneration,request.Snapshot.View.Top,request.Snapshot.View.RevealAll,request.Snapshot.View.WallCaps is null,result.Collision.Length);
+        _chunkState[request.Key]=new(request.CacheGeneration,request.Slice,4096L+result.Collision.Length*96L+result.Edges.Vertices.Length*64L);
         _meshProbe?.Count("view.terrain-chunks-applied");
+        DiagnosticTrace.Mark("terrain","applied",request.TraceId,request.Version);
     }
     private void ResetMeshPipeline()
     {
+        foreach(var request in _pendingMeshes.Values)DiagnosticTrace.Mark("terrain","superseded",request.TraceId,request.Version);
         foreach(var work in _meshWorkers)work.Cancellation.Cancel();
         _pendingMeshes.Clear();_meshVersions.Clear();_terrainMaterials.Clear();
         ClearSliceCache();_chunkState.Clear();

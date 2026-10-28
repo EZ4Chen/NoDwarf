@@ -1,13 +1,18 @@
 using System.Text.Json;
 namespace NoDwarf.Simulation;
 
-public sealed record GearDefinition(string Item,string Slot,double Weight,int Protection,string Skill="",double Bonus=0,bool TwoHanded=false);
+public sealed record GearDefinition(string Item,string Slot,double Weight,int Protection,string Skill="",double Bonus=0,bool TwoHanded=false,string WorkUse="")
+{ public EquipmentDimensions? Dimensions=>EquipmentPhysicalCatalog.Find(Item); }
 public static class ResidentGear
 {
     public static readonly GearDefinition[] All = [
         new("shirt","body",2,8),new("trousers","legs",1,5),new("boots","feet",2,8),new("gloves","hands",1,8),
         new("cap","head",1,8),new("pickaxe","main",4,0,"mining",.15,true),new("hammer","main",2,0,"smithing",.15),
-        new("sword","main",3,0,"combat",.15),new("shield","off",4,15)];
+        new("sword","main",3,0,"combat",.15),new("shield","off",4,15),
+        new("axe","main",3,0,"woodwork",.15,WorkUse:"forestry"),
+        new("battleaxe","main",5,0,"combat",.15,true),
+        new("shovel","main",3,0,"mining",.15,true,"earth"),
+        new("hoe","main",3,0,"growing",.15,true,"sowing")];
     public static GearDefinition? Get(string item)=>All.FirstOrDefault(g=>g.Item==item);
     public static double Weight(string item)=>Get(item)?.Weight??(item is "meal" or "bandage"?.25:1);
     public static string SlotForPart(string part)=>part switch
@@ -55,8 +60,16 @@ public sealed partial class DemoWorld
         worker.Person.Earn(skill,amount);TryAutoTalents(worker);
     }
     private string JobSkill(DemoJob job)=>job.Processing?(ProcessingCatalog.Find(job.Recipe)?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",_=>"woodwork"}):job.Farming||job.PlantTree?"growing":job.Chop?"woodwork":job.Demolish?"construction":job.Cook?"cooking":job.Dig?"mining":job.Smelt?"smelting":job.Forge?"smithing":
-        job.Build is BuildKind.Log or BuildKind.Planks or BuildKind.PlankStairs or BuildKind.LogStairs?"woodwork":"construction";
-    private double GearWorkBonus(DemoWorker worker,string skill)=>worker.Person.GearBonuses.GetValueOrDefault(skill);
+        job.Build is BuildKind.Ladder or BuildKind.Log or BuildKind.Planks or BuildKind.PlankStairs or BuildKind.LogStairs?"woodwork":"construction";
+    internal double GearWorkBonus(DemoWorker worker,DemoJob job)
+    {
+        var bonuses=worker.Person.GearBonuses;
+        string use=job.Chop?"forestry":job.Sow||job.PlantTree?"sowing":job.Dig&&IsLooseSoil(BlockAt(job.Cell))?"earth":"";
+        return bonuses.GetValueOrDefault(JobSkill(job))+(use!=""?bonuses.GetValueOrDefault("job:"+use):0);
+    }
+    private static bool IsLooseSoil(string block)=>block is "nodwarf:soil" or "nodwarf:soil_ramp" or "nodwarf:grass" or
+        "nodwarf:dry_grass" or "nodwarf:dry_grass_ramp" or "nodwarf:sand" or "nodwarf:sand_ramp" or
+        "nodwarf:humus" or "nodwarf:humus_ramp" or "nodwarf:gravel" or "nodwarf:gravel_ramp";
     private void RefreshWeight(DemoWorker worker,IEnumerable<ItemStack>? owned=null)
     {
         var items=(owned??Inventory(worker)).ToArray();
@@ -66,7 +79,10 @@ public sealed partial class DemoWorld
         foreach(var item in items.Where(s=>s.Slot!=""))
             if(ResidentGear.Get(item.Item) is {Skill:not ""} gear&&
                 (!gear.TwoHanded||worker.Person.Integrity("left_hand")>=.2&&worker.Person.Integrity("right_hand")>=.2))
-                worker.Person.GearBonuses[gear.Skill]=worker.Person.GearBonuses.GetValueOrDefault(gear.Skill)+gear.Bonus;
+            {
+                string key=gear.WorkUse==""?gear.Skill:"job:"+gear.WorkUse;
+                worker.Person.GearBonuses[key]=worker.Person.GearBonuses.GetValueOrDefault(key)+gear.Bonus;
+            }
     }
     private void SeedResidentItems()
     {
@@ -130,14 +146,14 @@ public sealed partial class DemoWorld
     }
     private ResidentResult BeginResidentActivity(DemoWorker w,string kind,string target="",int itemId=0,string origin="manual")
     {
-        var p=w.Person;if(p.Incapacitated)return new(false,"居民失去行动能力");
+        var p=w.Person;if(MilitaryControlled(w))return new(false,"请先解除征召或集合警报");if(p.Incapacitated)return new(false,"居民失去行动能力");
         if(kind is "research" or "treat"&&p.Manipulation<.05)return new(false,"双手无法操作，不能进行这项工作");
         Cell destination=w.Tile;Queue<Cell>? path=new();
         if(kind=="rest"&&!p.Incapacitated)
         {
             var beds=Buildings.Values.Where(b=>b.Kind==BuildKind.Bed&&!Workers.Any(o=>o!=w&&o.Person.Activity?.Target==BedKey(b.Cell))).ToArray();
             var candidates=beds.SelectMany(b=>Directions.Select(d=>b.Cell+d)).Where(Walkable);
-            var route=Navigation.FindNearest(w.Tile,candidates,out var bedside);
+            var route=Navigation.FindNearest(w.Tile,candidates.Where(c=>origin=="manual"||Navigation.CanReach(c,w.Tile)),out var bedside);
             if(route is not null){path=route;destination=bedside;target=BedKey(beds.First(b=>Directions.Any(d=>b.Cell+d==bedside)).Cell);}
         }
         if(kind=="research"&&Research.Active=="")return new(false,"先选择一个研究项目");
@@ -148,16 +164,18 @@ public sealed partial class DemoWorld
             var item=Items.FirstOrDefault(s=>s.Id==itemId&&s.Owner==""&&s.Count>Reserved(s.Id));
             if(item is null)return new(false,"物品不存在或已被预约");
             RefreshWeight(w);if(p.CarriedWeight+ResidentGear.Weight(item.Item)>p.Capacity)return new(false,"负重不足");
-            path=Navigation.FindNearest(w.Tile,ItemPositions(item.Cell).Where(Walkable),out destination);
+            path=Navigation.FindNearest(w.Tile,ItemPositions(item.Cell).Where(c=>Walkable(c)&&(origin=="manual"||Navigation.CanReach(c,w.Tile))),out destination);
         }
         if(kind is "treat" or "social")
         {
             var other=Workers.FirstOrDefault(o=>o.Id==target);if(other is null||other.Person.Dead)return new(false,"目标居民不存在或已死亡");
+            if(kind=="treat"&&Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"treat" or "care_supply"} care&&care.Target==target))return new(false,"已有护理者负责这名伤员");
+            if(kind=="treat"&&!Inventory(w).Any(i=>i.Item=="bandage"))return BeginMedicalSupply(w,target,origin);
             if(kind=="treat"&&(!other.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")||!Inventory(w).Any(i=>i.Item=="bandage")))return new(false,"需要未处理的伤口和随身绷带");
             if(kind=="social"&&(other==w||other.Person.Incapacitated||other.Job is not null||other.Path.Count>0||other.Person.Activity is not null))return new(false,"请选择空闲且清醒的另一位居民");
             if(kind=="social"&&p.Relations.Count>=32&&!p.Relations.Any(r=>r.Target==target))return new(false,"关系记录已满");
             if(kind=="social"&&p.Relations.Any(r=>r.Target==target&&_simulationTime-r.LastSocial<120))return new(false,"刚交流过，稍后再聊");
-            path=Navigation.FindNearest(w.Tile,ItemPositions(other.Tile).Where(Walkable),out destination);
+            path=Navigation.FindNearest(w.Tile,ItemPositions(other.Tile).Where(c=>Walkable(c)&&(origin=="manual"||Navigation.CanReach(c,w.Tile))),out destination);
         }
         if(path is null)return new(false,"没有可达路线");
         if(path.Count>0&&p.Mobility<.05)return new(false,"居民无法移动到目标位置");
@@ -167,7 +185,7 @@ public sealed partial class DemoWorld
         w.Status=ActivityName(kind);return new(true,w.Status);
     }
     public static string ActivityName(string kind)=>kind switch
-    {"rest"=>"休息","relax"=>"放松","research"=>"研究","pickup"=>"拾取物品","eat"=>"进食","treat"=>"包扎护理","social"=>"交流",_=>"等待"};
+    {"rest"=>"休息","relax"=>"放松","research"=>"研究","pickup"=>"拾取物品","eat"=>"进食","treat"=>"包扎护理","care_supply"=>"取用公共绷带","social"=>"交流",_=>"等待"};
     private void CancelResidentActivity(DemoWorker worker)
     {worker.Person.Activity=null;StopMovement(worker);worker.Status="等待工作";worker.Person.DecisionVersion++;}
     private bool ConsumePersonal(DemoWorker worker,string item)
@@ -196,6 +214,10 @@ public sealed partial class DemoWorld
         if(a is null)return false;
         if(a.Kind is "research" or "treat"&&p.Manipulation<.05||w.Path.Count>0&&p.Mobility<.05)
         {CancelResidentActivity(w);w.Status="活动能力不足";return true;}
+        if(a.Kind=="care_supply"&&!Items.Any(s=>s.Id==a.ItemId&&s.Item=="bandage"&&s.Owner==""&&s.Count>0&&ItemPositions(s.Cell).Contains(a.Destination)))
+        {CancelResidentActivity(w);w.Status="护理用品已移动或不可达";return true;}
+        if(a.Kind=="care_supply"&&!Workers.Any(o=>o.Id==a.Target&&!o.Person.Dead&&o.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")))
+        {CancelResidentActivity(w);w.Status="护理对象已不需要治疗";return true;}
         if(w.Path.Count>0)
         {
             if(!EnsureWorkerRoute(w,ref budget))
@@ -229,6 +251,7 @@ public sealed partial class DemoWorld
         }
         a.Progress+=dt*(a.Kind=="treat"?p.WorkRate("medicine"):a.Kind=="social"?p.WorkRate("social"):1);
         if(a.Progress<(a.Kind is "treat" or "social"?8:1))return true;
+        if(a.Kind=="care_supply")return CompleteMedicalSupply(w,a);
         switch(a.Kind)
         {
             case "pickup":
@@ -238,7 +261,7 @@ public sealed partial class DemoWorld
                     int count=Math.Min(ResidentGear.Get(stack.Item) is null?5:1,Math.Min(stack.Count-Reserved(stack.Id),(int)Math.Floor((p.Capacity-p.CarriedWeight)/ResidentGear.Weight(stack.Item))));
                     if(count>0)
                     {
-                        stack.Count-=count;Items.Add(new(){Id=++_nextItem,Item=stack.Item,Count=count,Cell=w.Tile,Owner=w.Id});
+                        stack.Count-=count;Items.Add(new(){Id=++_nextItem,Item=stack.Item,Count=count,Cell=w.Tile,Owner=w.Id,Properties=stack.Properties});
                         if(stack.Count==0)Items.Remove(stack);RefreshWeight(w);Revision++;
                     }
                 }
@@ -294,7 +317,7 @@ public sealed partial class DemoWorld
             p.Injuries.RemoveAll(i=>i.Severity<=0);RefreshWeight(w,ownedItems[w.Id]);
             if(p.Dead){p.Remember("death","因严重伤势死亡。",_simulationTime);Log(w.Name+"因严重伤势死亡。");}
             // Self-care is deterministic and cheap. No API requests, no full-history scans.
-            if((p.Activity is null||p.Activity.Kind is "research" or "rest" or "relax")&&!p.Incapacitated)
+            if(!MilitaryControlled(w)&&(p.Activity is null||p.Activity.Kind is "research" or "rest" or "relax")&&!p.Incapacitated)
             {
                 var research=p.Activity?.Kind=="research"?p.Activity:p.PausedResearch;
                 bool BeginNeed(string kind)
@@ -330,7 +353,7 @@ public sealed partial class DemoWorld
         if(Inventory(w).Any(s=>s.Item=="meal"))return BeginResidentActivity(w,"eat",origin:"need").Ok;
         var available=Items.Where(s=>s.Item=="meal"&&s.Owner==""&&s.Count>Reserved(s.Id)).ToArray();
         if(available.Length==0)return false;
-        var targets=available.SelectMany(s=>ItemPositions(s.Cell)).Where(Walkable);
+        var targets=available.SelectMany(s=>ItemPositions(s.Cell)).Where(c=>Walkable(c)&&Navigation.CanReach(c,w.Tile));
         var route=Navigation.FindNearest(w.Tile,targets,out var endpoint);
         if(route is null)return false;
         var meal=available.First(s=>ItemPositions(s.Cell).Contains(endpoint));
@@ -339,11 +362,26 @@ public sealed partial class DemoWorld
     public ResidentResult InjureResident(string id,string part,string kind,double severity)
     {
         var w=Workers.FirstOrDefault(w=>w.Id==id);
-        if(w is null||!ResidentCatalog.Parts.Any(p=>p.Id==part)||kind is not ("cut" or "burn" or "fracture" or "missing")||!double.IsFinite(severity)||severity<=0||severity>100)return new(false,"伤势参数无效");
-        if(w.Person.Injuries.Count>=40||w.Person.Dead)return new(false,"无法增加伤势");
-        double armor=Inventory(w).Where(s=>s.Slot==ResidentGear.SlotForPart(part)||s.Slot=="off").Sum(s=>ResidentGear.Get(s.Item)?.Protection??0);
+        return w is null?new(false,"居民不存在"):ApplyInjury(w,part,kind,severity);
+    }
+    private ResidentResult ApplyInjury(DemoWorker w,string part,string kind,double severity)
+    {
+        if(!ResidentCatalog.Parts.Any(p=>p.Id==part)||kind is not ("cut" or "burn" or "fracture" or "missing")||!double.IsFinite(severity)||severity<=0||severity>100)return new(false,"伤势参数无效");
+        if(w.Person.Dead)return new(false,"无法增加伤势");
+        double armor=Inventory(w).Where(s=>s.Slot==ResidentGear.SlotForPart(part)).Sum(s=>ResidentGear.Get(s.Item)?.Protection??0);
         double damage=kind=="missing"?100:severity*(1-Math.Min(.8,armor/100));
-        w.Person.Injuries.Add(new(){Part=part,Kind=kind,Severity=damage});w.Person.DecisionVersion++;RefreshWeight(w);
+        // At most one accumulated injury per body part and kind (10 * 4 = 40).
+        // Compact old saves too, without losing damage or leaving treated wounds immune.
+        var injuries=w.Person.Injuries;
+        if(injuries.Count>=40)
+        {
+            var combined=injuries.GroupBy(i=>(i.Part,i.Kind)).Select(g=>new ResidentInjury{Part=g.Key.Part,Kind=g.Key.Kind,Severity=Math.Min(100,g.Sum(i=>i.Severity)),Treated=g.All(i=>i.Treated)}).ToArray();
+            injuries.Clear();injuries.AddRange(combined);
+        }
+        var existing=injuries.FirstOrDefault(i=>i.Part==part&&i.Kind==kind);
+        if(existing is not null){existing.Severity=Math.Min(100,existing.Severity+damage);existing.Treated=false;}
+        else injuries.Add(new(){Part=part,Kind=kind,Severity=damage});
+        w.Person.DecisionVersion++;RefreshWeight(w);
         w.Person.Remember("injury:"+part,$"{ResidentCatalog.PartName(part)}受到{ResidentCatalog.InjuryName(kind)}。",_simulationTime);
         return new(true,"伤势已记录");
     }

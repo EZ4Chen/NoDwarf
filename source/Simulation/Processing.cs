@@ -14,7 +14,11 @@ public static class ProcessingCatalog
         new("shield","木盾：4 木料 → 木盾",BuildKind.Workbench,new(){{"wood",4}},"shield",1),
         new("rubble","碎石整形：2 深板岩碎石 → 2 圆石",BuildKind.Workbench,new(){{"deep_rubble",2}},"cobblestone",2),
         new("pickaxe","锻镐：2 铁锭 + 1 木料 → 矿镐",BuildKind.Anvil,new(){{"iron",2},{"wood",1}},"pickaxe",1),
-        new("hammer","锻锤：1 铁锭 + 1 木料 → 锻锤",BuildKind.Anvil,new(){{"iron",1},{"wood",1}},"hammer",1)};
+        new("hammer","锻锤：1 铁锭 + 1 木料 → 锻锤",BuildKind.Anvil,new(){{"iron",1},{"wood",1}},"hammer",1),
+        new("axe","铁斧：2 铁锭 + 1 木料 → 铁斧",BuildKind.Anvil,new(){{"iron",2},{"wood",1}},"axe",1),
+        new("battleaxe","双刃战斧：3 铁锭 + 2 木料 → 双刃战斧",BuildKind.Anvil,new(){{"iron",3},{"wood",2}},"battleaxe",1),
+        new("shovel","铁铲：1 铁锭 + 2 木料 → 铁铲",BuildKind.Anvil,new(){{"iron",1},{"wood",2}},"shovel",1),
+        new("hoe","铁锄：2 铁锭 + 2 木料 → 铁锄",BuildKind.Anvil,new(){{"iron",2},{"wood",2}},"hoe",1)};
     public static ProcessingRecipe? Find(string id)=>All.FirstOrDefault(r=>r.Id==id);
 }
 public sealed partial class DemoWorld

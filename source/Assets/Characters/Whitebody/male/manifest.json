@@ -1,0 +1,173 @@
+{
+  "bones": [
+    "root",
+    "pelvis",
+    "spine",
+    "chest",
+    "upper_chest",
+    "neck",
+    "head",
+    "slot_head",
+    "shoulder.cr.L",
+    "upper_arm.L",
+    "forearm.L",
+    "hand.L",
+    "finger_pinky.01.cr.L",
+    "finger_pinky.02.cr.L",
+    "finger_pinky.03.cr.L",
+    "finger_ring.01.cr.L",
+    "finger_ring.02.cr.L",
+    "finger_ring.03.cr.L",
+    "finger_middle.01.cr.L",
+    "finger_middle.02.cr.L",
+    "finger_middle.03.cr.L",
+    "finger_index.01.cr.L",
+    "finger_index.02.cr.L",
+    "finger_index.03.cr.L",
+    "thumb.01.cr.L",
+    "thumb.02.cr.L",
+    "thumb.03.cr.L",
+    "slot_hand_l",
+    "shoulder.cr.R",
+    "upper_arm.R",
+    "forearm.R",
+    "hand.R",
+    "finger_pinky.01.cr.R",
+    "finger_pinky.02.cr.R",
+    "finger_pinky.03.cr.R",
+    "finger_ring.01.cr.R",
+    "finger_ring.02.cr.R",
+    "finger_ring.03.cr.R",
+    "finger_middle.01.cr.R",
+    "finger_middle.02.cr.R",
+    "finger_middle.03.cr.R",
+    "finger_index.01.cr.R",
+    "finger_index.02.cr.R",
+    "finger_index.03.cr.R",
+    "thumb.01.cr.R",
+    "thumb.02.cr.R",
+    "thumb.03.cr.R",
+    "slot_hand_r",
+    "slot_back",
+    "a_1.L",
+    "a_1.R",
+    "thigh.L",
+    "shin.L",
+    "foot.L",
+    "toe.cr.L",
+    "a_4.L",
+    "thigh.R",
+    "shin.R",
+    "foot.R",
+    "toe.cr.R",
+    "a_4.R",
+    "a_2.L",
+    "a_2.R",
+    "slot_belt",
+    "a_3"
+  ],
+  "animations": {
+    "Idle": {
+      "loop": true,
+      "frames": [
+        1,
+        49
+      ],
+      "seconds": 2.0
+    },
+    "Walk": {
+      "loop": true,
+      "frames": [
+        1,
+        25
+      ],
+      "seconds": 1.0
+    },
+    "Mine": {
+      "loop": true,
+      "frames": [
+        1,
+        37
+      ],
+      "seconds": 1.5
+    },
+    "Attack": {
+      "loop": false,
+      "frames": [
+        1,
+        25
+      ],
+      "seconds": 1.0
+    },
+    "Carry": {
+      "loop": true,
+      "frames": [
+        1,
+        25
+      ],
+      "seconds": 1.0
+    }
+  },
+  "equipment": {
+    "shirt": {
+      "mode": "skin",
+      "file": "shirt.glb"
+    },
+    "trousers": {
+      "mode": "skin",
+      "file": "trousers.glb"
+    },
+    "boots": {
+      "mode": "skin",
+      "file": "boots.glb"
+    },
+    "armor": {
+      "mode": "skin",
+      "file": "armor.glb"
+    },
+    "helmet": {
+      "mode": "skin",
+      "file": "helmet.glb"
+    },
+    "sword": {
+      "mode": "attachment",
+      "file": "sword.glb",
+      "socket": "slot_hand_r"
+    },
+    "shield": {
+      "mode": "attachment",
+      "file": "shield.glb",
+      "socket": "slot_hand_l"
+    },
+    "pickaxe": {
+      "mode": "attachment",
+      "file": "pickaxe.glb",
+      "socket": "slot_hand_r"
+    }
+  },
+  "presets": {
+    "base": [],
+    "casual": [
+      "shirt",
+      "trousers",
+      "boots"
+    ],
+    "miner": [
+      "shirt",
+      "trousers",
+      "boots",
+      "helmet",
+      "pickaxe"
+    ],
+    "guard": [
+      "armor",
+      "trousers",
+      "boots",
+      "helmet",
+      "sword",
+      "shield"
+    ]
+  },
+  "height_m": 1.4,
+  "fps": 24
+}

@@ -6,10 +6,14 @@ namespace NoDwarf;
 public partial class Main
 {
     private bool _developerMode, _creative=true, _revealUnknown;
-    private PanelContainer _developerPanel=null!, _consolePanel=null!;
+    private PanelContainer _consolePanel=null!;
+    private ColorRect _consoleShield=null!;
     private RichTextLabel _consoleOutput=null!;
     private LineEdit _commandInput=null!;
     private Label _developerStatus=null!;
+    private AppDiagnostics _diagnostics=null!;
+    private ConsoleLua? _lua;
+    private string _logFilter="all";
     private SessionLog _sessionLog=null!;
     private DemoWorld? _loggedWorld;
     private long _shownLog=-1;
@@ -18,66 +22,50 @@ public partial class Main
     private long _logStart;
     private void StartLogging()
     {
-        _sessionLog=new SessionLog(ProjectSettings.GlobalizePath("user://logs"));
+        _diagnostics=GetNode<AppDiagnostics>("/root/Diagnostics");_sessionLog=_diagnostics.Log;
         BindWorldLog();
-        AppDomain.CurrentDomain.UnhandledException+=LogUnhandled;
         _sessionLog.Write(0,"INFO","应用","启动开发调试版");
     }
     private void BindWorldLog()
     {
         if(_loggedWorld==_world)return;
         if(_loggedWorld is not null)_loggedWorld.Logged-=RecordWorldEvent;
-        _loggedWorld=_world;_world.Logged+=RecordWorldEvent;
+        _lua=null;_loggedWorld=_world;_world.Logged+=RecordWorldEvent;
         foreach(var e in _world.Events.AsEnumerable().Reverse())RecordWorldEvent(e);
     }
-    private void LogUnhandled(object sender,UnhandledExceptionEventArgs e)=>_sessionLog.Write(_clock.Tick,"ERROR","应用",e.ExceptionObject.ToString()??"未知异常");
     private void RecordWorldEvent(string message)=>_sessionLog.Write(_clock.Tick,"INFO","世界",message);
     public override void _ExitTree()
     {
+        StopInteriorWork();
         GetWindow().CloseRequested-=RequestWindowQuit;
         if(_loggedWorld is not null)_loggedWorld.Logged-=RecordWorldEvent;
-        AppDomain.CurrentDomain.UnhandledException-=LogUnhandled;
-        _sessionLog?.Dispose();
+        _diagnostics?.Drain();
     }
     private void BuildDeveloperUi()
     {
         var layer=new CanvasLayer{Layer=20};AddChild(layer);
         var root=new Control{MouseFilter=Control.MouseFilterEnum.Ignore};layer.AddChild(root);root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        _developerPanel=Panel(root,new Vector2(300,150),new Vector2(500,0));_developerPanel.Hide();
-        var box=new VBoxContainer();_developerPanel.AddChild(box);
-        _developerStatus=new Label();box.AddChild(_developerStatus);
-        Button(box,"开启 / 关闭开发者模式",()=>RunCommand(_developerMode?"dev off":"dev on"));
-        Button(box,"直接编辑 / 普通规划（开发模式）",()=>RunCommand(_creative?"creative off":"creative on"));
-        Button(box,"移除居民",()=>RunCommand("residents off"));
-        Button(box,"添加 / 恢复居民",()=>RunCommand("residents on"));
-        Button(box,"立即完成现有施工规划",()=>RunCommand("finish"));
-        var waterTools=new HBoxContainer();box.AddChild(waterTools);
-        Button(waterTools,"选中格注水 1000 L",()=>EditSelectedWater(false));Button(waterTools,"选中格排水",()=>EditSelectedWater(true));
-        Button(box,"查看寻路统计",()=>{RunCommand("navstats");ToggleConsole();});
-        Button(box,"显示 / 隐藏未知岩层（开发模式）",()=>RunCommand(_revealUnknown?"fog on":"fog off"));
-        var time=new HBoxContainer();box.AddChild(time);
-        Button(time,"暂停",()=>RunCommand("pause"));Button(time,"继续",()=>RunCommand("resume"));Button(time,"推进 1 tick",()=>RunCommand("step"));
-        Button(box,"打开日志目录",()=>OS.ShellOpen(ProjectSettings.GlobalizePath("user://logs")));
-        Button(box,"关闭 [F1]",()=>ToggleDeveloperPanel());
+        _consoleShield=new ColorRect{Color=new Color(0,0,0,.2f),MouseFilter=Control.MouseFilterEnum.Stop};root.AddChild(_consoleShield);
+        _consoleShield.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);_consoleShield.Hide();
         _consolePanel=Panel(root,Vector2.Zero,Vector2.Zero);_consolePanel.Hide();
-        _consolePanel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomWide);
-        _consolePanel.OffsetLeft=12;_consolePanel.OffsetRight=-12;_consolePanel.OffsetTop=-350;_consolePanel.OffsetBottom=-48;
+        _consolePanel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopWide);
+        _consolePanel.OffsetLeft=12;_consolePanel.OffsetRight=-12;_consolePanel.OffsetTop=12;_consolePanel.OffsetBottom=410;
         var console=new VBoxContainer();_consolePanel.AddChild(console);
-        console.AddChild(new Label{Text="调试控制台 · help 查看命令 · ↑↓ 历史 · F2 / Esc 关闭"});
+        console.AddChild(new Label{Text="控制台 · help 命令 · lua help 脚本 · ↑↓ 历史 · ～ / Esc 关闭"});
+        _developerStatus=new Label();console.AddChild(_developerStatus);
         _consoleOutput=new RichTextLabel{BbcodeEnabled=false,ScrollFollowing=true,SizeFlagsVertical=Control.SizeFlags.ExpandFill,CustomMinimumSize=new Vector2(0,210)};
         console.AddChild(_consoleOutput);
-        _commandInput=new LineEdit{PlaceholderText="例如：dev on / residents off / level -2"};console.AddChild(_commandInput);
+        console.AddChild(new Label{Text="命令"});
+        _commandInput=new LineEdit{PlaceholderText="例如：dev on / residents off / level -2"};console.AddChild(_commandInput);UiAccess.Name(_commandInput,"控制台命令","回车执行；上下方向键浏览历史。");
         _commandInput.TextSubmitted+=text=>{RunCommand(text);_commandInput.Clear();};
         RefreshDeveloperUi();
     }
-    private void ToggleDeveloperPanel(){_developerPanel.Visible=!_developerPanel.Visible;_consolePanel.Hide();_commandInput.ReleaseFocus();_dragging=false;Clear(_hover);RefreshDeveloperUi();}
-    private void ToggleConsole(){_consolePanel.Visible=!_consolePanel.Visible;_developerPanel.Hide();_dragging=false;Clear(_hover);if(_consolePanel.Visible)_commandInput.GrabFocus();else _commandInput.ReleaseFocus();}
+    private void ToggleConsole(){_consolePanel.Visible=!_consolePanel.Visible;_consoleShield.Visible=_consolePanel.Visible;_dragging=false;_orbitHeld=false;_digStart=null;_digEnd=null;_hoverCell=null;Clear(_hover);RefreshDeveloperUi();if(_consolePanel.Visible)_commandInput.GrabFocus();else _commandInput.ReleaseFocus();}
     private bool DeveloperInput(InputEvent input)
     {
-        if(input is InputEventKey{Pressed:true,Echo:false} key)
+        if(input is InputEventKey{Pressed:true} key)
         {
-            if(key.Keycode==Key.F1){ToggleDeveloperPanel();GetViewport().SetInputAsHandled();return true;}
-            if(key.Keycode==Key.F2){ToggleConsole();GetViewport().SetInputAsHandled();return true;}
+            if(key.PhysicalKeycode==Key.Quoteleft||key.Keycode is Key.Quoteleft or Key.Asciitilde||key.Unicode is 96 or 126 or 65374){if(!key.Echo)ToggleConsole();GetViewport().SetInputAsHandled();return true;}
             if(_consolePanel.Visible && key.Keycode==Key.Escape){ToggleConsole();GetViewport().SetInputAsHandled();return true;}
             if(_consolePanel.Visible && key.Keycode is Key.Up or Key.Down)
             {
@@ -86,7 +74,7 @@ public partial class Main
                 _commandInput.CaretColumn=_commandInput.Text.Length;GetViewport().SetInputAsHandled();return true;
             }
         }
-        return _consolePanel.Visible || _developerPanel.Visible;
+        return _consolePanel.Visible;
     }
     private bool CreativeAct(Cell c)
     {
@@ -99,19 +87,20 @@ public partial class Main
     }
     private void RefreshDeveloperUi()
     {
-        if(_developerStatus is null)return;
+        _diagnostics.Tick=_clock.Tick;_diagnostics.Drain();
+        if(_developerStatus is null||!_consolePanel.Visible)return;
         _developerStatus.Text=$"开发者模式：{(_developerMode?"开":"关")} · {(_creative?"立即编辑，不耗料":"普通规划")}\n未知岩层：{(_revealUnknown?"显示":"隐藏")} · 居民 {_world.Workers.Count}\n{(_sessionLog.WriteError is null?"日志已写入磁盘":"日志写入失败："+_sessionLog.WriteError)}";
         if(_shownLog==_sessionLog.Version)return;
         _shownLog=_sessionLog.Version;
-        _consoleOutput.Text=string.Join("\n",_sessionLog.Snapshot().TakeLast((int)Math.Min(400,_sessionLog.Version-_logStart)).Select(r=>$"{r.Time:HH:mm:ss} [{r.Level}/{r.Category}] T{r.Tick} {r.Message}"));
+        _consoleOutput.Text=string.Join("\n",_sessionLog.Snapshot().TakeLast((int)Math.Min(400,_sessionLog.Version-_logStart)).Where(r=>_logFilter=="all"||r.Level==_logFilter).Select(r=>$"{r.Time:HH:mm:ss} [{r.Level}/{r.Category}] T{r.Tick} {r.Message}"));
     }
     private void RunCommand(string text)
     {
         text=text.Trim();if(text.Length==0)return;
         _commandHistory.Add(text);if(_commandHistory.Count>100)_commandHistory.RemoveAt(0);_historyIndex=_commandHistory.Count;
         _sessionLog.Write(_clock.Tick,"INFO","命令",text);
-        try {ExecuteCommand(text.Split(' ',StringSplitOptions.RemoveEmptyEntries));}
-        catch(Exception e){_sessionLog.Write(_clock.Tick,e is ArgumentException?"WARN":"ERROR","控制台",e.Message);}
+        try {if(text=="lua"||text.StartsWith("lua ",StringComparison.Ordinal))RunLua(text.Length>3?text[4..]:"help");else ExecuteCommand(text.Split(' ',StringSplitOptions.RemoveEmptyEntries));}
+        catch(Exception e){_sessionLog.Write(_clock.Tick,e is ArgumentException?"WARN":"ERROR","控制台",e is ArgumentException?e.Message:e.ToString());}
         SyncWorld();RefreshUi();
     }
     private void ExecuteCommand(string[] a)
@@ -124,7 +113,21 @@ public partial class Main
         switch(a[0].ToLowerInvariant())
         {
             case "help":
-                Count(1);RecordWorldEvent("人物调试（开发模式）：personxp 居民ID 技能ID 经验 | injure 居民ID 部位ID cut/fracture/burn/missing 严重度 | give 物品ID 数量\n" + "region [类型] [种子]（region 查看全部类型） | weather [auto/clear/cloudy/rain/fog] | water X Z Y 升 | drain X Z Y | aquifer X Z Y 储量 水头 流量 补给 温度 | gate X Z Y | fluidstats | help | status | navstats | navmode exact/hierarchy | dev on/off | creative on/off | fog on/off\npause | resume | step [1..300] | level 高度 | residents on/off | finish\nplace 方块ID X Z 高度 [朝向0..3] | dig X Z 高度 [stairs 朝向0..3]\nerase X Z 高度 | clear | logs\n直接放置不耗料；直接挖掘天然方块会掉落物品；finish 完成已有规划，沿用其材料结算。");break;
+                Count(1);RecordWorldEvent("～ 开关控制台；↑↓ 历史；Esc 关闭\n新增：lua help | stats | stats on/off | filter all/info/warn/error | selected | demo single/two/underground | play | speed 1/3 | water selected [升] | drain selected | logs open\n人物调试（开发模式）：personxp 居民ID 技能ID 经验 | injure 居民ID 部位ID cut/fracture/burn/missing 严重度 | give 物品ID 数量\n" + "region [类型] [种子]（region 查看全部类型） | weather [auto/clear/cloudy/rain/fog] | water X Z Y 升 | drain X Z Y | aquifer X Z Y 储量 水头 流量 补给 温度 | gate X Z Y | fluidstats | help | status | navstats | navmode exact/hierarchy | dev on/off | creative on/off | fog on/off\npause | resume | step [1..300] | level 高度 | residents on/off | finish\nplace 方块ID X Z 高度 [朝向0..3] | dig X Z 高度 [stairs 朝向0..3]\nerase X Z 高度 | clear | logs\n直接放置不耗料；直接挖掘天然方块会掉落物品；finish 完成已有规划，沿用其材料结算。");break;
+            case "selected":
+                Count(1);RecordWorldEvent(_selectedCell is Cell selected?$"选中格 X={selected.X} Z={selected.Z} Y={selected.Level}":"未选中地格。");break;
+            case "filter":
+                Count(2);_logFilter=a[1].ToLowerInvariant() switch{"all"=>"all","info"=>"INFO","warn"=>"WARN","error"=>"ERROR",_=>throw new ArgumentException("filter all/info/warn/error")};_shownLog=-1;break;
+            case "stats":
+                if(a.Length==1)RecordWorldEvent(_stats.Text);else _diagnosticsPanel.Visible=Switch();break;
+            case "speed":Count(2);int speed=Number(1,1,3);if(speed is not (1 or 3))throw new ArgumentException("speed 1/3");_clock.SetSpeed(speed);break;
+            case "play":
+                Dev();Count(1);_world.DeveloperResidents(true);_developerMode=false;_creative=false;_revealUnknown=false;_clock.Paused=false;CreatePeople();break;
+            case "demo":
+                Dev();Count(2);switch(a[1])
+                {case "single":_world.QueueBlueprint(_world.Camp,DemoWorld.ExampleBlueprint());FocusCamp();break;
+                 case "two":StartTwoStoreyDemo();break;case "underground":StartUndergroundDemo();break;
+                 default:throw new ArgumentException("demo single/two/underground");}break;
             case "personxp":
                 Dev();Count(4);
                 var learner=_world.Workers.FirstOrDefault(w=>w.Id==a[1])??throw new ArgumentException("未知居民 ID");
@@ -143,9 +146,9 @@ public partial class Main
                 _world.Navigation.UseHierarchy=a[1] switch {"exact"=>false,"hierarchy"=>true,_=>throw new ArgumentException("navmode exact/hierarchy")};
                 RecordWorldEvent(_world.Navigation.UseHierarchy?"后续点对点寻路使用实验分层模式，可能绕路。":"后续点对点寻路使用精确 A*。");break;
             case "water":
-                Dev();Count(5);RecordWorldEvent($"已加入 {_world.Fluids.Add(Position(1),Number(4,1,1000))} L 水（不能加入固体或关闭的闸门）。");break;
+                Dev();if(a.Length is 2 or 3&&a[1]=="selected"){EditSelectedWater(false,a.Length==3?Number(2,1,1000):1000);break;}Count(5);RecordWorldEvent($"已加入 {_world.Fluids.Add(Position(1),Number(4,1,1000))} L 水（不能加入固体或关闭的闸门）。");break;
             case "drain":
-                Dev();Count(4);RecordWorldEvent($"移除 {_world.Fluids.Drain(Position(1))} L 水，已计入外部排水。");break;
+                Dev();if(a.Length==2&&a[1]=="selected"){EditSelectedWater(true);break;}Count(4);RecordWorldEvent($"移除 {_world.Fluids.Drain(Position(1))} L 水，已计入外部排水。");break;
             case "aquifer":
                 Dev();Count(9);var sourceCell=Position(1);int stored=Number(4,1,10000000);
                 _world.Fluids.AddSource(new Aquifer{Cell=sourceCell,Capacity=stored,Stored=stored,Head=Number(5,sourceCell.Level+1,TerrainMap.MaxLevel+1),Rate=Number(6,5,5000),Recharge=Number(7,0,5000),Temperature=Number(8,0,100)});RecordWorldEvent("已设置有限含水层。挖通相邻格会出水。");break;
@@ -191,7 +194,7 @@ public partial class Main
                 Dev();if(a.Length!=4 && !(a.Length==6&&a[4]=="stairs"))throw new ArgumentException("dig X Z 高度 [stairs 朝向]");
                 if(!_world.DeveloperDig(Position(1),a.Length==6,a.Length==6?Number(5,0,3):0))throw new ArgumentException("挖掘失败，见世界日志。");break;
             case "erase":Dev();Count(4);if(!_world.DeveloperErase(Position(1)))throw new ArgumentException("没有可移除的建筑或规划。");break;
-            case "logs":Count(1);RecordWorldEvent(_sessionLog.FilePath);break;
+            case "logs":if(a.Length==2&&a[1]=="open")OS.ShellOpen(ProjectSettings.GlobalizePath("user://logs"));else {Count(1);RecordWorldEvent(_sessionLog.FilePath);}break;
             case "clear":Count(1);_logStart=_sessionLog.Version;_shownLog=-1;break;
             default:throw new ArgumentException("未知命令；输入 help 查看命令。");
         }

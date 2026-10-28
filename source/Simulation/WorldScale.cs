@@ -3,7 +3,7 @@ namespace NoDwarf.Simulation;
 public static class WorldScale
 {
     public const float BlockMeters = 1f;
-    public const float DwarfHeightMeters = 1.1f;
+    public const float DwarfHeightMeters = 1.4f;
 }
 
 // Navigation bookmarks over a foundation footprint; they do not create floors or excavate terrain.

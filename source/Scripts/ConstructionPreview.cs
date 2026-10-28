@@ -45,6 +45,7 @@ public partial class Main
             foreach(var (c,height) in new[]{(cell,.7f),(door,1.75f),(anvil,.7f)})
                 if(PickTarget(_camera.UnprojectPosition(WorldPosition(c)+Vector3.Up*height))!=c)throw new InvalidOperationException("Blueprint geometry is not selectable: "+c);
             Click(_camera.UnprojectPosition(WorldPosition(cell)+Vector3.Up*.7f));await Frame();
+            CheckConstructionOutlines();
             if(_selectedCell!=cell||!_cancelConstructionAction.IsVisibleInTree()||!_constructionProgress.IsVisibleInTree())throw new InvalidOperationException("Blueprint selection lacks cancellation or progress");
             if(_demolishAction.Visible)throw new InvalidOperationException("Blueprint must offer cancellation directly");
             ulong node=_planVisuals[job.Id].Root.GetInstanceId();
@@ -61,6 +62,7 @@ public partial class Main
             }
             int stock=_world.Total("cobblestone");
             Click(_cancelConstructionAction.GetGlobalRect().GetCenter());await Frame();
+            CheckConstructionOutlines();
             if(_world.Jobs.Contains(job)||_planVisuals.ContainsKey(job.Id)||_constructionVisuals.ContainsKey(job.Id)||_world.Total("cobblestone")!=stock||_selectionPanel.Visible)throw new InvalidOperationException("Cancel button did not remove the selected plan safely");
             if(PickObject(_camera.UnprojectPosition(WorldPosition(cell)+Vector3.Up*.7f),8).Count!=0)throw new InvalidOperationException("Cancelled plan retained collision");
             GD.Print("CONSTRUCTION_UI_OK: wall/door/anvil blueprint picking, progress opacity, retained geometry, panel, cancel button and collision cleanup");

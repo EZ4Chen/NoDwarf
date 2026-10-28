@@ -74,6 +74,7 @@ public partial class Main : Node3D
 
     public override void _Ready()
     {
+        ConfigureInteriorThreads();
         var launch=GameLaunch.Take();_world=launch?.World??new DemoWorld();_activeSavePath=launch?.SavePath;
         GetWindow().Title="NoDwarf · 营地";
         GetTree().AutoAcceptQuit=false;GetWindow().CloseRequested+=RequestWindowQuit;
@@ -96,6 +97,18 @@ public partial class Main : Node3D
         if (OS.GetCmdlineUserArgs().Contains("--resident-test")) { try { ResidentChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
         if (OS.GetCmdlineUserArgs().Contains("--region-preview-test")) CaptureRegionPreview();
         if (OS.GetCmdlineUserArgs().Contains("--voxel-tree-preview-test")) CaptureVoxelTreePreview();
+        if (OS.GetCmdlineUserArgs().Contains("--block-face-test")) ReviewBlockFaces();
+        if (OS.GetCmdlineUserArgs().Contains("--gravity-test")) ReviewGravity();
+        if (OS.GetCmdlineUserArgs().Contains("--climbing-test")) ReviewClimbing();
+        if (OS.GetCmdlineUserArgs().Contains("--equipment-test")) ReviewEquipment();
+        if (OS.GetCmdlineUserArgs().Contains("--tool-equipment-test")) ReviewToolEquipment();
+        if (OS.GetCmdlineUserArgs().Contains("--equipment-dimensions-test")) ReviewEquipmentDimensions();
+        if (OS.GetCmdlineUserArgs().Contains("--melee-test")) ReviewMelee();
+        if (OS.GetCmdlineUserArgs().Contains("--actor-model-test")) ReviewActorModel();
+        if (OS.GetCmdlineUserArgs().Contains("--dwarf-integration-test")) ReviewDwarfIntegration();
+        if (OS.GetCmdlineUserArgs().Contains("--complex-combat-test")) ReviewComplexCombat();
+        if (OS.GetCmdlineUserArgs().Contains("--combat-test")) ReviewCombat();
+        if (OS.GetCmdlineUserArgs().Contains("--ladder-test")) ReviewLadders();
         if (OS.GetCmdlineUserArgs().Contains("--settlement-preview-test")) CaptureSettlementPreview();
         if (OS.GetCmdlineUserArgs().Contains("--crop-climate-preview-test")) CaptureCropClimatePreview();
         if (OS.GetCmdlineUserArgs().Contains("--fluid-preview-test")) CaptureFluidPreview();
@@ -111,13 +124,18 @@ public partial class Main : Node3D
         if (OS.GetCmdlineUserArgs().Contains("--construction-preview-test")) CaptureConstructionPreview();
         if (OS.GetCmdlineUserArgs().Contains("--room-preview-test")) CaptureRoomPreview();
         if (OS.GetCmdlineUserArgs().Contains("--distant-view-test")) CheckDistantView();
+        if (OS.GetCmdlineUserArgs().Any(a=>a is "--console-test" or "--console-preview-test")) CheckUnifiedConsole();
         if (OS.GetCmdlineUserArgs().Contains("--room-test"))
         {try{RoomEnvironmentChecks.Run();GetTree().Quit();}catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}}
         if (OS.GetCmdlineUserArgs().Contains("--interior-preview-test")) CaptureInteriorPreview();
         if (OS.GetCmdlineUserArgs().Contains("--interaction-test")) RunInteractionCheck();
+        if (OS.GetCmdlineUserArgs().Contains("--box-selection-test")) CheckBoxSelection();
         if (OS.GetCmdlineUserArgs().Contains("--tps-test")) StartTpsReview();
         if (OS.GetCmdlineUserArgs().Contains("--depth-review")) RunDepthReview();
         if (OS.GetCmdlineUserArgs().Contains("--terrain-pipeline-test")) CheckTerrainPipeline();
+        if (OS.GetCmdlineUserArgs().Contains("--terrain-cache-test")) CheckTerrainCache();
+        if (OS.GetCmdlineUserArgs().Contains("--interior-performance-test")) ReviewInteriorPerformance();
+        if (OS.GetCmdlineUserArgs().Contains("--interior-thread-test")) ReviewInteriorThreads();
         if(OS.GetCmdlineUserArgs().Contains("--logistics-test"))
         {try{LogisticsChecks.Run();GetTree().Quit();}catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}}
         if (OS.GetCmdlineUserArgs().Contains("--smoke-test"))
@@ -375,14 +393,18 @@ public partial class Main : Node3D
 
     public override void _Process(double delta)
     {
+        DiagnosticTrace.Frame((long)Engine.GetProcessFrames());
+        using var frameTrace=DiagnosticTrace.Span("frame.main");
         long processStarted = _tpsReview is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         BeginFrameDiagnostic(delta);
         var profileFrame = _world.Probe?.Measure("frame.main-callback") ?? default;
+        PumpInteriorWork();
         int quadrant=Mathf.FloorToInt(Mathf.RadToDeg(Mathf.PosMod(_cameraYaw,Mathf.Tau))/5);
         if(_interiorView&&quadrant!=_viewQuadrant){_viewQuadrant=quadrant;_revision=-1;}
         if(!_depthReviewActive)MoveCamera(delta);
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
         int ticks = _clock.Advance(delta);
+        if(_creative&&_clock.Paused)_world.AdvanceSupport();
         try { for (int i = 0; i < ticks; i++) { if (_tpsReview is null) _world.Update(1.0 / SimulationClock.BaseTicksPerSecond); else ReviewTick(); } }
         catch(Exception e) { _clock.Paused=true;_sessionLog.Write(_clock.Tick,"ERROR","模拟",e.ToString());GD.PushError(e.ToString()); }
         _tickMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
@@ -394,6 +416,7 @@ public partial class Main : Node3D
         double syncMs = System.Diagnostics.Stopwatch.GetElapsedTime(syncStarted).TotalMilliseconds;
         long uiStarted = _tpsReview is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         AnimatePeople();
+        AnimateBuildingFalls(delta);
         UpdateConstructionVisuals();
         RefreshWeatherVisuals(delta);RefreshFluidVisuals();
         if (++_uiCounter % 6 == 0) RefreshUi();
@@ -417,15 +440,18 @@ public partial class Main : Node3D
         // Benchmark camera and workload must not be changed by desktop input.
         if (_tpsReview is not null) { GetViewport().SetInputAsHandled(); return; }
         if(_titleDialog?.Visible==true)return;
+        if(_removeGrowingDialog?.Visible==true)return;
+        if (DeveloperInput(input)) return;
         if(DossierOpen)
         {
             if(input is InputEventKey { Pressed:true, Echo:false, Keycode:Key.Escape })
             { CloseResidentPanel();GetViewport().SetInputAsHandled(); }
             return;
         }
+        if(input is InputEventMouseButton{Pressed:true,ButtonIndex:MouseButton.Left}&&GetViewport().GuiGetHoveredControl() is null)
+            GetViewport().GuiGetFocusOwner()?.ReleaseFocus();
         if(HandleMapGesture(input))return;
         if (SessionInput(input)) return;
-        if (DeveloperInput(input)) return;
         if (DossierOpen || _characterEditor is not null && _characterEditor.Visible) return;
         if (GetViewport().GuiGetFocusOwner() is LineEdit editor)
         {
@@ -444,6 +470,7 @@ public partial class Main : Node3D
     {
         if (editor == _seed.GetLineEdit()) _seed.Apply();
         if (editor == _floorHeight.GetLineEdit()) _floorHeight.Apply();
+        if (editor == _targetCount.GetLineEdit()) _targetCount.Apply();
         editor.ReleaseFocus();
     }
 
@@ -452,7 +479,7 @@ public partial class Main : Node3D
         if (_tpsReview is not null) return;
         if(_titleDialog?.Visible==true)return;
         if(DossierOpen)return;
-        if (_characterEditor.Visible || _consolePanel.Visible || _developerPanel.Visible) return;
+        if (_characterEditor.Visible || _consolePanel.Visible || _removeGrowingDialog?.Visible==true) return;
         if (input is InputEventPanGesture pan)
         {
             _focus += (CameraRight * pan.Delta.X + CameraBack * pan.Delta.Y) * (_camera.Size / 120f);
@@ -470,7 +497,7 @@ public partial class Main : Node3D
             if (mouse.ButtonIndex == MouseButton.Left && mouse.Pressed)
             {
                 if(_tool is "dig" or "digstairs") { if(DigPick(mouse.Position) is Cell start) { _digStart=start;_digEnd=start;_hoverCell=null; } }
-                else if (_tool == "select" && PickResident(mouse.Position) is int resident) SelectResident(resident);
+                else if (_tool=="select"||AreaTool(_tool)) BeginLeftSelection(mouse.Position,mouse.ShiftPressed);
                 else if (PickForTool(mouse.Position) is Cell cell) Act(cell);
             }
         }
@@ -483,9 +510,15 @@ public partial class Main : Node3D
         if (input is InputEventKey key && key.Pressed && !key.Echo)
         {
             if (key.Keycode == Key.Space) TogglePause();
-            if (key.Keycode == Key.Escape) { _storagePanel?.QueueFree();_storagePanel=null; SelectTool("select"); _buildMenu.Hide(); _inspector.Hide(); _worldMenu.Hide(); _selectionPanel.Hide(); _selectedWorker = -1; _selectedCell = null; }
+            if (key.Keycode == Key.Escape) { _combatPanel?.Hide(); _storagePanel?.QueueFree();_storagePanel=null; SelectTool("select"); _buildMenu.Hide(); _inspector.Hide(); _worldMenu.Hide(); ClearResidentSelection(); }
             if (key.Keycode == Key.H) ToggleWalls();
-            if (key.PhysicalKeycode == Key.R) RotateStairs();
+            if ((key.PhysicalKeycode==Key.R||key.Keycode==Key.R)&&!key.CtrlPressed&&!key.MetaPressed&&!key.AltPressed&&GetViewport().GuiGetFocusOwner() is not (LineEdit or TextEdit))
+            {
+                if(_tool=="select")
+                {if(SelectedResidents().Length>0)DraftSelectedResidents();}
+                else RotateStairs();
+                GetViewport().SetInputAsHandled();
+            }
             if (key.PhysicalKeycode == Key.Z) OrbitCamera(-45);
             if (key.PhysicalKeycode == Key.C) OrbitCamera(45);
             if (key.PhysicalKeycode == Key.Q) StepLayer(-1);
@@ -493,7 +526,6 @@ public partial class Main : Node3D
             if (key.Keycode is Key.Plus or Key.KpAdd || key.PhysicalKeycode == Key.Equal) {if(key.MetaPressed||key.CtrlPressed)StepLayer(1);else ChangeFloor(1);}
             if (key.Keycode is Key.Minus or Key.KpSubtract) {if(key.MetaPressed||key.CtrlPressed)StepLayer(-1);else ChangeFloor(-1);}
             if (key.PhysicalKeycode == Key.F || key.Keycode == Key.Home) FocusCamp();
-            if (key.Keycode == Key.Tab) TogglePanel(_inspector);
             if (key.PhysicalKeycode == Key.B) TogglePanel(_buildMenu);
             string? tool = key.Keycode switch { Key.Key1 => "Wall", Key.Key2 => "Door", Key.Key3 => "Furnace", Key.Key4 => "Anvil", Key.Key5 => "erase", _ => null };
             if (tool is not null) SelectTool(tool);
@@ -567,6 +599,7 @@ public partial class Main : Node3D
     }
     private void SelectResident(int index)
     {
+        _selectedResidents.Clear();_residentSelectionWorld=_world;
         if(_foundation is not null)
         {
             int floor=(int)Math.Floor((_world.Workers[index].Level-_foundation.Min.Level)/(double)_foundation.FloorHeight);
@@ -580,6 +613,7 @@ public partial class Main : Node3D
     private void TogglePanel(PanelContainer panel)
     {
         bool open = !panel.Visible;
+        _combatPanel?.Hide();
         if(DossierOpen)CloseResidentPanel();
         _buildMenu.Hide(); _inspector.Hide(); _worldMenu.Hide(); _selectionPanel.Hide();
         if (open) panel.Show();
@@ -604,13 +638,14 @@ public partial class Main : Node3D
     private void MoveCamera(double delta)
     {
         if (_tpsReview is not null) return;
-        if (_consolePanel.Visible || _developerPanel.Visible) return;
+        if (_consolePanel.Visible||_removeGrowingDialog?.Visible==true) return;
         if (DossierOpen || _characterEditor is not null && _characterEditor.Visible) return;
         if (!GetWindow().HasFocus()) { _dragging = false; return; }
         if (GetViewport().GuiGetFocusOwner() is LineEdit) return;
         if (Input.IsPhysicalKeyPressed(Key.Meta) || Input.IsPhysicalKeyPressed(Key.Ctrl) || Input.IsPhysicalKeyPressed(Key.Alt)) return;
-        float x = (Input.IsPhysicalKeyPressed(Key.D) || Input.IsPhysicalKeyPressed(Key.Right) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.A) || Input.IsPhysicalKeyPressed(Key.Left) ? 1 : 0);
-        float z = (Input.IsPhysicalKeyPressed(Key.S) || Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.W) || Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0);
+        bool arrows=GetViewport().GuiGetFocusOwner() is null;
+        float x = (Input.IsPhysicalKeyPressed(Key.D) || arrows && Input.IsPhysicalKeyPressed(Key.Right) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.A) || arrows && Input.IsPhysicalKeyPressed(Key.Left) ? 1 : 0);
+        float z = (Input.IsPhysicalKeyPressed(Key.S) || arrows && Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.W) || arrows && Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0);
         if (x == 0 && z == 0) return;
         _focus += (CameraRight * x + CameraBack * z) * (float)delta * _camera.Size * .6f;
         PositionCamera();
@@ -618,6 +653,7 @@ public partial class Main : Node3D
 
     private void Act(Cell c)
     {
+        if(_tool=="rally"){CombatNotice(_world.SetRallyPoint(c));SelectTool("select");return;}
         if (_tool == "foundation") { MarkFoundation(c); return; }
         if(_tool is "growingzone" or "unfarm"){MarkFarm(c);return;}
         if(_tool is "stockpile" or "unstockpile"){MarkStockpile(c);return;}
@@ -630,7 +666,7 @@ public partial class Main : Node3D
         else if (Enum.TryParse<BuildKind>(_tool, out var kind)) _world.QueueBuild(c, kind, facing: _facing);
         else
         {
-            _selectedWorker = -1; _selectedCell = c;
+            _selectedResidents.Clear();_selectedWorker = -1; _selectedCell = c;
             _buildMenu.Hide(); _inspector.Hide(); _worldMenu.Hide(); _selectionPanel.Show();
         }
         RefreshUi();
@@ -672,6 +708,15 @@ public partial class Main : Node3D
                 { mesh.MaterialOverride = PreviewMaterial(false); mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off; }
             return;
         }
+        if(kind==BuildKind.Ladder)
+        {
+            var d=DemoWorld.StairDirection(facing);
+            var mesh=new MeshInstance3D{Position=p+new Vector3(d.X*.46f,.5f,d.Z*.46f),
+                Rotation=new Vector3(0,Mathf.Atan2(d.X,d.Z),0),
+                Mesh=new QuadMesh{Size=new Vector2(.9f,1),Material=BlockTextures.Material("nodwarf:ladder")}};
+            mesh.SetMeta("voxel_bounds",new Aabb(new Vector3(-.45f,-.5f,-.05f),new Vector3(.9f,1,.1f)));
+            parent.AddChild(mesh);return;
+        }
         if (BlockCatalog.IsStairs(kind))
         {
             var d = DemoWorld.StairDirection(facing);
@@ -686,7 +731,8 @@ public partial class Main : Node3D
         if (BlockCatalog.IsWall(kind))
         {
             float h = fullHeight?1f:Math.Clamp(CurrentView.CellTop(cell)-cell.Level,0,1);
-            BlockTextures.Box(parent,p+Vector3.Up*h/2,new Vector3(1,h,1),BlockCatalog.Id(kind));
+            BlockTextures.Box(parent,p+Vector3.Up*h/2,new Vector3(1,h,1),BlockCatalog.Id(kind),
+                fullHeight?BlockFaces.All:BlockExposure.BuildingFaces(_world,CurrentView,cell));
         }
         else if(kind==BuildKind.Floodgate)
         {
@@ -824,7 +870,7 @@ public partial class Main : Node3D
         foreach (var mesh in visual.GetChildren().OfType<MeshInstance3D>())
         {
             if (mesh.Mesh is null) continue;
-            var bounds = mesh.Mesh.GetAabb();
+            var bounds = mesh.HasMeta("voxel_bounds")?mesh.GetMeta("voxel_bounds").AsAabb():mesh.Mesh.GetAabb();
             var body = new StaticBody3D { Position=bounds.GetCenter(),CollisionLayer = 2, CollisionMask = 0 };
             body.SetMeta("cell", new Vector3I(cell.X, cell.Level, cell.Z));
             mesh.AddChild(body); body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = bounds.Size } });
@@ -878,7 +924,7 @@ public partial class Main : Node3D
             var node = new Node3D(); AddChild(node); _people.Add(node);
             node.AddChild(new Sprite3D
             {
-                Texture = CharacterArt.Texture(_world.Workers[i].Appearance), PixelSize = WorldScale.DwarfHeightMeters / 300f, Position = new Vector3(0, WorldScale.DwarfHeightMeters * .49f, 0),
+                Texture = EquipmentArt.Texture(_world.Workers[i].Appearance,_world.Inventory(_world.Workers[i])), PixelSize = WorldScale.DwarfHeightMeters / 300f, Position = new Vector3(0, WorldScale.DwarfHeightMeters * .49f, 0),
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
                 Shaded = false, Modulate = Colors.White, AlphaCut = SpriteBase3D.AlphaCutMode.Discard
             });
@@ -894,13 +940,20 @@ public partial class Main : Node3D
             body.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = .27f, Height = WorldScale.DwarfHeightMeters } });
             node.AddChild(new Label3D{Name="Cargo",Position=new Vector3(0,1.7f,0),FontSize=28,PixelSize=.004f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Font=GameFont.Regular,OutlineSize=8});
             AddResidentContact(node);
+            AddSelectionRing(node);
+            AddActorModel(node);
         }
         for (int i = 0; i < _residentButtons.Count; i++) { _residentButtons[i].Visible=i<_people.Count; if(i<_people.Count) _residentButtons[i].Icon = _people[i].GetChild<Sprite3D>(0).Texture; }
+        SyncEquipmentVisuals(true);
         AnimatePeople();
+        AnimateBuildingFalls(0);
     }
 
     private void AnimatePeople()
     {
+        SyncEquipmentVisuals();
+        AnimateCombat();
+        UpdateCommandMarkers();
         for (int i = 0; i < _people.Count; i++)
         {
             var worker = _world.Workers[i]; var node = _people[i];
@@ -909,19 +962,22 @@ public partial class Main : Node3D
             node.Position = new Vector3((float)worker.X - (DemoWorld.Width - 1) / 2f, _world.WorkerHeight(worker) + bob, (float)worker.Z - (DemoWorld.Depth - 1) / 2f);
             node.Visible=VisibleAt(worker.Tile);
             node.GetChild<StaticBody3D>(2).CollisionLayer=node.Visible?4u:0u;
-            node.GetChild<Label3D>(1).Visible = _camera.Size < 42 || i == _selectedWorker;
+            node.GetChild<Label3D>(1).Visible = _camera.Size < 42 || IsResidentSelected(i);
+            node.GetNode<MeshInstance3D>("SelectionRing").Visible=IsResidentSelected(i);
             var cargo=worker.Job?.Materials.FirstOrDefault(r=>r.Stage==1);
             node.GetChild<Label3D>(3).Text=cargo is null?"":$"搬运 {ItemCatalog.Get(cargo.Item).Name} ×{cargo.Count}";
             var sprite = node.GetChild<Sprite3D>(0);
-            sprite.Modulate = i == _selectedWorker ? new Color("fff0ad") : Colors.White;
-            sprite.Rotation = new Vector3(0, 0, worker.Job is not null && worker.Path.Count == 0 ? MathF.Sin(phase) * 0.1f : 0);
+            sprite.Modulate = worker.Combat.FlashUntil>_world.SimulationTime?new Color("ffb0a0"):IsResidentSelected(i) ? new Color("fff0ad") : Colors.White;
+            sprite.Rotation = new Vector3(0, 0, worker.Person.Incapacitated?Mathf.Pi/2:worker.Combat.FlashUntil>_world.SimulationTime?.2f:worker.Job is not null && worker.Path.Count == 0 ? MathF.Sin(phase) * 0.1f : 0);
             if (worker.Path.TryPeek(out var next)) sprite.FlipH = next.X < worker.X;
+            UpdateActorModel(node,worker,bob);
         }
     }
 
     private void UpdateHover()
     {
-        if(_consolePanel.Visible || _developerPanel.Visible) { Clear(_hover); _hoverCell=null;return; }
+        if(UpdateLeftSelectionPreview())return;
+        if(_consolePanel.Visible) { Clear(_hover); _hoverCell=null;return; }
         if(_digStart is Cell start && _digEnd is Cell end) { DrawDigDrag(start,end);return; }
         Cell? picked = PickForTool(GetViewport().GetMousePosition());
         if (GetViewport().GuiGetHoveredControl() is not null) picked = null;
@@ -945,7 +1001,8 @@ public partial class Main : Node3D
         else
         {
             bool hasBuild = Enum.TryParse<BuildKind>(_tool, out var build);
-            bool valid = hasBuild && (_developerMode&&_creative ? _world.CanDeveloperPlace(cell,build) : _world.CanPlace(cell, build, _facing));
+            bool valid = hasBuild && (_developerMode&&_creative ? _world.CanDeveloperPlace(cell,build,_facing) : _world.CanPlace(cell, build, _facing));
+            if(hasBuild&&build==BuildKind.Ladder)_hint.Text="木梯 · 每段 1 米 · 贴实心墙安装 · R 旋转靠墙方向";
             if(hasBuild && BlockCatalog.IsStairs(build))
             {
                 var blocked=_world.StairObstructions(cell).ToArray();
@@ -1028,13 +1085,10 @@ public partial class Main : Node3D
         _colonyTabs[8]=HudTab(tabs,"工作",()=>OpenColonyPage(8),"各类工作的优先级");
         _colonyTabs[7]=HudTab(tabs,"作息",()=>OpenColonyPage(7),"每日 24 小时安排");
         _colonyTabs[6]=HudTab(tabs,"研究",()=>OpenColonyPage(6),"聚落研究与解锁");
-        HudTab(tabs,"生产",()=>TogglePanel(_inspector),"工坊与生产订单 [Tab]");
+        HudTab(tabs,"生产",()=>TogglePanel(_inspector),"工坊与生产订单");
         HudTab(tabs,"地图 / 存档",()=>TogglePanel(_worldMenu),"区域地图、保存与读取");
         HudTab(tabs,"回到营地",()=>{if(DossierOpen)CloseResidentPanel();FocusCamp();},"定位营地 [F]");
         HudTab(tabs,"视图",()=>{if(DossierOpen)CloseResidentPanel();_viewControls.Visible=!_viewControls.Visible;},"楼层、旋转、切墙与俯视");
-        IconButton(tabs,"dev","",ToggleDeveloperPanel).TooltipText="开发工具 [F1]";
-        IconButton(tabs,"console","",ToggleConsole).TooltipText="控制台 [F2]";
-        IconButton(tabs,"layers","",()=>_diagnosticsPanel.Visible=!_diagnosticsPanel.Visible).TooltipText="性能统计";
 
         BuildArchitect(root);
         _selectionPanel = Panel(root, Vector2.Zero, new Vector2(400, 170)); BottomLeft(_selectionPanel, 282, 400);
@@ -1062,7 +1116,6 @@ public partial class Main : Node3D
         Button(inspectorHeading, "关闭", () => _inspector.Hide());
         _objective = Text("", 13, Accent, true); content.AddChild(_objective);
         content.AddChild(new HSeparator()); _room = Text("", 13, Ink, true); content.AddChild(_room);
-        Button(content,"启用居民生产",()=>{_world.DeveloperResidents(true);_developerMode=false;_creative=false;_clock.Paused=false;CreatePeople();RefreshUi();});
         _forge = Button(content, "下单：铁剑 · 2 铁 + 1 煤", () => { _world.QueueSword(); RefreshUi(); });
         Button(content,"熔炼：2 粗铁 + 1 煤 → 2 铁锭",()=>{_world.QueueSmelt();RefreshUi();});
         Button(content,"烹饪：2 食材 + 1 木料 → 2 口粮",()=>{_world.QueueCook();RefreshUi();});
@@ -1076,7 +1129,7 @@ public partial class Main : Node3D
         var worldColumn = new VBoxContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill}; worldColumn.AddThemeConstantOverride("separation", 10); mapScroll.AddChild(worldColumn);
         worldColumn.AddChild(Text($"区域地图 · {TerrainMap.Size}×{TerrainMap.Size} · 0.4.2", 17, Ink));
         worldColumn.AddChild(Text("新地图种子", 13, Muted));
-        _seed = new SpinBox { MinValue = 0, MaxValue = 999999, Value = _world.Terrain.Seed, CustomMinimumSize = new Vector2(160, 30) }; worldColumn.AddChild(_seed);
+        _seed = new SpinBox { MinValue = 0, MaxValue = 999999, Value = _world.Terrain.Seed, CustomMinimumSize = new Vector2(160, 30) }; worldColumn.AddChild(_seed);UiAccess.Name(_seed,"地图种子");
         Button(worldColumn, "生成新地图…", Reset);
         var saveRow=new HBoxContainer();worldColumn.AddChild(saveRow);
         IconButton(saveRow,"save","存档 [F5]",SaveSession);
@@ -1093,7 +1146,7 @@ public partial class Main : Node3D
         var viewColumn=new VBoxContainer();_viewControls.AddChild(viewColumn);
         var viewHeading=new HBoxContainer();viewColumn.AddChild(viewHeading);
         var viewTitle=Text("视角与楼层",14,Accent);viewTitle.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;viewHeading.AddChild(viewTitle);
-        Button(viewHeading,"×",()=>_viewControls.Hide());
+        UiAccess.Name(Button(viewHeading,"×",()=>_viewControls.Hide()),"关闭视图设置");
         var levelRow=new HBoxContainer();viewColumn.AddChild(levelRow);
         IconButton(levelRow,"down","层",()=>ChangeFloor(-1)).TooltipText="下降一层 [-]";
         IconButton(levelRow,"up","层",()=>ChangeFloor(1)).TooltipText="上升一层 [+]";
@@ -1112,7 +1165,7 @@ public partial class Main : Node3D
         _calendarLabel=Text("",12,Ink);_calendarLabel.HorizontalAlignment=HorizontalAlignment.Right;controlColumn.AddChild(_calendarLabel);
         var timeRow=new HBoxContainer{Alignment=BoxContainer.AlignmentMode.End};controlColumn.AddChild(timeRow);
         _timeStatus=Text("",17,Ink);_timeStatus.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;timeRow.AddChild(_timeStatus);
-        _pause=IconButton(timeRow,"pause","",TogglePause);_pause.TooltipText="暂停 / 继续 [空格]";
+        _pause=IconButton(timeRow,"pause","",TogglePause);_pause.TooltipText="暂停 / 继续 [空格]";UiAccess.Name(_pause,"暂停或继续模拟");
         _normalSpeed=IconButton(timeRow,"play","1×",()=>{_clock.SetSpeed(1);_clock.Paused=false;RefreshUi();});
         _fastSpeed=IconButton(timeRow,"fast","3×",()=>{_clock.SetSpeed(3);_clock.Paused=false;RefreshUi();});
         var display=new HBoxContainer{Alignment=BoxContainer.AlignmentMode.End};controlColumn.AddChild(display);
@@ -1139,8 +1192,11 @@ public partial class Main : Node3D
         BottomLeft(hints,72,810);hints.OffsetBottom=-48;hints.MouseFilter=Control.MouseFilterEnum.Ignore;
         _hint=Text("",12,Ink);_hint.TextOverrunBehavior=TextServer.OverrunBehavior.TrimEllipsis;_hint.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;_hint.MouseFilter=Control.MouseFilterEnum.Ignore;hints.AddChild(_hint);
         _location=Text("",11,Muted);_location.HorizontalAlignment=HorizontalAlignment.Right;controlColumn.AddChild(_location);
-        var credit=new LinkButton{Text="PureBDcraft 材质鸣谢",Uri="https://bdcraft.net",FocusMode=Control.FocusModeEnum.None,TooltipText="Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net"};
+        var credit=new LinkButton{Text="PureBDcraft 材质鸣谢",Uri="https://bdcraft.net",TooltipText="Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net"};
+        UiAccess.Name(credit,"PureBDcraft 材质鸣谢","在浏览器中打开材质作者网站。");
         credit.AddThemeFontSizeOverride("font_size",11);worldColumn.AddChild(credit);
+        var combatActions=new HBoxContainer();selectionColumn.AddChild(combatActions);
+        BuildCombatInterface(root,tabs,combatActions);
         BuildCharacterEditor(root); BuildResidentPanel(root);
         _buildMenu.Hide();_selectionPanel.Hide();_inspector.Hide();_worldMenu.Hide();
     }
@@ -1173,8 +1229,10 @@ public partial class Main : Node3D
     }
     private static Button Button(Node parent, string text, Action action)
     {
-        var button = new Button { Text = text, CustomMinimumSize = new Vector2(52, 30), MouseDefaultCursorShape = Control.CursorShape.PointingHand, FocusMode = Control.FocusModeEnum.None };
+        var button = new Button { Text = text, CustomMinimumSize = new Vector2(52, 30), MouseDefaultCursorShape = Control.CursorShape.PointingHand, FocusMode = Control.FocusModeEnum.All };
         button.AddThemeStyleboxOverride("normal", ButtonStyle("303942"));
+        button.AddThemeStyleboxOverride("focus",UiAccess.FocusRing());
+        if(text=="×")button.AccessibilityName="关闭面板";
         button.AddThemeStyleboxOverride("hover", ButtonStyle("455563"));
         button.AddThemeStyleboxOverride("pressed", ButtonStyle("566c7b"));
         button.AddThemeColorOverride("font_color", Ink);
@@ -1193,30 +1251,33 @@ public partial class Main : Node3D
     }
     private void SelectTool(string tool)
     {
+        CancelLeftSelection();
         _digStart=null;_digEnd=null;_stockpileStart=null;_farmStart=null;
         if(tool is "dig" or "digstairs")
         {
 
             _placement=0;_cutaway=true;
         }
-        if (tool != "select") { _selectionPanel.Hide(); _selectedCell = null; _selectedWorker = -1; }
+        if (tool != "select") { _selectedResidents.Clear();_selectionPanel.Hide(); _selectedCell = null; _selectedWorker = -1; }
         if (tool != "foundation") _foundationStart = null;
-        if(tool is "select" or "erase" or "foundation" || tool is "Floodgate" or "Door" or "Furnace" or "Anvil" or "Stove" or "Bed" or "Campfire" or "Mill" or "Loom" or "Workbench" or "chop" or "planttree" || (Enum.TryParse<BuildKind>(tool,out var chosen)&&BlockCatalog.IsStairs(chosen))) _placement=0;
+        if(tool is "select" or "rally" or "erase" or "foundation" || tool is "Floodgate" or "Door" or "Furnace" or "Anvil" or "Stove" or "Bed" or "Campfire" or "Mill" or "Loom" or "Workbench" or "chop" or "planttree" || (Enum.TryParse<BuildKind>(tool,out var chosen)&&BlockCatalog.IsStairs(chosen))) _placement=0;
         if(_foundation is not null && Enum.TryParse<BuildKind>(tool,out _)) _cutaway=true;
-        if(tool!="select"){_interiorView=false;_floorWalls=false;_wallCaps=null;}
+        if(tool!="select"&&tool!="rally"){_interiorView=false;_floorWalls=false;_wallCaps=null;}
         _revision=-1; _tool = tool; _hoverCell = null; Clear(_hover);
         foreach (var (id, button) in _toolButtons) button.AddThemeStyleboxOverride("normal", ButtonStyle(id == tool ? "566c7b" : "303942"));
         _hint.Text = Enum.TryParse<BuildKind>(tool, out var kind)
             ? $"{DemoWorld.NameOf(kind)} · {DemoWorld.CostOf(kind)} / 格    " + (BlockCatalog.IsStairs(kind) ? $"R 旋转 · 上行方向 {new[] { "东", "南", "西", "北" }[_facing]} · 连接高一层平台" : "左键规划，居民施工；右键取消工具。")
-            : tool is "growingzone" or "unfarm" ? "点击同高两角划种植区，完成后点击区域设置。移除会损失农作物；右键退出工具。"
+            : tool == "growingzone" ? "左键拖框或点击同高两角划种植区；完成后点击区域设置。右键取消。"
+            : tool == "unfarm" ? "拖框或点击两角选择移除范围；确认后损失未收获作物。右键取消。"
+            : tool is "stockpile" or "unstockpile" ? "左键拖框或点击同高两角设置储存范围；右键取消。"
             : tool is "chop" or "planttree" ? "点击树根安排伐木，或点击露天土壤种树；消耗实体树苗，需要居民执行。"
             : tool == "cancelplan" ? "点击地格取消尚未完成的任务，材料保留；不会拆除已有建筑。"
             : tool == "dig" ? "点击可见岩土挖 1 格；按住左键拖选一行或矩形，松开下单。"
             : tool == "digstairs" ? $"挖楼梯坑 · 仅清空 3 米岩土，不生成楼梯 · 挖完后选择楼梯材质安装"
-            : tool == "foundation" ? "依次点击地基两个角；要求同高平地。顶面为第 0 层，右键取消。"
+            : tool == "foundation" ? "左键拖框或点击地基两角；要求同高平地。顶面为第 0 层，右键取消。"
             : tool == "erase" ? "左键规划拆除 / 取消规划；居民按耐久拆除，完整退料。右键回到选择。"
             : tool == "blueprint" ? "移动鼠标预览，左键放置蓝图；右键退出。蓝图只保存在本次游玩。"
-            : "WASD 移动 · 中键平移 · 右键旋转 / 俯仰 · 滚轮缩放 · 空格暂停";
+            : "左键拖框选人 · Shift 追加 · WASD 移动 · 中键平移 · 右键旋转 / 指令 · 滚轮缩放 · 空格暂停";
     }
     private void RefreshUi()
     {
@@ -1226,6 +1287,7 @@ public partial class Main : Node3D
         _floorLabel.Text = _foundation is null ? "地基未设置 · 1 格 = 1 m" : $"第 {_foundation.Floor} 层 · 工作高度 {ActiveLevel} m · 落块 {BuildLevel} m · 层高 {_foundation.FloorHeight} m";
         _layerStatus.Text=_foundation is null?$"高度 {ActiveLevel} m · 未设地基":"F"+_foundation.Floor+$" · {ActiveLevel} m";
         _cutButton.Text=!_cutaway?"全貌":_interiorView?"切墙":_floorWalls?"本层墙":"精确";
+        RefreshCombatUi();
         _editCharacter.Visible = _selectedWorker >= 0;
         _residentDetails.Visible = _selectedWorker >= 0;
         _selectionTabs.Visible=_selectedWorker>=0;
@@ -1235,16 +1297,19 @@ public partial class Main : Node3D
         _objective.Text = _world.Swords > 0 ? "完成！第一把铁剑已制成。\n试试保存蓝图，或设计另一间工坊。"
             : _world.WorkshopReady ? "02 / 工坊就绪\n下达订单，看居民打造第一把铁剑。"
             : _world.Jobs.Any(j => j.Construction) ? "01 / 施工进行中\n浅色格为规划，居民正在分工建设。"
-            : "01 / 规划一间工坊\n可自由建造，也可一键放置示例。";
+            : "01 / 规划一间工坊\n划定地基，安排墙壁、门和生产设施。";
         _forge.Disabled = !_world.WorkshopReady || _world.Iron < 2 || _world.Coal < 1 || _world.Jobs.Count(j => j.Forge) >= 3;
         RefreshOrders();
         _residents.Text = string.Join("\n", _world.Workers.Select(w => $"{w.Name}  ·  {w.Status}"));
-        _events.Text = string.Join("\n", _world.Events.Take(2));
+        _events.Text = string.Join("\n", _world.Events.Where(e=>!e.StartsWith("[开发]")&&!e.StartsWith("开发模式")).Take(2));
         if (_selectedWorker >= _world.Workers.Count)_selectedWorker=-1;
         if (_selectedWorker >= 0)
         {
             var worker = _world.Workers[_selectedWorker];
-            _selection.Text = $"{worker.Name} · {worker.Person.Adulthood}\n{worker.Person.Age} 岁 · 心情 {worker.Person.Mood:F0}% · 技能点 {worker.Person.Points}\n{worker.Status}\n右键地面：移动空闲居民";
+            _selection.Text = $"{worker.Name} · {worker.Person.Adulthood}\n{worker.Person.Age} 岁 · 心情 {worker.Person.Mood:F0}% · 技能点 {worker.Person.Points}\n{worker.Status}\nR 征召 / 解除；右键地面移动、敌人攻击";
+            if(worker.Combat.Destination is Cell goal)_selection.Text+=$"\n目的地 {goal.X}, {goal.Z} / {goal.Level}m";
+            if(worker.Combat.Target!="")_selection.Text+="\n追击："+(_world.Enemies.FirstOrDefault(e=>e.Id==worker.Combat.Target)?.Name??"目标已失效");
+            if(worker.MedicalIssue!="")_selection.Text+="\n"+worker.MedicalIssue;
         }
         else if (_selectedCell is Cell selected)
         {
@@ -1271,13 +1336,13 @@ public partial class Main : Node3D
             foreach(var stack in stacks)_selection.Text+=$"\n{ItemCatalog.Get(stack.Item).Name} ×{stack.Count}";
         }
         RefreshFarms();
-        RefreshConstructionSelection();RefreshFluidSelection();
+        RefreshConstructionSelection();RefreshFluidSelection();RefreshGroupSelection();
         for (int i = 0; i < _residentButtons.Count; i++)
         {
             _residentButtons[i].Visible=i<_world.Workers.Count;
             if(i>=_world.Workers.Count) continue;
             _residentButtons[i].TooltipText = _world.Workers[i].Status;
-            _residentButtons[i].AddThemeStyleboxOverride("normal", ButtonStyle(i == _selectedWorker ? "566c7b" : "303942"));
+            _residentButtons[i].AddThemeStyleboxOverride("normal", ButtonStyle(IsResidentSelected(i) ? "566c7b" : "303942"));
         }
         _buildTab.AddThemeStyleboxOverride("normal", ButtonStyle(_buildMenu.Visible ? "566c7b" : "303942"));
         _pause.Text="";_pause.Icon=UiIcons.Get(_clock.Paused?"play":"pause");

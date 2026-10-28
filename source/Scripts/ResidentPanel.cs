@@ -48,7 +48,7 @@ public partial class Main
         var navigation=RV(header,5);navigation.SizeFlagsVertical=Control.SizeFlags.ShrinkCenter;
         var pickerRow=RH(navigation,4);
         RB(pickerRow,"‹",()=>CycleResident(-1),"上一位居民",30);
-        _residentPicker=new OptionButton{CustomMinimumSize=new(106,30),FocusMode=Control.FocusModeEnum.None};StyleResidentChoice(_residentPicker);pickerRow.AddChild(_residentPicker);
+        _residentPicker=new OptionButton{CustomMinimumSize=new(106,30),FocusMode=Control.FocusModeEnum.All};StyleResidentChoice(_residentPicker);UiAccess.Name(_residentPicker,"当前居民");pickerRow.AddChild(_residentPicker);
         _residentPicker.ItemSelected+=i=>SelectDossierResident((int)i);
         _residentNext=RB(pickerRow,"›",()=>CycleResident(1),"下一位居民",30);
         var closeRow=RH(navigation,8);
@@ -101,6 +101,7 @@ public partial class Main
     private void SelectDossierResident(int index)
     {
         if(index<0||index>=_world.Workers.Count)return;
+        _selectedResidents.Clear();_residentSelectionWorld=_world;
         _selectedWorker=index;_dossierId=_world.Workers[index].Id;_residentPicker.Select(index);_residentRosterPage=index/RosterPageSize;
         _residentNotice.Text="";RenderResidentPanel();RefreshUi();
     }
@@ -179,7 +180,8 @@ public partial class Main
     }
     private static Button RB(Node parent,string text,Action action,string hint="",float width=0,bool primary=false)
     {
-        var b=new Button{Text=text,TooltipText=hint,CustomMinimumSize=new(width,29),FocusMode=Control.FocusModeEnum.None,MouseDefaultCursorShape=Control.CursorShape.PointingHand};
+        var b=new Button{Text=text,TooltipText=hint,CustomMinimumSize=new(width,29),FocusMode=Control.FocusModeEnum.All,MouseDefaultCursorShape=Control.CursorShape.PointingHand};
+        UiAccess.Focus(b);if(text=="×")b.AccessibilityName="关闭人物面板";
         b.AddThemeFontSizeOverride("font_size",14);
         b.AddThemeColorOverride("font_color",primary?RGold:RInk);b.AddThemeColorOverride("font_disabled_color",new Color("717b7b"));
         b.AddThemeStyleboxOverride("normal",RStyle(primary?"3e4035":"303739",primary?"8a805f":"525e5f"));
@@ -188,6 +190,7 @@ public partial class Main
     }
     private static void StyleResidentChoice(OptionButton choice)
     {
+        UiAccess.Focus(choice);
         choice.AddThemeFontSizeOverride("font_size",14);choice.AddThemeColorOverride("font_color",RInk);
         choice.AddThemeStyleboxOverride("normal",RStyle("303739","525e5f"));choice.AddThemeStyleboxOverride("hover",RStyle("455052","9aa7a2"));
     }
@@ -219,6 +222,6 @@ public partial class Main
     {
         var g=ResidentGear.Get(item);if(g is null)return "";
         return $"重量 {g.Weight:F1} kg"+(g.Protection>0?$" · 防护 {g.Protection}%":"")+
-            (g.Skill!=""?$" · {ResidentCatalog.Skill(g.Skill).Name}效率 +{g.Bonus:P0}":"")+(g.TwoHanded?" · 占用双手":"");
+            (g.Skill!=""?$" · {g.WorkUse switch{"forestry"=>"伐木","earth"=>"挖掘土砂","sowing"=>"播种 / 种树",_=>ResidentCatalog.Skill(g.Skill).Name}}效率 +{g.Bonus:P0}":"")+(g.TwoHanded?" · 占用双手":"");
     }
 }

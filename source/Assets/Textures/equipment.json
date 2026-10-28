@@ -1,0 +1,138 @@
+{
+  "sword": {
+    "Icon": "res://Assets/Textures/Items/iron_sword.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "pickaxe": {
+    "Icon": "res://Assets/Textures/Items/iron_pickaxe.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "hammer": {
+    "Icon": "res://Assets/Textures/Items/warhammer.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "cap": {
+    "Icon": "res://Assets/Textures/Items/leather_helmet.png",
+    "Head": "<path d='M16 22Q15 1 40 1q25 0 25 21l-12-7-13 4-13-4z' fill='#826445' stroke='#463b30' stroke-width='2'/><path d='M18 21q22-12 45 0' fill='none' stroke='#c3ad84' stroke-width='3'/>",
+    "Tint": "98744f"
+  },
+  "shirt": {
+    "Icon": "res://Assets/Textures/Items/shirt.svg",
+    "Clothing": "<path d='M23 49l-6 14 8 3 1-7-3 22h34l-3-22 1 7 8-3-6-14-10-3-7 8-7-8z' fill='#d8cbb3' stroke='#655443' stroke-width='1.6'/><path d='M35 55h10M40 55v16M24 75h32' stroke='#867458' stroke-width='2'/>"
+  },
+  "trousers": {
+    "Icon": "res://Assets/Textures/Items/trousers.svg",
+    "Clothing": "<path d='M25 80h30l3 16H44l-4-12-3 12H22z' fill='#728392' stroke='#414c56' stroke-width='1.5'/>"
+  },
+  "boots": {
+    "Icon": "res://Assets/Textures/Items/leather_boots.png",
+    "Clothing": "<path d='M23 88h14v13H18v-6h5zm21 0h13l2 7h4v6H44z' fill='#825c3a' stroke='#493825' stroke-width='1.7'/><path d='M24 91h11m11 0h9' stroke='#c4a16c' stroke-width='2'/>",
+    "Tint": "98744f"
+  },
+  "shield": {
+    "Icon": "res://Assets/Textures/Items/shield_base.png",
+    "Region": [
+      56,
+      4,
+      46,
+      86
+    ],
+    "HeldRect": [
+      10,
+      50,
+      24,
+      40
+    ]
+  },
+  "gloves": {
+    "Clothing": "<path d='m12 70 10 4-3 8-11-5zm46 4 10-4 4 7-11 5z' fill='#8f6b45' stroke='#4f3f2b' stroke-width='1.5'/>",
+    "Icon": "res://Assets/Textures/Items/gloves.svg"
+  },
+  "axe": {
+    "Icon": "res://Assets/Textures/Items/iron_axe.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "battleaxe": {
+    "Icon": "res://Assets/Textures/Items/iron_battleaxe.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "shovel": {
+    "Icon": "res://Assets/Textures/Items/iron_shovel.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "hoe": {
+    "Icon": "res://Assets/Textures/Items/iron_hoe.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "bow": {
+    "Icon": "res://Assets/Textures/Items/bow.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "crossbow": {
+    "Icon": "res://Assets/Textures/Items/crossbow_standby.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "shears": {
+    "Icon": "res://Assets/Textures/Items/shears.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  },
+  "fishing_rod": {
+    "Icon": "res://Assets/Textures/Items/fishing_rod.png",
+    "HeldRect": [
+      72,
+      40,
+      38,
+      38
+    ]
+  }
+}

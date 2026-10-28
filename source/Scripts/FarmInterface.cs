@@ -4,6 +4,7 @@ namespace NoDwarf;
 public partial class Main
 {
     private Cell? _farmStart;
+    private ConfirmationDialog? _removeGrowingDialog;
     private Node3D? _farmsView;
     private DemoWorld? _farmWorld;
     private readonly Dictionary<Cell,(Node3D Root,string Crop,int Stage)> _farmNodes=new();
@@ -25,6 +26,7 @@ public partial class Main
         _growingSettings.AddChild(new HSeparator());
         var row=new HBoxContainer();_growingSettings.AddChild(row);row.AddChild(Text("种植作物",14,Ink));
         _growingCrop=new OptionButton{CustomMinimumSize=new(210,32),SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};row.AddChild(_growingCrop);
+        UiAccess.Name(_growingCrop,"种植作物","整个种植区生效；现有作物收获后换种。");
         foreach(string crop in GrowingCrops)_growingCrop.AddItem(DemoWorld.CropName(crop));
         _growingCrop.ItemSelected+=index=>{if(SelectedGrowingZone is {} zone){_world.ConfigureGrowingZone(zone.Id,GrowingCrops[(int)index],zone.AllowSowing);SyncWorld();RefreshUi();}};
         _growingSowing=new CheckButton{Text="允许播种 / 补种",TooltipText="关闭后停止新播种，已种作物仍正常生长和收获。"};_growingSettings.AddChild(_growingSowing);
@@ -34,10 +36,29 @@ public partial class Main
     }
     private void MarkFarm(Cell c)
     {
-        if(_farmStart is not Cell start){_farmStart=c;_world.Log("农田：选择同高的另一角，最多 16×16 格；右键取消。");return;}
-        bool ok=_tool=="unfarm"?_world.SetFarm(start,c,"grain",true):_world.DesignateGrowingZone(start,c);_farmStart=null;
+        if(_farmStart is not Cell start){_farmStart=c;_hint.Text="选择同高的另一角；右键取消。";return;}
+        _farmStart=null;
+        if(_tool=="unfarm"){RequestRemoveGrowingArea(start,c);return;}
+        bool ok=_world.DesignateGrowingZone(start,c);
         if(!ok)_world.Log("未改变种植区：请选择同高、平整、空闲的天然土壤或地下岩石地面，范围最多 16×16。");
         SyncWorld();RefreshUi();
+    }
+    private void RequestRemoveGrowingArea(Cell start,Cell end)
+    {
+        if(_removeGrowingDialog?.Visible==true)return;
+        if(start.Level!=end.Level||Math.Abs(start.X-end.X)>15||Math.Abs(start.Z-end.Z)>15)
+        {_world.Log("请选择同高、最多 16×16 格的范围。");return;}
+        var plots=_world.Farms.Values.Where(p=>p.Cell.Level==start.Level&&p.Cell.X>=Math.Min(start.X,end.X)&&p.Cell.X<=Math.Max(start.X,end.X)&&p.Cell.Z>=Math.Min(start.Z,end.Z)&&p.Cell.Z<=Math.Max(start.Z,end.Z)).ToArray();
+        if(plots.Length==0){_world.Log("范围内没有种植区。");return;}
+        var world=_world;bool paused=_clock.Paused;_clock.Paused=true;
+        _removeGrowingDialog?.QueueFree();
+        var dialog=new ConfirmationDialog{Title="移除种植区",OkButtonText="确认移除",CancelButtonText="保留种植区",
+            DialogText=$"将移除 {plots.Length} 格种植区，损失 {plots.Count(p=>p.Planted&&!CropCatalog.IsTree(p.Crop))} 格未收获作物。\n现有树木保留，区域内播种与收获任务会取消。\n此操作无法撤销。"};
+        _removeGrowingDialog=dialog;AddChild(dialog);
+        dialog.Confirmed+=()=>{if(_world==world){_world.SetFarm(start,end,"grain",true);_clock.Paused=paused;}SyncWorld();RefreshUi();};
+        dialog.Canceled+=()=>{if(_world==world)_clock.Paused=paused;SelectTool("select");};
+        _hoverCell=null;Clear(_hover);dialog.PopupCentered(new Vector2I(460,200));
+        dialog.GetCancelButton().GrabFocus();
     }
     private void DrawFarmPreview(Cell end)
     {
@@ -56,23 +77,13 @@ public partial class Main
         {var old=_farmNodes[c].Root;_farmsView.RemoveChild(old);old.QueueFree();_farmNodes.Remove(c);}
         foreach(var p in _world.Farms.Values)
         {
-            int stage=p.Planted?1+(int)(p.Growth/DemoWorld.GrowTime(p.Crop)*3):0;
+            int stage=CropVisuals.Stage(p);
             if(_farmNodes.TryGetValue(p.Cell,out var existing)&&(existing.Stage!=stage||existing.Crop!=p.Crop))
             {_farmsView.RemoveChild(existing.Root);existing.Root.QueueFree();_farmNodes.Remove(p.Cell);}
             if(!_farmNodes.TryGetValue(p.Cell,out var entry))
             {
                 var root=new Node3D{Position=WorldPosition(p.Cell)};_farmsView.AddChild(root);
-                Box(root,new Vector3(0,.018f,0),new Vector3(.92f,.025f,.92f),Mat(p.Crop=="mushroom"?"594f65":"70533d"));
-                var outline=Mat(p.Crop=="mushroom"?"b49bc7":"a2b86a");
-                foreach(float side in new[]{-.46f,.46f})
-                {Box(root,new Vector3(side,.035f,0),new Vector3(.025f,.025f,.94f),outline);Box(root,new Vector3(0,.035f,side),new Vector3(.94f,.025f,.025f),outline);}
-                if(stage>0)
-                foreach(float x in new[]{-.23f,.23f})foreach(float z in new[]{-.23f,.23f})
-                {
-                    float h=.08f+stage*.09f;
-                    Box(root,new Vector3(x,h/2+.04f,z),new Vector3(.045f,h,.045f),Mat(p.Crop=="mushroom"?"d8cebc":"7e9c4d"));
-                    Box(root,new Vector3(x,h+.04f,z),p.Crop=="grain"?new Vector3(.09f,.12f,.06f):new Vector3(.12f+stage*.035f,.07f,.12f+stage*.035f),Mat(p.Crop switch {"cotton"=>stage==4?"f2ede4":"a3ba75","potato"=>stage==4?"af8c62":"6f994c","grain"=>stage==4?"e0c673":"9fbb60",_=>"b78da8"}));
-                }
+                CropVisuals.AddTo(root,p.Crop,stage);
                 entry=(root,p.Crop,stage);_farmNodes[p.Cell]=entry;
             }
             entry.Root.Visible=VisibleAt(p.Cell);
@@ -131,6 +142,12 @@ public partial class Main
             ShowBuildPage("区域");_buildMenu.Show();SelectTool("growingzone");SyncWorld();RefreshUi();
             async Task Snap(string name)
             {
+                var timer=System.Diagnostics.Stopwatch.StartNew();
+                while(_terrainView.PendingMeshCount>0)
+                {
+                    if(timer.Elapsed.TotalSeconds>60)throw new TimeoutException("Farm preview terrain did not finish loading");
+                    await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
+                }
                 await ToSignal(GetTree(),SceneTree.SignalName.PhysicsFrame);await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
                 if(GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://.local/{name}.png"))!=Error.Ok)throw new IOException("Farm screenshot failed");
@@ -146,6 +163,17 @@ public partial class Main
             _growingCrop.EmitSignal(OptionButton.SignalName.ItemSelected,(long)Array.IndexOf(GrowingCrops,"mushroom"));
             if(SelectedGrowingZone.Crop!="mushroom"||_world.Farms.Values.Any(f=>f.Crop!="grain"))throw new InvalidOperationException("Changing zone crop must preserve existing grain");
             _world.ConfigureGrowingZone(SelectedGrowingZone.Id,"grain",true);
+            bool wasPaused=_clock.Paused;int plotsBefore=_world.Farms.Count;
+            SelectTool("unfarm");Act(origin);Act(origin+new Cell(2,1));
+            if(_removeGrowingDialog?.Visible!=true||_world.Farms.Count!=plotsBefore||!_removeGrowingDialog.DialogText.Contains("6 格"))
+                throw new InvalidOperationException("Farm removal must explain losses before changing plots");
+            await Snap("growing-zone-removal");
+            _removeGrowingDialog.Hide();_removeGrowingDialog.EmitSignal(ConfirmationDialog.SignalName.Canceled);
+            if(_world.Farms.Count!=plotsBefore||_clock.Paused!=wasPaused)throw new InvalidOperationException("Cancel farm removal changed plots or clock");
+            SelectTool("unfarm");Act(origin);Act(origin+new Cell(2,1));
+            _removeGrowingDialog!.Hide();_removeGrowingDialog.EmitSignal(ConfirmationDialog.SignalName.Confirmed);
+            if(_world.Farms.Count!=plotsBefore-6||_clock.Paused!=wasPaused)throw new InvalidOperationException("Confirmed farm removal failed");
+            GD.Print("FARM_REMOVAL_OK: loss summary, cancel preserves crops, confirmation removes only the selected range");
             var p=new Cell(20,20,-5);
             for(int x=-1;x<=3;x++)for(int z=-1;z<=2;z++)for(int y=0;y<2;y++)_world.Terrain.Excavate(p+new Cell(x,z,y));
             _world.SetFarm(p,p+new Cell(2,1),"mushroom");_world.DeveloperResidents(true);

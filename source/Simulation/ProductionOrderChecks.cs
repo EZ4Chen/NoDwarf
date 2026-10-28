@@ -10,7 +10,7 @@ public static class ProductionOrderChecks
         var station=new Cell(5,9);w.Buildings[station]=new(station,BuildKind.Loom);w.SpawnItem("cotton",16,new(2,10));
         w.SetProductionTarget("cloth",4);Until(w,()=>w.Total("cloth")==4);for(int i=0;i<300;i++)w.Update(1d/30);
         Check(w.Total("cotton")==8&&!w.Jobs.Any(j=>j.Recipe=="cloth"),"Target stops without excess batches");
-        var cloth=w.Items.First(i=>i.Item=="cloth");cloth.Count-=2;w.SetProductionTarget("cloth",4,false);for(int i=0;i<90;i++)w.Update(1d/30);
+        int consumed=2;foreach(var cloth in w.Items.Where(i=>i.Item=="cloth").ToArray()){int take=Math.Min(consumed,cloth.Count);cloth.Count-=take;consumed-=take;if(cloth.Count==0)w.Items.Remove(cloth);if(consumed==0)break;}w.SetProductionTarget("cloth",4,false);for(int i=0;i<90;i++)w.Update(1d/30);
         Check(!w.Jobs.Any(j=>j.Recipe=="cloth"),"Paused target does not schedule");w.SetProductionTarget("cloth",4);Until(w,()=>w.Total("cloth")==4);
         Check(w.Total("cotton")==4,"Consumption triggers replenishment");
         w.SetProductionTarget("shirt",1);Until(w,()=>w.Total("shirt")==1&&w.Total("cotton")==0&&w.Total("cloth")==4);Check(w.Total("cotton")==0&&w.Total("cloth")<=4,"Chained targets consume real ingredients");

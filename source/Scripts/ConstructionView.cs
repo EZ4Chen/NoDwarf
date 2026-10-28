@@ -10,7 +10,8 @@ public partial class Main
     private sealed class ConstructionVisual
     {
         public required DemoJob Job;
-        public required StandardMaterial3D Outline;
+        public MultiMesh? OutlineBatch;
+        public int OutlineIndex;
         public readonly List<(BaseMaterial3D Material,Color Color)> Materials=new();
         public float Fraction=-1;
         public bool Selected;
@@ -44,8 +45,7 @@ public partial class Main
     {
         var shape=new Node3D();root.AddChild(shape);
         DrawBuilding(shape,job.Cell,job.Build!.Value,facing:job.Facing,fullHeight:true);
-        var outline=new StandardMaterial3D{AlbedoColor=new Color("6ab7d6"),ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded};
-        var visual=new ConstructionVisual{Job=job,Outline=outline};
+        var visual=new ConstructionVisual{Job=job};
         void Prepare(Node node)
         {
             foreach(var child in node.GetChildren())Prepare(child);
@@ -70,13 +70,8 @@ public partial class Main
             if(!mesh.Visible)body.CollisionLayer=0;
         }
         Prepare(shape);
-        var p=WorldPosition(job.Cell)+Vector3.Up*.025f;
-        foreach(float side in new[]{-.48f,.48f})
-        {
-            Box(root,p+new Vector3(side,0,0),new Vector3(.025f,.025f,.98f),outline);
-            Box(root,p+new Vector3(0,0,side),new Vector3(.98f,.025f,.025f),outline);
-        }
         _constructionVisuals[job.Id]=visual;
+        _constructionOutlinesDirty=true;
         UpdateConstructionVisual(visual);
     }
     private void UpdateConstructionVisuals()
@@ -88,7 +83,7 @@ public partial class Main
     {
         bool selected=_selectedWorker<0&&_selectedCell==visual.Job.Cell;
         if(selected!=visual.Selected)
-        {visual.Selected=selected;visual.Outline.AlbedoColor=selected?Accent:new Color("6ab7d6");}
+        {visual.Selected=selected;visual.OutlineBatch?.SetInstanceColor(visual.OutlineIndex,ConstructionOutlineColor(visual));}
         float fraction=(float)visual.Job.BuildFraction;
         if(visual.Fraction==fraction)return;
         visual.Fraction=fraction;

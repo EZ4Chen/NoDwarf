@@ -1,0 +1,57 @@
+{
+  "status": "needs_revision",
+  "source_files_modified": false,
+  "reviewed": [
+    "orthographic-six.png",
+    "old-new-front.png",
+    "equipment-pair.png",
+    "male-block_hold.png",
+    "male-slash_contact.png",
+    "male-walk.png",
+    "female-mine_raise.png",
+    "female-slash_windup.png",
+    "female-down.png"
+  ],
+  "findings": [
+    {
+      "severity": "high",
+      "images": [
+        "male-block_hold.png",
+        "male-slash_contact.png",
+        "female-slash_windup.png"
+      ],
+      "finding": "Large pointed triangles and gaps on animated sleeves/shoulder armor."
+    },
+    {
+      "severity": "high",
+      "images": [
+        "female-mine_raise.png",
+        "female-slash_windup.png"
+      ],
+      "finding": "Raised right hand pulls a triangle from right trouser waist; inspect garment bone assignments."
+    },
+    {
+      "severity": "medium",
+      "images": [
+        "female-front.png",
+        "female-back.png"
+      ],
+      "finding": "Upper underwear shoulder straps stand upright instead of following shoulders."
+    },
+    {
+      "severity": "medium",
+      "images": [
+        "female-mine_raise.png",
+        "female-slash_windup.png"
+      ],
+      "finding": "Grip aligns with palm but fingers remain visibly open."
+    }
+  ],
+  "passed": [
+    "All requested animation names resolved.",
+    "Body clothing masks present for both sexes.",
+    "Sword and pick working direction aligned with hand forward axis.",
+    "Shield front faces outward.",
+    "Male walk frame has no obvious torso clipping."
+  ]
+}

@@ -80,7 +80,8 @@ public partial class Main
                     var root=new Node3D();_itemsView.AddChild(root);
                     var def=ItemCatalog.Get(stack.Item);
                     string? spriteId=stack.Item switch{"raw_iron"=>"raw_iron","iron"=>"iron_ingot","sword"=>"iron_sword","coal"=>"coal",_=>null};
-                    if(stack.Item is "raw_food" or "meal" or "grain_seed" or "mushroom_spawn")root.AddChild(new Sprite3D{Texture=UiIcons.Get(stack.Item),PixelSize=.007f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Shaded=false});
+                    if(EquipmentArt.Icon(stack.Item) is {} equipment)root.AddChild(new Sprite3D{Texture=equipment,PixelSize=.45f/Math.Max(equipment.GetWidth(),equipment.GetHeight()),Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Shaded=false});
+                    else if(stack.Item is "raw_food" or "meal" or "grain_seed" or "mushroom_spawn")root.AddChild(new Sprite3D{Texture=UiIcons.Get(stack.Item),PixelSize=.007f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Shaded=false});
                     else if(spriteId is null)BlockTextures.Box(root,Vector3.Zero,new Vector3(.27f,.23f,.27f),def.Texture);
                     else root.AddChild(new Sprite3D{Texture=GD.Load<Texture2D>($"res://Assets/Textures/Items/{spriteId}.png"),PixelSize=.007f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Shaded=false});
                     var label=new Label3D{Position=Vector3.Up*.22f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,FontSize=28,PixelSize=.004f,OutlineSize=8,NoDepthTest=false};root.AddChild(label);

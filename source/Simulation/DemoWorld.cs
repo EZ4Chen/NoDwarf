@@ -1,6 +1,6 @@
 namespace NoDwarf.Simulation;
 
-public enum BuildKind { Wall, Door, Furnace, Anvil, Log, Planks, Cobblestone, StoneBricks, LogStairs, PlankStairs, CobbleStairs, BrickStairs, Stove, Bed, Campfire, Mill, Loom, Floodgate, Workbench }
+public enum BuildKind { Wall, Door, Furnace, Anvil, Log, Planks, Cobblestone, StoneBricks, LogStairs, PlankStairs, CobbleStairs, BrickStairs, Stove, Bed, Campfire, Mill, Loom, Floodgate, Workbench, Ladder }
 public readonly record struct Cell(int X, int Z, int Level = 0)
 {
     public static Cell operator +(Cell a, Cell b) => new(a.X + b.X, a.Z + b.Z, a.Level + b.Level);
@@ -49,6 +49,7 @@ public sealed class DemoJob
 
 public sealed class DemoWorker
 {
+    public CombatOrder Combat {get;set;}=new();
     public required string Name { get; init; }
     public string Id { get; init; } = "resident";
     public CharacterAppearance Appearance { get; set; } = new();
@@ -60,8 +61,11 @@ public sealed class DemoWorker
     public DemoJob? Job { get; set; }
     public string Status { get; set; } = "等待工作";
     public Cell? TravelFrom { get; set; }
+    public double ClimbProgress {get;set;}
     public long CheckedNavigationVersion { get; set; } = -1;
     public double NextJobSearch { get; set; }
+    public double NextMedicalCheck {get;set;}
+    public string MedicalIssue {get;set;}="";
     public double NextPolicyCheck { get; set; }
     public Cell Tile => TravelFrom ?? new((int)Math.Round(X), (int)Math.Round(Z), Level);
 }
@@ -75,10 +79,12 @@ public sealed partial class DemoWorld
     public Cell Surface(int x, int z) => Terrain.At(x, z);
     public IEnumerable<Cell> Neighbors(Cell c)
     {
+        if(LadderAt(c))yield return c+new Cell(0,0,1);
+        if(LadderAt(c+new Cell(0,0,-1)))yield return c+new Cell(0,0,-1);
         foreach (var d in Directions)
         {
             int x = c.X + d.X, z = c.Z + d.Z;
-            if (x >= 0 && x < Width && z >= 0 && z < Depth) for (int dy = -1; dy <= 1; dy++) yield return new Cell(x, z, c.Level + dy);
+            if (x >= 0 && x < Width && z >= 0 && z < Depth) for (int dy = -2; dy <= 1; dy++) yield return new Cell(x, z, c.Level + dy);
         }
     }
     private static readonly Cell[] Directions = { new(1, 0), new(-1, 0), new(0, 1), new(0, -1) };
@@ -125,8 +131,8 @@ public sealed partial class DemoWorld
         if(climateVersion is not (0 or 1))throw new ArgumentException("不支持的天气版本。");
         ClimateVersion=Terrain.Region is null?0:climateVersion;
         Navigation = new WorldNavigation(this);
-        Buildings = new BuildingMap(c=>{Navigation.Invalidate(c);InvalidateRooms(c);_blockDamage.Remove(c);FluidGeometryChanged(c);});
-        Terrain.Changed += c=>{Navigation.Invalidate(c);InvalidateRooms(c);_blockDamage.Remove(c);FluidGeometryChanged(c);};
+        Buildings = new BuildingMap(c=>{Navigation.Invalidate(c);InvalidateRooms(c);_blockDamage.Remove(c);FluidGeometryChanged(c);SupportChanged(c);});
+        Terrain.Changed += c=>{Navigation.Invalidate(c);InvalidateRooms(c);_blockDamage.Remove(c);FluidGeometryChanged(c);SupportChanged(c);};
         InitializeFluids(generateFluids);
         Workers.Add(new DemoWorker { Id = "azhen", Name = "阿榛", X = 2, Z = 10 });
         Workers.Add(new DemoWorker { Id = "mila", Name = "米拉", X = 3, Z = 11 });
@@ -170,6 +176,7 @@ public sealed partial class DemoWorld
     public bool CanPlace(Cell c, BuildKind kind, int facing = 0)
     {
         if (!CanPlace(c)) return false;
+        if(kind==BuildKind.Ladder)return Solid(c+StairDirection(facing))||PlannedSolid(c+StairDirection(facing));
         if(BlockCatalog.IsStairs(kind)&&Enumerable.Range(1,2).Any(h=>Occupied(c+new Cell(0,0,h))))return false;
         if (!BlockCatalog.IsWall(kind) && !Solid(c + new Cell(0, 0, -1)) && !PlannedSolid(c + new Cell(0, 0, -1))) return false;
         if (TallFixture(kind) && (Occupied(c + new Cell(0, 0, 1)) || Jobs.Any(j => j.Construction && j.Cell == c + new Cell(0, 0, 1)))) return false;
@@ -181,13 +188,16 @@ public sealed partial class DemoWorld
         if (!Inside(c) || c.Level <= TerrainMap.MinLevel || c.Level > TerrainMap.MaxLevel || NaturalSolid(c) || Fluids.Amount(c)>=500) return false;
         if (Terrain[c.X, c.Z].Tree && c.Level >= Terrain[c.X,c.Z].Level && c.Level < Terrain[c.X, c.Z].Level + TreeHeight(Surface(c.X,c.Z))) return false;
         bool stair = Buildings.TryGetValue(c, out var b) && BlockCatalog.IsStairs(b.Kind);
-        if (b is not null && b.Kind != BuildKind.Door && !(b.Kind==BuildKind.Floodgate&&GateOpen(c)) && !stair) return false;
-        if (!Solid(c + new Cell(0, 0, -1))) return false;
-        // 1.1 m residents require two clear voxels; stairs need clearance at their high end.
-        if (Occupied(c + new Cell(0, 0, 1)) && b?.Kind != BuildKind.Door) return false;
+        if (b is not null && b.Kind != BuildKind.Door && !(b.Kind==BuildKind.Floodgate&&GateOpen(c)) && !stair && b.Kind!=BuildKind.Ladder) return false;
+        if (!Solid(c + new Cell(0, 0, -1))&&!LadderAt(c)&&!LadderAt(c+new Cell(0,0,-1))) return false;
+        // 1.4 m residents require two clear voxels; stairs need clearance at their high end.
+        if (BodyBlocked(c + new Cell(0, 0, 1)) && b?.Kind != BuildKind.Door) return false;
         if ((stair || NaturalRamp(c)) && Occupied(c + new Cell(0, 0, 2))) return false;
         return true;
     }
+    public bool LadderAt(Cell c)=>Buildings.TryGetValue(c,out var b)&&b.Kind==BuildKind.Ladder;
+    private bool BodyBlocked(Cell c)=>Occupied(c)&&!LadderAt(c);
+    public bool LadderLink(Cell a,Cell b)=>a.X==b.X&&a.Z==b.Z&&Math.Abs(a.Level-b.Level)==1&&LadderAt(a.Level<b.Level?a:b);
     private Cell? Slope(Cell c)
     {
         if (Buildings.TryGetValue(c, out var b) && BlockCatalog.IsStairs(b.Kind)) return StairDirection(b.Facing);
@@ -201,20 +211,36 @@ public sealed partial class DemoWorld
     }
     public bool Connected(Cell a, Cell b)
     {
+        if(LadderLink(a,b))return Walkable(a)&&Walkable(b);
         int dx = b.X - a.X, dz = b.Z - a.Z;
-        if (Math.Abs(dx) + Math.Abs(dz) != 1 || Math.Abs(a.Level - b.Level) > 1 || !Walkable(a) || !Walkable(b)) return false;
+        if (Math.Abs(dx) + Math.Abs(dz) != 1 || b.Level-a.Level > 1 || a.Level-b.Level > 2 || !Walkable(a) || !Walkable(b)) return false;
         // Match the height of the shared edge. Stairs cannot be entered through their sides.
         if (Slope(a) is Cell sa && dx * sa.X + dz * sa.Z == 0) return false;
         if (Slope(b) is Cell sb && dx * sb.X + dz * sb.Z == 0) return false;
-        return Math.Abs(NodeHeight(a, dx * .5, dz * .5) - NodeHeight(b, -dx * .5, -dz * .5)) < .001f;
+        if(Math.Abs(NodeHeight(a, dx * .5, dz * .5) - NodeHeight(b, -dx * .5, -dz * .5)) < .001f)return true;
+        if(!ClimbEdge(a,b))return false;
+        var low=a.Level<b.Level?a:b;
+        // The body rises above the low cell before crossing the ledge: 2.4 m clearance.
+        for(int y=low.Level+2;y<=Math.Max(a.Level,b.Level)+1;y++)if(BodyBlocked(low with{Level=y}))return false;
+        return true;
     }
+    public bool ClimbEdge(Cell a,Cell b)=>b.Level-a.Level is >=-2 and <=1&&a.Level!=b.Level&&Slope(a) is null&&Slope(b) is null;
+    public int TraversalCost(Cell a,Cell b)=>LadderLink(a,b)?4:ClimbEdge(a,b)?(a.Level-b.Level==2?4:3):1;
     public float StandingHeight(double x, double z) => NodeHeight(Surface((int)Math.Round(x), (int)Math.Round(z)), x - Math.Round(x), z - Math.Round(z));
     public float WorkerHeight(DemoWorker worker)
     {
         var from = worker.Tile;
         if (worker.Path.TryPeek(out var to))
         {
+            if(LadderLink(from,to))return (float)(from.Level+(to.Level-from.Level)*worker.ClimbProgress);
             double t = Math.Abs(worker.X - from.X) + Math.Abs(worker.Z - from.Z);
+            if(ClimbEdge(from,to))
+            {
+                t=Math.Clamp(t,0,1);
+                double phase=to.Level>from.Level?Math.Clamp(t/.45,0,1):Math.Clamp((t-.55)/.45,0,1);
+                phase=phase*phase*(3-2*phase);
+                return (float)(from.Level+(to.Level-from.Level)*phase);
+            }
             // Evaluate each half of the edge in its own voxel, preserving flat landings.
             return t < .5 ? NodeHeight(from, worker.X - from.X, worker.Z - from.Z) : NodeHeight(to, worker.X - to.X, worker.Z - to.Z);
         }
@@ -237,6 +263,7 @@ public sealed partial class DemoWorld
 
     public void Erase(Cell c)
     {
+        _supportSafety.Clear();
         var pending = Jobs.FirstOrDefault(j => j.Construction && j.Cell == c);
         if (pending is not null)
         {
@@ -249,6 +276,7 @@ public sealed partial class DemoWorld
         }
         if(Buildings.TryGetValue(c,out var support) && BlockCatalog.IsWall(support.Kind) && Workers.Any(w=>w.Tile==c+new Cell(0,0,1) || (w.Path.TryPeek(out var next)&&next==c+new Cell(0,0,1))))
         { Log("居民正站在这块楼板上或经过它；请先移开居民，再拆除。");return; }
+        if(Buildings.ContainsKey(c)&&RemovalEndangersResident(c)){Log("先移开受支撑建筑上的居民再拆除。");return;}
         if (!Buildings.Remove(c, out var building)) return;
         _blockDamage.Remove(c);
         Refund(building.Kind,c); // Demo deliberately uses full refunds.
@@ -315,7 +343,10 @@ public sealed partial class DemoWorld
         using var timing = Probe?.Measure("simulation.total") ?? default;
         if(!double.IsFinite(dt)||dt<=0)return;
         _orderedJobs = null;
+        _supportSafety.Clear();
         _simulationTime += dt;
+        foreach(var actor in Actors)actor.Combat.Cooldown=Math.Max(0,actor.Combat.Cooldown-dt);
+        AdvanceSupport();
         Fluids.Advance(dt);
         UpdateHomes(dt);UpdateRoomTemperatures();UpdateTrees(dt);
         UpdateFarming(dt);UpdateProductionOrders(dt);
@@ -325,6 +356,7 @@ public sealed partial class DemoWorld
         bool assign = _assignElapsed >= 0.25;
         if (assign) { foreach(var cached in _jobAccess.Keys.Where(j=>!Jobs.Contains(j)).ToArray()) _jobAccess.Remove(cached); _assignElapsed = 0; Demo?.Advance(this); Underground?.Advance(this); ScheduleHomeJobs(); ScheduleHauling(); SettleItems(); }
         int budget = Math.Max(1, NavigationRequestsPerTick);
+        foreach(var enemy in Enemies)UpdateMilitary(enemy,dt,ref budget,true);
         int first = _assignmentCursor;
         // Broken routes take precedence over idle job searches. Otherwise hundreds
         // of idle residents can consume the budget before a blocked walker is served.
@@ -337,6 +369,7 @@ public sealed partial class DemoWorld
         {
             int i = (first + offset) % Workers.Count;
             var worker = Workers[i];
+            if(UpdateMilitary(worker,dt,ref budget))continue;
             if(ApplyResidentSchedule(worker,ref budget))continue;
             if(worker.Person.Activity is {Kind:"research",Origin:"work"}&&_simulationTime>=worker.NextJobSearch&&budget>0)
             {Assign(worker,i);budget--;worker.NextJobSearch=_simulationTime+2;}
@@ -386,15 +419,17 @@ public sealed partial class DemoWorld
                 continue;
             }
             if(AdvanceDelivery(worker,job))continue;
-            if (job.Build is not null && (Fluids.Amount(job.Cell)>0 || !Supported(job.Cell) || Workers.Any(other => IntersectsWorker(job.Cell, job.Build!.Value, other))))
+            if (job.Build is not null && (Fluids.Amount(job.Cell)>0 || !Supported(job.Cell) || (job.Build==BuildKind.Ladder&&!Solid(job.Cell+StairDirection(job.Facing))) || Actors.Any(other => IntersectsWorker(job.Cell, job.Build!.Value, other))))
             { worker.Status = "等待施工位置腾空"; continue; }
             if (!Walkable(worker.Tile)) { Release(job); continue; }
             if(job.Dig && !DigSafe(job)) { Release(job); worker.Status="等待挖掘空间安全"; continue; }
             worker.Status = job.Processing ? "加工物资" : job.Refuel ? "添柴" : job.Chop ? "伐木" : job.PlantTree ? "种树" : job.Sow ? "播种" : job.Harvest ? "收获" : job.Demolish ? "拆除方块" : job.Dig ? "挖掘岩土" : job.Cook ? "烹制口粮" : job.Smelt ? "熔炼粗铁" : job.Forge ? "锻造铁剑" : $"建造{NameOf(job.Build!.Value)}";
-            double work=dt * worker.Person.WorkRate(JobSkill(job)) * (1+GearWorkBonus(worker,JobSkill(job)));
+            double work=dt * worker.Person.WorkRate(JobSkill(job)) * (1+GearWorkBonus(worker,job));
             job.Progress += work;
             if(job.Chop ? DamageBlock(job.Cell,work*20) : job.Dig ? MineStep(job,work) : job.Progress >= (job.Chop ? TreeHeight(job.Cell)*.8 : job.PlantTree?3 : job.Farming ? 2.0 : job.Production ? 5.0 : DemoJob.BuildWorkRequired))Complete(job,worker);
         }
+        AdvanceMelee(dt);
+        UpdateBattleOutcome();
     }
 
     private static bool SameConstructionSite(DemoJob equipment, DemoJob shell)
@@ -416,7 +451,7 @@ public sealed partial class DemoWorld
         {
             _residentFootCells.Add(w.Tile);
             if (w.Path.TryPeek(out var next)) _residentFootCells.Add(next);
-            if (w.Job is not null) occupiedStands.Add(w.Path.Count > 0 ? w.Path.Last() : w.Tile);
+            if (w.Job is not null) occupiedStands.Add(AssignmentDestination(w));
         }
         foreach (var j in Jobs) if (j.Worker >= 0) occupiedJobs.Add(j.Cell);
         int bestRank=int.MaxValue;
@@ -426,21 +461,22 @@ public sealed partial class DemoWorld
             if (job.Worker >= 0) continue;
             int rank=ResidentWork.Rank(worker.Person,ResidentWork.JobType(job));
             if(rank==int.MaxValue||rank>bestRank)continue;
-            if (job.Build is BuildKind.Furnace or BuildKind.Anvil && Jobs.Any(j=>j.Build is BuildKind k && (BlockCatalog.IsWall(k)||k==BuildKind.Door) && SameConstructionSite(job,j))) continue;
+            if (job.Build is BuildKind.Furnace or BuildKind.Anvil && PendingConstructionShell(job)) continue;
             if(job.Forestry&&!ForestryReady(job))continue;
             if(job.Farming&&!FarmReady(job))continue;
             if (job.Production && !ProductionReady(job)) continue;
             if (job.Build is not null && (Fluids.Amount(job.Cell)>0 || !Supported(job.Cell))) continue;
+            if(job.Build==BuildKind.Ladder&&!Solid(job.Cell+StairDirection(job.Facing)))continue;
             if(job.Dig && !DigSafe(job, _residentFootCells)) continue;
             if (occupiedJobs.Contains(job.Cell)) continue;
             if (JobAccess(job).Length == 0) continue;
             if(!PrepareMaterials(worker,job))continue;
-            bool requireFlat = !job.Haul && job.Materials.All(r=>r.Stage==2) && !job.Dig && !(job.Build is BuildKind stair && BlockCatalog.IsStairs(stair));
+            bool requireFlat = !job.Haul && MaterialsDelivered(job) && !job.Dig && !(job.Build is BuildKind stair && BlockCatalog.IsStairs(stair));
             foreach(var stand in AssignmentPositions(job))
             {
                 if (requireFlat && Slope(stand) is not null) continue;
                 if(occupiedStands.Contains(stand)) continue;
-                if(component==0||Navigation.ComponentAt(stand)!=component)continue;
+                if(component==0||Navigation.ComponentAt(stand)!=component||!Navigation.CanReach(stand,worker.Tile))continue;
                 if(rank<bestRank){bestRank=rank;targets.Clear();}
                 targets.TryAdd(stand,job);
             }
@@ -459,6 +495,12 @@ public sealed partial class DemoWorld
     private bool EnsureWorkerRoute(DemoWorker worker, ref int budget)
     {
         using var timing = Probe?.Measure("navigation.validate-worker-route") ?? default;
+        if(worker.Path.TryPeek(out var step)&&worker.Tile.Level-step.Level==2&&
+            (worker.Job is not null||worker.Person.Activity is {Origin:not "manual"})&&!Navigation.CanReach(step,worker.Tile))
+        {
+            if(worker.Job is {} job)Release(job);else {CancelResidentActivity(worker);StopMovement(worker);}
+            worker.Status="等待安全返程路线";return false;
+        }
         if (Navigation.PathValid(worker.Tile, worker.Path, worker.CheckedNavigationVersion))
         { worker.CheckedNavigationVersion = Navigation.Version; return true; }
         if (budget <= 0) { worker.Status = "等待重新寻路"; return false; }
@@ -480,10 +522,17 @@ public sealed partial class DemoWorld
 
     private void Move(DemoWorker worker, double dt)
     {
+        _supportSafety.Clear();
         worker.TravelFrom ??= worker.Tile;
         var next = worker.Path.Peek();
+        if(LadderLink(worker.Tile,next))
+        {
+            worker.ClimbProgress+=dt*.8*worker.Person.MoveRate;
+            if(worker.ClimbProgress>=1){worker.Level=next.Level;worker.TravelFrom=null;worker.ClimbProgress=0;worker.Path.Dequeue();}
+            return;
+        }
         double dx = next.X - worker.X, dz = next.Z - worker.Z;
-        double distance = Math.Sqrt(dx * dx + dz * dz), move = dt * 2.5 * worker.Person.MoveRate;
+        double distance = Math.Sqrt(dx * dx + dz * dz), move = dt * 2.5 * worker.Person.MoveRate / TraversalCost(worker.Tile,next);
         if (distance <= move)
         { worker.X = next.X; worker.Z = next.Z; worker.Level = next.Level; worker.TravelFrom = null; worker.Path.Dequeue(); }
         else { worker.X += dx / distance * move; worker.Z += dz / distance * move; }
@@ -493,7 +542,7 @@ public sealed partial class DemoWorld
     private static void StopMovement(DemoWorker worker)
     {
         var c = worker.Tile; worker.X = c.X; worker.Z = c.Z; worker.Level = c.Level;
-        worker.TravelFrom = null; worker.Path.Clear();
+        worker.TravelFrom = null; worker.ClimbProgress=0; worker.Path.Clear();
     }
     private IEnumerable<Cell> ActionPositions(DemoJob job)
     {
@@ -509,6 +558,7 @@ public sealed partial class DemoWorld
             }
             yield break;
         }
+        if(job.Build==BuildKind.Ladder){yield return job.Cell;yield return job.Cell+new Cell(0,0,1);foreach(var d in Directions)yield return job.Cell+d+new Cell(0,0,1); }
         // A resident on the upper landing can install a stair into the excavated cell below.
         if(job.Build is BuildKind stairKind && BlockCatalog.IsStairs(stairKind))
             foreach(var d in Directions)yield return job.Cell+d+new Cell(0,0,1);
@@ -525,6 +575,12 @@ public sealed partial class DemoWorld
     private bool IntersectsWorker(Cell c, BuildKind kind, DemoWorker worker)
     {
         // Include both ends of a movement segment, so finishing construction cannot clip a walker.
+        if(kind==BuildKind.Ladder)return false;
+        if(worker.Path.TryPeek(out var step)&&ClimbEdge(worker.Tile,step))
+        {
+            var low=worker.Tile.Level<step.Level?worker.Tile:step;
+            if(c.X==low.X&&c.Z==low.Z&&c.Level<Math.Max(worker.Tile.Level,step.Level)+WorldScale.DwarfHeightMeters&&c.Level+(TallFixture(kind)?2:1)>low.Level)return true;
+        }
         bool At(Cell w) => w.X == c.X && w.Z == c.Z && c.Level < NodeHeight(w) + WorldScale.DwarfHeightMeters && c.Level + (TallFixture(kind) ? 2 : 1) > NodeHeight(w);
         return At(worker.Tile) || (worker.Path.TryPeek(out var next) && At(next));
     }

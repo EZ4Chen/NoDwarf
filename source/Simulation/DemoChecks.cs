@@ -9,6 +9,12 @@ public static class DemoChecks
 
     public static void Run()
     {
+        CombatChecks.Run();
+        LadderChecks.Run();
+        FallSafetyChecks.Run();
+        ClimbingChecks.Run();
+        BuildingGravityChecks.Run();
+        BlockExposureChecks.Run();
         ResidentChecks.Run();
         LogisticsChecks.Run();
         ConstructionChecks.Run();
@@ -41,7 +47,7 @@ public static class DemoChecks
         foundation.Step(-1); Check(foundation.WorldLevel == -1, "Basement floor bookmark");
         foundation.SetFloorHeight(4); Check(foundation.WorldLevel == -2, "Floor height is floor-to-floor distance");
         foundation.Step(1); Check(foundation.WorldLevel == 2, "Changing floor spacing preserves zero datum");
-        Check(TerrainMap.LayerHeight == 1f && WorldScale.DwarfHeightMeters == 1.1f, "World uses requested metric scale");
+        Check(TerrainMap.LayerHeight == 1f && WorldScale.DwarfHeightMeters == 1.4f, "World uses requested metric scale");
         UndergroundChecks();
         MultiLevelChecks();
         MaterialAndStairChecks();
@@ -185,7 +191,7 @@ public static class DemoChecks
             Check(!w.NaturalSolid(wall)&&w.NaturalSolid(wall+new Cell(0,0,1)),"Single voxel mining preserves block above");
             Check(w.QueueDig(wall+new Cell(0,0,1)),"Plan upper wall voxel separately");Advance(w,30);
             Check(!w.NaturalSolid(wall+new Cell(0,0,1))&&w.NaturalSolid(wall+new Cell(0,0,2)),"Residents can mine upper voxel over excavated air");
-            w.Erase(o+new Cell(2,6,-2));Check(w.FindPath(surface,target)is null,"Removing underground stair disconnects route");
+            w.Erase(o+new Cell(2,6,-2));Check(w.FindPath(target,surface)is null,"Removing underground stair removes safe return route");
             Check(!w.QueueDig(target)&&!w.QueueDig(new Cell(10,10,TerrainMap.MinLevel)),"Empty space and bedrock cannot be mined twice");
             var remote=o+new Cell(10,0,-3);Check(w.QueueDig(remote),"Unreachable mining can be planned");Advance(w,5);Check(w.NaturalSolid(remote),"Residents cannot remotely mine sealed rock");w.Erase(remote);Check(!w.Jobs.Any(j=>j.Cell==remote),"Mining plans cancel safely");
         }
@@ -212,16 +218,18 @@ public static class DemoChecks
         var lowRoom=world.Camp+new Cell(2,2);
         Check(world.Walkable(lowRoom)&&world.Walkable(lowRoom+new Cell(0,0,3)),"Two traversable floors share same X/Z");
         Check(world.BlockAt(lowRoom+new Cell(0,0,2))=="nodwarf:planks","Slab is one voxel serving both floor and ceiling");
+        // Put the resident on a known built floor; cheaper routes may now leave it outdoors.
+        world.Workers[0].Path.Clear();world.Workers[0].TravelFrom=null;world.Workers[0].X=upper.X;world.Workers[0].Z=upper.Z;world.Workers[0].Level=upper.Level;
         var occupiedFloor=world.Workers[0].Tile+new Cell(0,0,-1);var savedStock=world.Wood;
         world.Erase(occupiedFloor);Check(world.Buildings.ContainsKey(occupiedFloor)&&world.Wood==savedStock,"Do not remove occupied floor beneath a resident");
         var returning=world.Workers[0];var descent=world.FindPath(returning.Tile,ground);
         Check(descent is not null,"Worker can return downstairs");foreach(var step in descent!)returning.Path.Enqueue(step);
         Advance(world,30);Check(returning.Tile==ground,"Resident actually walks downstairs");
         var stair=world.Camp+new Cell(2,6,1); world.Erase(stair);
-        Check(world.FindPath(ground,upper) is null && world.FindPath(upper,ground) is null,"Removing middle stair disconnects both directions");
+        Check(world.FindPath(ground,upper) is null,"Removing middle stair blocks ascent even if a safe downward jump remains");
         Check(world.QueueBuild(stair,BuildKind.PlankStairs,facing:3),"Stair can be repaired"); Advance(world,60);
         Check(world.FindPath(ground,upper) is not null,"Repair restores upstairs access");
-        // One metre headroom blocks a 1.1 m resident even when the floor still exists.
+        // One metre headroom blocks a 1.4 m resident even when the floor still exists.
         var obstruct=world.Camp+new Cell(2,2,4);world.Buildings[obstruct]=new Building(obstruct,BuildKind.Planks);
         Check(!world.Walkable(lowRoom+new Cell(0,0,3)),"Low ceiling blocks resident body");
         Console.WriteLine("MULTILEVEL_OK: built two floors and roof, ascended, forged, descended, removed and repaired stairs; headroom checked");
@@ -257,7 +265,7 @@ public static class DemoChecks
             Check(found.HasValue, "Reachable stair site exists for direction " + facing);
             var site = found!.Value;
             var high = site + new Cell(direction.X, direction.Z, 1);
-            Check(!world.Connected(site, high), "Cliff not traversable before staircase");
+            Check(world.Connected(site, high)&&world.TraversalCost(site,high)==3, "One-metre ledge can be climbed slowly before staircase");
             int stone = world.Stone, wood = world.Wood;
             world.Buildings[site]=new Building(site,kind,(facing+2)%4);
             Check(!world.Connected(site,high),"Reversed stairs cannot climb the cliff"); world.Buildings.Remove(site);
@@ -269,8 +277,7 @@ public static class DemoChecks
             world.SaveBlueprint(); Check(world.Blueprint.Single().Facing == facing, "Existing blueprint preserves stair orientation");
             var resident = world.Workers[0]; resident.X = site.X; resident.Z = site.Z; resident.Level = site.Level; resident.Path.Enqueue(high);
             world.Erase(site); world.Update(1.0 / 30);
-            Check(!world.Connected(site, high) && resident.Tile == site &&
-                (!resident.Path.TryPeek(out var nextStep) || nextStep != high), "Removing stairs invalidates queued ascent");
+            Check(world.Connected(site, high)&&world.TraversalCost(site,high)==3, "Removing stairs retains slower one-metre climbing route");
             var previousStep = resident.Tile;
             foreach (var step in resident.Path)
             { Check(world.Connected(previousStep, step), "Replacement route cannot use removed stair link"); previousStep = step; }
@@ -381,9 +388,9 @@ public static class DemoChecks
             var previous = world.Workers[0].Tile;
             foreach (var step in route)
             {
-                Check(world.Terrain.Connected(previous, step), "Every path step obeys terrain links");
+                Check(world.Connected(previous, step), "Every path step obeys world traversal rules");
                 int dx = step.X - previous.X, dz = step.Z - previous.Z;
-                Check(Math.Abs(world.Terrain.TileHeight(previous.X, previous.Z, dx * .5, dz * .5) - world.Terrain.TileHeight(step.X, step.Z, -dx * .5, -dz * .5)) < .001f, "No height jumps at path edges");
+                if(!world.ClimbEdge(previous,step))Check(Math.Abs(world.NodeHeight(previous,dx*.5,dz*.5)-world.NodeHeight(step,-dx*.5,-dz*.5))<.001f,"Walking and stair edges stay level; ledges use climbing motion");
                 previous = step;
             }
             elevated = c;

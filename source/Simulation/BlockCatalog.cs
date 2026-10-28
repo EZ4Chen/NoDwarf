@@ -12,7 +12,7 @@ public sealed record BlockDefinition(string Id, string Name, BlockShape Shape = 
         "nodwarf:granite" or "nodwarf:granite_ramp"=>140,
         "nodwarf:sandstone" or "nodwarf:sandstone_ramp"=>80,
         "nodwarf:grass" or "nodwarf:soil" or "nodwarf:soil_ramp"=>60,
-        "nodwarf:planks" or "nodwarf:plank_stairs" or "nodwarf:wood_door"=>60,
+        "nodwarf:ladder" or "nodwarf:planks" or "nodwarf:plank_stairs" or "nodwarf:wood_door"=>60,
         "nodwarf:log" or "nodwarf:log_stairs" or "nodwarf:tree"=>80,
         "nodwarf:deepslate" or "nodwarf:deepslate_coal_ore"=>160,
         "nodwarf:deepslate_iron_ore"=>180,"nodwarf:iron_ore"=>120,
@@ -67,6 +67,7 @@ public static class BlockCatalog
         new("nodwarf:planks", "木板", Color: "b68b55", Cost: new(Wood: 2)),
         new("nodwarf:cobblestone", "圆石", Color: "7b807c", Cost: new(Stone: 2)),
         new("nodwarf:stone_bricks", "石砖", Color: "aba99d", Cost: new(Stone: 2)),
+        new("nodwarf:ladder", "木梯", BlockShape.Fixture, "b68b55", new(Wood: 1)),
         new("nodwarf:log_stairs", "原木楼梯", BlockShape.Stairs, "795337", new(Wood: 3)),
         new("nodwarf:plank_stairs", "木板楼梯", BlockShape.Stairs, "b68b55", new(Wood: 3)),
         new("nodwarf:cobblestone_stairs", "圆石楼梯", BlockShape.Stairs, "7b807c", new(Stone: 3)),
@@ -104,7 +105,7 @@ public static class BlockCatalog
     public static bool IsRegionalRock(string id)=>id is "nodwarf:granite" or "nodwarf:limestone" or "nodwarf:sandstone";
     public static string Id(BuildKind kind) => kind switch
     {
-        BuildKind.Floodgate=>"nodwarf:floodgate", BuildKind.Wall => "nodwarf:stone_wall", BuildKind.Door => "nodwarf:wood_door",
+        BuildKind.Ladder=>"nodwarf:ladder", BuildKind.Floodgate=>"nodwarf:floodgate", BuildKind.Wall => "nodwarf:stone_wall", BuildKind.Door => "nodwarf:wood_door",
         BuildKind.Workbench=>"nodwarf:workbench",BuildKind.Mill=>"nodwarf:mill",BuildKind.Loom=>"nodwarf:loom",BuildKind.Stove=>"nodwarf:stove",BuildKind.Bed=>"nodwarf:bed",BuildKind.Campfire=>"nodwarf:campfire",
         BuildKind.Furnace => "nodwarf:furnace", BuildKind.Anvil => "nodwarf:anvil",
         BuildKind.Log => "nodwarf:log", BuildKind.Planks => "nodwarf:planks",

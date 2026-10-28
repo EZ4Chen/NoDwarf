@@ -5,4 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MoonSharp" Version="2.0.0" />
+  </ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Assets/Combat/equipment-geometry.json" LogicalName="NoDwarf.equipment-geometry.json" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Assets/Combat/grip-poses.json" LogicalName="NoDwarf.grip-poses.json" /></ItemGroup>
 </Project>

@@ -58,6 +58,17 @@ public partial class TerrainView
             if(expected.Collision.Length==0){if(actual is not null)throw new Exception("Unexpected collision");continue;}
             if(actual is null||body!.CollisionLayer==0||!actual.GetFaces().SequenceEqual(expected.Collision))throw new Exception("Stale or missing chunk collision: "+entry.Key);
             if(!entry.Value.Visible)throw new Exception("Final chunk stayed hidden");
+            var mesh=(ArrayMesh)entry.Value.GetChildren().OfType<MeshInstance3D>().Last().Mesh;
+            int surface=0;
+            foreach(var data in expected.Surfaces.Values)
+            {
+                using var arrays=mesh.SurfaceGetArrays(surface++);
+                var colors=arrays[(int)Mesh.ArrayType.Color].AsColorArray();
+                if(colors.Length!=data.Colors.Length)throw new Exception("Missing contact shading: "+entry.Key);
+                // ArrayMesh packs colors into RGBA8, so allow one quantization step.
+                for(int i=0;i<colors.Length;i++)for(int channel=0;channel<4;channel++)
+                    if(Math.Abs(colors[i][channel]-data.Colors[i][channel])>1f/255+.00001f)throw new Exception("Stale contact shading: "+entry.Key);
+            }
         }
     }
 }

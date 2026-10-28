@@ -10,6 +10,7 @@ public static class UiIcons
         if(Cache.TryGetValue(name,out var texture))return texture;
         string shape=name.ToLowerInvariant() switch
         {
+            "ladder" => "<path stroke='#c29c66' stroke-width='5' d='M12 4v40M36 4v40M12 10h24M12 20h24M12 30h24M12 40h24'/>",
             "floodgate" => "<path fill='#829ba4' d='M5 4h6v32H5zm32 0h6v32h-6ZM12 8h24v21H12Z'/><path stroke='#6cbbe1' stroke-width='3' d='M3 35q5-5 10 0t10 0t10 0t12 0M3 43q5-5 10 0t10 0t10 0t12 0'/>",
             "growingzone" => "<path fill='#6b9a68' d='M6 20h24V9h12v33H6Z'/><path stroke='#d9e8b9' stroke-width='3' d='M23 33V15'/><path fill='#b1d18b' d='M23 24Q7 24 9 10q14 1 14 14Zm0-7Q24 3 37 5q0 13-14 12Z'/>",
             "stockpile" => "<path fill='#ab82ad' d='M5 7h25v13h13v22H17V30H5Z'/><path stroke='#e4c6e6' d='M12 14h12m0 13h12m-12 8h12'/>",

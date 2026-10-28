@@ -77,18 +77,19 @@ public partial class Main
         RStat(left,"血量",$"{p.Blood:F0}%",p.Blood<90?RRed:RGreen);
         RStat(left,"疼痛",p.Pain<1?"无":$"{p.Pain:F0}%",p.Pain<1?RGreen:RRed);
         RSection(left,"护理");
-        var medicChoice=new OptionButton{CustomMinimumSize=new(0,30)};StyleResidentChoice(medicChoice);left.AddChild(medicChoice);
+        var medicChoice=new OptionButton{CustomMinimumSize=new(0,30)};StyleResidentChoice(medicChoice);UiAccess.Name(medicChoice,"治疗人员");left.AddChild(medicChoice);
         var medics=_world.Workers.Where(m=>!m.Person.Dead).ToArray();
         foreach(var m in medics)medicChoice.AddItem(m==w?"自己护理":$"{m.Name} · 医疗 {m.Person.Level("medicine")} 级");
-        var eligible=medics.Where(m=>!m.Person.Incapacitated&&_world.Inventory(m).Any(i=>i.Item=="bandage")).OrderByDescending(m=>m.Person.Level("medicine")).FirstOrDefault();
+        var eligible=medics.Where(m=>!m.Person.Incapacitated&&!_world.MilitaryControlled(m)&&m.Person.Manipulation>=.05).OrderByDescending(m=>m.Person.Level("medicine")).FirstOrDefault();
         if(eligible is not null)medicChoice.Select(Array.IndexOf(medics,eligible));
-        var care=RB(left,"安排护理",()=>{if(medicChoice.Selected>=0&&medicChoice.Selected<medics.Length)ResidentDo("treat",w.Id,actor:medics[medicChoice.Selected].Id);},"消耗护理者携带的 1 份绷带，处理一处伤口。",0,true);
+        var care=RB(left,"安排护理",()=>{if(medicChoice.Selected>=0&&medicChoice.Selected<medics.Length)ResidentDo("treat",w.Id,actor:medics[medicChoice.Selected].Id);},"每处伤口消耗 1 份绷带；没有随身绷带时会先去公共库存取用。",0,true);
         void UpdateCare()
         {
             var medic=medicChoice.Selected>=0&&medicChoice.Selected<medics.Length?medics[medicChoice.Selected]:null;
-            care.Disabled=p.Dead||!p.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")||medic is null||medic.Person.Incapacitated||!_world.Inventory(medic).Any(i=>i.Item=="bandage");
+            care.Disabled=p.Dead||!p.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")||medic is null||medic.Person.Incapacitated||medic.Person.Manipulation<.05;
         }
         medicChoice.ItemSelected+=_=>UpdateCare();UpdateCare();
+        RT(left,$"公共可用绷带：{_world.Available("bandage")} 份",13,RMuted,true);
         RT(left,"护理割伤可止血。骨折需护理后恢复；缺失部位无法恢复。",13,RMuted,true);
         RSection(right,"部位与伤势",$"{p.Injuries.Count} 处伤势");
         var list=RScroll(right);
@@ -152,7 +153,7 @@ public partial class Main
     }
     private static void ResidentItemIcon(Node parent,string item)
     {
-        parent.AddChild(new TextureRect{Texture=UiIcons.Get(item),CustomMinimumSize=new(26,26),ExpandMode=TextureRect.ExpandModeEnum.IgnoreSize,StretchMode=TextureRect.StretchModeEnum.KeepAspectCentered,SizeFlagsVertical=Control.SizeFlags.ShrinkCenter,MouseFilter=Control.MouseFilterEnum.Ignore});
+        parent.AddChild(new TextureRect{Texture=EquipmentArt.Icon(item)??UiIcons.Get(item),CustomMinimumSize=new(26,26),ExpandMode=TextureRect.ExpandModeEnum.IgnoreSize,StretchMode=TextureRect.StretchModeEnum.KeepAspectCentered,SizeFlagsVertical=Control.SizeFlags.ShrinkCenter,MouseFilter=Control.MouseFilterEnum.Ignore});
     }
     private void RenderResidentSocial(DemoWorker w)
     {
@@ -198,7 +199,7 @@ public partial class Main
         }
         if(!skill.HasWork)RT(right,"对应玩法待接入，当前无法通过工作提升。",12,RGold,true);
         var route=RH(right);RT(route,"培养路线",13,RMuted);
-        var choice=new OptionButton{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill,CustomMinimumSize=new(0,29)};StyleResidentChoice(choice);route.AddChild(choice);choice.AddItem("手动选择");foreach(var s in ResidentCatalog.Skills)choice.AddItem(s.Name+"优先");
+        var choice=new OptionButton{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill,CustomMinimumSize=new(0,29)};StyleResidentChoice(choice);UiAccess.Name(choice,"培养路线");route.AddChild(choice);choice.AddItem("手动选择");foreach(var s in ResidentCatalog.Skills)choice.AddItem(s.Name+"优先");
         choice.Select(Array.FindIndex(ResidentCatalog.Skills,s=>s.Id==p.AutoSkill)+1);choice.ItemSelected+=i=>ResidentDo("route",i==0?"":ResidentCatalog.Skills[(int)i-1].Id);choice.TooltipText="选择路线后，满足等级、点数与研究条件时自动加点。";
         RT(right,$"每 1000 成长经验获得 1 点 · 距下一点 {1000-p.GrowthXp%1000}",12,RMuted);
     }

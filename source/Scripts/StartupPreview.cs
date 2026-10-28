@@ -37,6 +37,15 @@ public partial class Startup
             _seedInput.Text="23519";_seedInput.EmitSignal(LineEdit.SignalName.TextChanged,_seedInput.Text);_options["moisture"].Select(3);_options["moisture"].EmitSignal(OptionButton.SignalName.ItemSelected,3L);
             await Snap("startup-settings");await Click("next");
             if(_settings.Seed!=23519||_settings.Moisture!=1||_enter.Disabled)throw new InvalidOperationException("Options were not applied to atlas");
+            var keyboardStart=_settings;_atlas.GrabFocus();await Frame();
+            foreach(bool down in new[]{true,false})GetViewport().PushInput(new InputEventKey{Keycode=Key.Right,PhysicalKeycode=Key.Right,Pressed=down},true);
+            await Frame();
+            if(_settings.SiteX!=Math.Min(keyboardStart.SiteX+1,71)||_settings.SiteY!=keyboardStart.SiteY||string.IsNullOrEmpty(_atlas.AccessibilityDescription))
+                throw new InvalidOperationException("Keyboard atlas selection or accessible description failed");
+            foreach(bool down in new[]{true,false})GetViewport().PushInput(new InputEventKey{Keycode=Key.Tab,PhysicalKeycode=Key.Tab,Pressed=down},true);
+            await Frame();if(_atlas.HasFocus())throw new InvalidOperationException("Tab cannot leave atlas");
+            _settings=keyboardStart;UpdateSite();
+            GD.Print("STARTUP_ACCESS_OK: keyboard map selection, Tab exit and selected-region description");
             var water=(from x in Enumerable.Range(0,72) from y in Enumerable.Range(0,44) where !_settings.Tile(x,y).Land select (x,y)).First();
             _atlas.Selected!(water.x,water.y);if(!_enter.Disabled)throw new InvalidOperationException("Water must reject settlement");
             await Click("recommend");await Snap("startup-atlas");

@@ -178,6 +178,76 @@
     "nodwarf:cover_dead_bush": {
       "side": "dead_bush.png",
       "cutout": true
+    },
+    "nodwarf:crop_wheat_0": {
+      "side": "wheat_stage0.png",
+      "cutout": true
+    },
+    "nodwarf:crop_wheat_1": {
+      "side": "wheat_stage1.png",
+      "cutout": true
+    },
+    "nodwarf:crop_wheat_2": {
+      "side": "wheat_stage2.png",
+      "cutout": true
+    },
+    "nodwarf:crop_wheat_3": {
+      "side": "wheat_stage3.png",
+      "cutout": true
+    },
+    "nodwarf:crop_wheat_4": {
+      "side": "wheat_stage4.png",
+      "cutout": true
+    },
+    "nodwarf:crop_wheat_5": {
+      "side": "wheat_stage5.png",
+      "cutout": true
+    },
+    "nodwarf:crop_wheat_6": {
+      "side": "wheat_stage6.png",
+      "cutout": true
+    },
+    "nodwarf:crop_wheat_7": {
+      "side": "wheat_stage7.png",
+      "cutout": true
+    },
+    "nodwarf:crop_potato_0": {
+      "side": "potatoes.png",
+      "cutout": true,
+      "model": "carrots_stage0.model.json"
+    },
+    "nodwarf:crop_potato_1": {
+      "side": "potatoes.png",
+      "cutout": true,
+      "model": "carrots_stage1.model.json"
+    },
+    "nodwarf:crop_potato_2": {
+      "side": "potatoes.png",
+      "cutout": true,
+      "model": "carrots_stage2.model.json"
+    },
+    "nodwarf:crop_potato_3": {
+      "side": "potatoes.png",
+      "cutout": true,
+      "model": "carrots_stage3.model.json"
+    },
+    "nodwarf:crop_mushroom": {
+      "side": "brown_mushroom.png",
+      "cutout": true
+    },
+    "nodwarf:crop_cotton_foliage": {
+      "side": "azalea_plant.png",
+      "cutout": true
+    },
+    "nodwarf:crop_soil": {
+      "side": "farmland.png"
+    },
+    "nodwarf:crop_fungus_bed": {
+      "side": "mycelium_top.png"
+    },
+    "nodwarf:ladder": {
+      "side": "ladder.png",
+      "cutout": true
     }
   }
 }

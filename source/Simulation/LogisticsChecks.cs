@@ -56,7 +56,7 @@ public static class LogisticsChecks
         Check(sourcing.Jobs[0].Materials.Any(r=>r.StackId==trapped.Id),"Regression begins with nearer source reserved");
         // A 5x5 two-metre enclosure prevents collecting from adjacent cells as well.
         for(int x=-2;x<=2;x++)for(int z=-2;z<=2;z++)
-            if(Math.Abs(x)==2||Math.Abs(z)==2){var c=source+new Cell(x,z);sourcing.Buildings[c]=new Building(c,BuildKind.Wall);}
+            if(Math.Abs(x)==2||Math.Abs(z)==2){var c=source+new Cell(x,z);sourcing.Buildings[c]=new Building(c,BuildKind.Wall);var top=c+new Cell(0,0,1);sourcing.Buildings[top]=new(top,BuildKind.Wall);}
         Advance(sourcing,120);
         Check(sourcing.Buildings.ContainsKey(new Cell(28,25))&&trapped.Count==20,"Unreachable reservation replaced by reachable material without consuming sealed stock");
         sourcing.SetStockpile(new Cell(15,15),new Cell(15,15));Advance(sourcing,60);

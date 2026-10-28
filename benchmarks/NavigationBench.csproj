@@ -8,4 +8,6 @@
   <ItemGroup>
     <Compile Include="../source/Simulation/*.cs" />
   </ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../source/Assets/Combat/equipment-geometry.json" LogicalName="NoDwarf.equipment-geometry.json" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../source/Assets/Combat/grip-poses.json" LogicalName="NoDwarf.grip-poses.json" /></ItemGroup>
 </Project>

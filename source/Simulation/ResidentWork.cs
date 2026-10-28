@@ -89,20 +89,25 @@ public sealed partial class DemoWorld
     }
     private DemoWorker? AutomaticPatient(DemoWorker medic)
     {
-        if(!Inventory(medic).Any(i=>i.Item=="bandage"))return null;
         return Workers.Where(o=>!o.Person.Dead&&o.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")&&
             (o==medic||o.Job is null&&o.Path.Count==0)&&
-            !Workers.Any(other=>other!=medic&&other.Person.Activity is {Kind:"treat"} care&&care.Target==o.Id)&&
+            !Workers.Any(other=>other!=medic&&other.Person.Activity is {Kind:"treat" or "care_supply"} care&&care.Target==o.Id)&&
             CanReachAny(medic.Tile,ItemPositions(o.Tile).Where(Walkable).ToArray()))
             .OrderBy(o=>Math.Abs(o.Tile.X-medic.Tile.X)+Math.Abs(o.Tile.Z-medic.Tile.Z)).FirstOrDefault();
     }
     private bool AssignPersonalWork(DemoWorker w,int ordinaryRank)
     {
         int doctorRank=ResidentWork.Rank(w.Person,"doctor"),researchRank=ResidentWork.Rank(w.Person,"research");
-        DemoWorker? patient=doctorRank<ordinaryRank?AutomaticPatient(w):null;
+        if(doctorRank==int.MaxValue||!Workers.Any(o=>!o.Person.Dead&&o.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")))w.MedicalIssue="";
+        DemoWorker? patient=doctorRank<ordinaryRank&&_simulationTime>=w.NextMedicalCheck?AutomaticPatient(w):null;
         bool research=Research.Active!=""&&researchRank<ordinaryRank;
         if(patient is not null&&(!research||doctorRank<researchRank))
-        {BeginResidentActivity(w,"treat",patient.Id,origin:"work");return true;}
+        {
+            var result=BeginResidentActivity(w,"treat",patient.Id,origin:"work");
+            if(result.Ok){w.MedicalIssue="";return true;}
+            w.MedicalIssue=result.Message;w.Status=result.Message;w.NextMedicalCheck=_simulationTime+3;
+            // A failed care attempt must not monopolize the worker (including bandage production).
+        }
         if(!research)return false;
         if(w.Person.Activity is {Kind:"research",Origin:"work"})return true;
         var paused=w.Person.PausedResearch;

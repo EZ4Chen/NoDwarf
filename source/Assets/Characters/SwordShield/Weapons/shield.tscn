@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://Assets/Characters/SwordShield/Weapons/shield.glb" id="1"]
+
+[node name="Shield" type="Node3D"]
+metadata/weapon_id = "shield"
+metadata/socket = "OffHandSocket"
+metadata/coordinate_space = "slot_hand_l local; +Y front normal, +Z up"
+metadata/panel_size = Vector3(0.399, 0.05775, 0.462)
+
+[node name="Visual" parent="." instance=ExtResource("1")]
+
+[node name="PanelCenter" type="Marker3D" parent="."]
+position = Vector3(0, 0.107625, -0.0315)
+
+[node name="FrontNormal" type="Marker3D" parent="."]
+position = Vector3(0, 0.207625, -0.0315)
+
+[node name="Grip" type="Marker3D" parent="."]

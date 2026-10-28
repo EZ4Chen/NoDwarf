@@ -3,13 +3,14 @@ namespace NoDwarf;
 
 public partial class TerrainView
 {
-    private sealed record HeightBatch(MultiMesh Mesh,float[] Tops)
+    private sealed record HeightBatch(MultiMesh Mesh,float[] Tops,bool CutCap=false,Node3D? Root=null)
     {
         public int ShowBelow(float height)
         {
+            if(CutCap){int count=Tops.Length>0&&height==Tops[0]?Tops.Length:0;Mesh.VisibleInstanceCount=count;if(Root is not null)Root.Visible=count>0;return count;}
             int lo=0,hi=Tops.Length;
             while(lo<hi){int mid=(lo+hi)/2;if(Tops[mid]<=height)lo=mid+1;else hi=mid;}
-            Mesh.VisibleInstanceCount=lo;return lo;
+            Mesh.VisibleInstanceCount=lo;if(Root is not null)Root.Visible=lo>0;return lo;
         }
     }
     private readonly List<HeightBatch> _treeSlices=new();

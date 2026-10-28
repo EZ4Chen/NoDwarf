@@ -12,6 +12,21 @@ public sealed partial class DemoWorld
     private readonly HashSet<Cell> _residentFootCells = new();
     private DemoJob[]? _orderedJobs;
     private int _orderedRevision, _orderedCount;
+    private bool PendingConstructionShell(DemoJob equipment)
+    {
+        foreach(var job in Jobs)
+            if(job.Build is BuildKind kind&&(BlockCatalog.IsWall(kind)||kind==BuildKind.Door)&&SameConstructionSite(equipment,job))return true;
+        return false;
+    }
+    private static Cell AssignmentDestination(DemoWorker worker)
+    {
+        var cell=worker.Tile;foreach(var step in worker.Path)cell=step;return cell;
+    }
+    private static bool MaterialsDelivered(DemoJob job)
+    {
+        foreach(var material in job.Materials)if(material.Stage!=2)return false;
+        return true;
+    }
 
     private void CheckAccessVersion()
     {
@@ -37,7 +52,7 @@ public sealed partial class DemoWorld
     {
         int component = Navigation.ComponentAt(from);
         if (component == 0) return false;
-        foreach (var cell in positions) if (Navigation.ComponentAt(cell) == component) return true;
+        foreach (var cell in positions) if (Navigation.CanReach(from,cell)) return true;
         return false;
     }
     private Cell[] AssignmentPositions(DemoJob job)

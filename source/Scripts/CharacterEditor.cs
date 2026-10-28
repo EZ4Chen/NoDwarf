@@ -50,7 +50,7 @@ public partial class Main
             line.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(64, 36) });
             var choice = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(160, 36) };
             foreach (var name in names) choice.AddItem(name);
-            line.AddChild(choice); _appearanceOptions.Add((choice, ids, get));
+            line.AddChild(choice);UiAccess.Name(choice,label); _appearanceOptions.Add((choice, ids, get));
             choice.ItemSelected += index => { if (!_updatingOptions) { _draft = set(_draft, ids[(int)index]); UpdateCharacterPreview(); } };
         }
         Add("肤色", CharacterAppearance.Skins, ["瓷白", "暖肤", "小麦", "棕色", "深棕"], a=>a.Skin, (a,v)=>a with {Skin=v});
@@ -97,7 +97,7 @@ public partial class Main
     }
     private void UpdateCharacterVisual(int index)
     {
-        var texture = CharacterArt.Texture(_world.Workers[index].Appearance);
+        var texture = EquipmentArt.Texture(_world.Workers[index].Appearance,_world.Inventory(_world.Workers[index]));
         _people[index].GetChild<Sprite3D>(0).Texture = texture;
         if (index < _residentButtons.Count) _residentButtons[index].Icon = texture;
     }

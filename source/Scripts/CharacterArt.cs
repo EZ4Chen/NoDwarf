@@ -15,7 +15,7 @@ public static class CharacterArt
         return ImageTexture.CreateFromImage(image);
     }
 
-    public static string Svg(CharacterAppearance appearance)
+    public static string Svg(CharacterAppearance appearance,string clothing="",string headgear="")
     {
         var a = appearance.Normalize();
         string skin = a.Skin switch { "porcelain" => "f5d9bd", "tan" => "ce986c", "brown" => "a36c49", "deep" => "704a37", _ => "efc39d" };
@@ -66,9 +66,11 @@ public static class CharacterArt
         <path d="M{left} 52l-9 23 9 5 11-24M{right} 52l9 23-9 5-11-24" fill="#{skin}" stroke="#553e32" stroke-width="2"/>
         {outfit}
         <path d="M{left+4} 68h{right-left-8}" stroke="#655443" stroke-width="3"/>
+        {clothing}
         <rect x="33" y="41" width="14" height="13" rx="5" fill="#{skin}"/>
         {face}
         <path d="{frontHair}" fill="#{hair}"/>
+        {headgear}
         <ellipse cx="32" cy="31" rx="2.2" ry="3" fill="#38332e"/><ellipse cx="49" cy="31" rx="2.2" ry="3" fill="#38332e"/>
         {beard}
         <path d="M36 41q5 3 9-1" fill="none" stroke="#96634b" stroke-width="2" stroke-linecap="round"/>

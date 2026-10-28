@@ -66,6 +66,7 @@ public partial class Main
 
     private void ReviewTick()
     {
+        using var tickTrace=DiagnosticTrace.Span("simulation.tick");
         var review = _tpsReview!;
         long begin = Stopwatch.GetTimestamp();
         review.Scenario.BeforeTick(review.Ticks);
@@ -96,6 +97,7 @@ public partial class Main
             r.NavigationAtStart = _world.Navigation.Searches; r.TerrainAtStart = _world.Terrain.Revision;
             for (int g = 0; g < 3; g++) r.GcStart[g] = GC.CollectionCount(g);
             GD.Print("TPS_REVIEW_MEASURING");
+            DiagnosticTrace.Mark("measurement","start");
             return;
         }
         if (!r.Measuring) return;
@@ -124,6 +126,7 @@ public partial class Main
             r.LastWindow = elapsed; r.LastTicks = r.Ticks; r.LastFrames = r.Frames;
         }
         if (elapsed < r.Duration) return;
+        DiagnosticTrace.Mark("measurement","end");
         var s = r.Scenario;
         object Stats(List<double> values) => new { count = values.Count, mean = values.Count == 0 ? 0 : values.Average(),
             p50 = Quantile(values, .5), p95 = Quantile(values, .95), p99 = Quantile(values, .99), max = values.Count == 0 ? 0 : values.Max() };
@@ -156,11 +159,19 @@ public partial class Main
         string path = ProjectSettings.GlobalizePath(_frameDiagnostic is null
             ? $"res://.local/realtime-tps-{r.Speed}x-{DisplayServer.GetName()}{(r.Profiling ? "-profile" : "")}.json"
             : $"res://.local/frame-tps-{_frameDiagnostic.Name}.json");
+        path=DiagnosticTrace.OutputPath(path);
         File.WriteAllText(path, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print($"TPS_REVIEW_OK: {path}; TPS={r.TickMs.Count / elapsed:F2}/{30 * r.Speed}; FPS={r.FrameMs.Count / elapsed:F2}; tick p99={Quantile(r.TickMs, .99):F2}ms; frame p99={Quantile(r.FrameMs, .99):F2}ms");
-        if(r.CurrentEnvironment)GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://.local/environment-perf-{r.Speed}x{(r.Canopy?"-canopy":"")}.png"));
+        if(r.CurrentEnvironment&&DisplayServer.GetName()!="headless")GetViewport().GetTexture().GetImage().SavePng(DiagnosticTrace.OutputPath(ProjectSettings.GlobalizePath($"res://.local/environment-perf-{r.Speed}x{(r.Canopy?"-canopy":"")}.png")));
         SaveFrameDiagnostic();
-        GetTree().Quit();
+        SetProcess(false);_clock.Paused=true;
+        FinishProfileCapture();
+    }
+
+    private async void FinishProfileCapture()
+    {
+        try{await DiagnosticTrace.FinishCaptureAsync();GetTree().Quit();}
+        catch(Exception error){GD.PushError(error.ToString());GetTree().Quit(1);}
     }
 
     private static double Quantile(List<double> values, double fraction)

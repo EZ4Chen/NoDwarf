@@ -4,16 +4,23 @@ namespace NoDwarf.Simulation;
 
 public sealed class WorkerState
 {
+    public CombatOrder Combat {get;set;}=new();
     public string Id {get;set;}="";public string Name {get;set;}="";
     public CharacterAppearance Appearance {get;set;}=new();
     public ResidentProfile? Person {get;set;}
     public double X {get;set;} public double Z {get;set;} public int Level {get;set;}
+    public double ClimbProgress {get;set;}
     public Cell? TravelFrom {get;set;} public Cell[] Path {get;set;}=Array.Empty<Cell>();
     public int? JobId {get;set;} public string Status {get;set;}="等待工作";
 }
 public sealed class WorldSnapshot
 {
-    public int Version {get;set;}=14;
+    public int Version {get;set;}=17;
+    public WorkerState[] Enemies {get;set;}=[];
+    public Cell? RallyPoint {get;set;}
+    public bool CivilianAlert {get;set;}
+    public int RaidSerial {get;set;}
+    public string BattleOutcome {get;set;}="";
     public ProductionOrder[] ProductionOrders {get;set;}=Array.Empty<ProductionOrder>();
     public double ProductionElapsed {get;set;}
     public RoomClimateState[] RoomClimates {get;set;}=Array.Empty<RoomClimateState>();
@@ -48,8 +55,9 @@ public sealed class WorldSnapshot
 public sealed partial class DemoWorld
 {
     public static readonly JsonSerializerOptions SaveOptions=new(){WriteIndented=true,Converters={new JsonStringEnumConverter()}};
-    private static WorkerState SaveWorker(DemoWorker w)=>new(){Id=w.Id,Name=w.Name,Appearance=w.Appearance,Person=w.Person,X=w.X,Z=w.Z,Level=w.Level,TravelFrom=w.TravelFrom,Path=w.Path.ToArray(),JobId=w.Job?.Id,Status=w.Status};
+    private static WorkerState SaveWorker(DemoWorker w)=>new(){Combat=w.Combat,Id=w.Id,Name=w.Name,Appearance=w.Appearance,Person=w.Person,X=w.X,Z=w.Z,Level=w.Level,TravelFrom=w.TravelFrom,ClimbProgress=w.ClimbProgress,Path=w.Path.ToArray(),JobId=w.Job?.Id,Status=w.Status};
     public string SaveJson()=>JsonSerializer.Serialize(new WorldSnapshot{
+        Enemies=Enemies.Select(SaveWorker).ToArray(),RallyPoint=RallyPoint,CivilianAlert=CivilianAlert,RaidSerial=_raidSerial,BattleOutcome=BattleOutcome,
         ProductionOrders=ProductionOrders.ToArray(),ProductionElapsed=_productionElapsed,RoomClimates=SaveRoomClimates(),RoomTemperatureUpdatedAt=_lastRoomTemperatureUpdate,
         Fluids=Fluids.Save(_openFloodgates),ClimateVersion=ClimateVersion,WeatherOverride=WeatherOverride,EcologyVersion=Terrain.EcologyVersion,Seed=Terrain.Seed,Flat=Terrain.Flat,Region=Terrain.Region?.Id,GeneratorVersion=Terrain.GeneratorVersion,Trees=Trees.Values.ToArray(),StorageZones=StorageZones.ToArray(),Fires=FireFuel.Where(f=>Buildings.TryGetValue(f.Key,out var b)&&b.Kind==BuildKind.Campfire).Select(f=>new FireState(f.Key,f.Value)).ToArray(),Farms=Farms.Values.ToArray(),FarmElapsed=_farmElapsed,Damage=_blockDamage.Values.Where(d=>d.Block==BlockAt(d.Cell)).ToArray(),Excavated=Terrain.Excavated.ToArray(),Buildings=Buildings.Values.ToArray(),Items=Items.ToArray(),Stockpiles=Stockpiles.ToArray(),Jobs=Jobs.ToArray(),
         Generation=Terrain.Generation,GrowingZones=GrowingZones.Values.ToArray(),Workers=Workers.Select(SaveWorker).ToArray(),RemovedWorkers=_removedResidents?.Select(SaveWorker).ToArray(),Blueprint=Blueprint.ToArray(),DemoStage=Demo?.Stage,UndergroundStage=Underground?.Stage,SimulationTime=_simulationTime,ResidentElapsed=_residentElapsed,Research=Research},SaveOptions);
@@ -60,7 +68,7 @@ public sealed partial class DemoWorld
         if(s.EcologyVersion is not (1 or 2)||(s.Version<10&&s.EcologyVersion!=1)||
            (s.Generation is not null&&s.Generation.EcologyVersion!=s.EcologyVersion)||
            (s.Region is not null&&!(s.EcologyVersion==1?RegionProfile.Legacy:RegionProfile.All).Any(p=>p.Id==s.Region))||
-           s.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14)||s.GeneratorVersion is not (1 or 2 or 3)||
+           s.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17)||s.GeneratorVersion is not (1 or 2 or 3)||
            (s.GeneratorVersion==3&&(s.Version<9||s.Generation is null||s.Flat||s.Region!=s.Generation.Site.Region||s.Seed!=s.Generation.LocalSeed))||
            (s.GeneratorVersion!=3&&s.Generation is not null)||
            (s.GeneratorVersion==2&&(s.Version<8||s.Flat||!RegionProfile.All.Any(p=>p.Id==s.Region)))||
@@ -104,6 +112,8 @@ public sealed partial class DemoWorld
         foreach(var stack in s.Items)
         {
             ItemCatalog.Get(stack.Item);
+            if(stack.Properties is null)throw new InvalidDataException("物品属性为空");
+            stack.Properties.Validate();
             if(stack.Id<=0||stack.Count<=0||stack.Count>1000000||!Inside(stack.Cell)||w.Items.Any(i=>i.Id==stack.Id))throw new InvalidDataException("物品记录无效。");
             w.Items.Add(stack);
         }
@@ -143,6 +153,8 @@ public sealed partial class DemoWorld
             foreach(var r in j.Materials)
             {
                 ItemCatalog.Get(r.Item);
+                if(r.Properties is null)throw new InvalidDataException("搬运属性为空");
+                r.Properties.Validate();
                 if(r.Count<=0||r.Stage is <0 or >2||(r.Stage==1&&j.Worker<0)||
                     (r.Stage!=1&&!w.Items.Any(i=>i.Id==r.StackId&&i.Item==r.Item&&i.Owner=="")))throw new InvalidDataException("材料预约无效。");
             }
@@ -160,11 +172,13 @@ public sealed partial class DemoWorld
         DemoWorker Restore(WorkerState a,int index,bool removed)
         {
             if(!double.IsFinite(a.X)||!double.IsFinite(a.Z)||a.Path is null||a.Appearance is null||
-                !Inside(new Cell((int)Math.Round(a.X),(int)Math.Round(a.Z),a.Level))||a.Path.Any(c=>!Inside(c))||(a.TravelFrom is Cell t&&!Inside(t)))throw new InvalidDataException("居民位置无效。");
+                !double.IsFinite(a.ClimbProgress)||a.ClimbProgress<0||a.ClimbProgress>=1||!Inside(new Cell((int)Math.Round(a.X),(int)Math.Round(a.Z),a.Level))||a.Path.Any(c=>!Inside(c))||(a.TravelFrom is Cell t&&!Inside(t)))throw new InvalidDataException("居民位置无效。");
             var person=a.Person??ResidentProfile.Create(index);if(s.Version<7)person.WorkPriorities?.TryAdd("crafting",3);person.Validate();
             if(string.IsNullOrWhiteSpace(a.Id)||a.Id.Length>100||string.IsNullOrWhiteSpace(a.Name)||a.Name.Length>100||
                 person.Activity is not null&&a.JobId is not null)throw new InvalidDataException("居民身份或活动冲突。");
-            var worker=new DemoWorker{Id=a.Id,Name=a.Name,Appearance=a.Appearance,Person=person,X=a.X,Z=a.Z,Level=a.Level,TravelFrom=a.TravelFrom,Status=a.Status};
+            if(a.Combat is null||!double.IsFinite(a.Combat.Cooldown)||a.Combat.Cooldown<0||a.Combat.Cooldown>10||!double.IsFinite(a.Combat.RetryAt)||!double.IsFinite(a.Combat.FlashUntil)||a.Combat.Strikes<0||a.Combat.Target is null||a.Combat.Target.Length>100||a.Combat.Destination is Cell dest&&!Inside(dest)||a.Combat.Drafted&&(a.JobId is not null||person.Activity is not null))throw new InvalidDataException("战斗状态无效。");
+            ValidateMeleeState(a.Combat);
+            var worker=new DemoWorker{Combat=a.Combat,Id=a.Id,Name=a.Name,Appearance=a.Appearance,Person=person,X=a.X,Z=a.Z,Level=a.Level,TravelFrom=a.TravelFrom,ClimbProgress=a.ClimbProgress,Status=a.Status};
             foreach(var c in a.Path)worker.Path.Enqueue(c);
             if(a.JobId is int id)
             {
@@ -175,7 +189,12 @@ public sealed partial class DemoWorld
         }
         for(int i=0;i<s.Workers.Length;i++)w.Workers.Add(Restore(s.Workers[i],i,false));
         if(s.RemovedWorkers is not null)w._removedResidents=s.RemovedWorkers.Select((a,i)=>Restore(a,i,true)).ToList();
-        var residents=w.Workers.Concat(w._removedResidents??new()).ToArray();
+        if(s.BattleOutcome is not ("" or "victory" or "defeat")||s.Enemies is null||s.Enemies.Length>3||s.RaidSerial<0||s.RallyPoint is Cell rally&&!Inside(rally)||s.CivilianAlert&&s.RallyPoint is null)throw new InvalidDataException("袭击或集合点无效。");
+        foreach(var enemy in s.Enemies){if(enemy.JobId is not null||enemy.Person?.Activity is not null)throw new InvalidDataException("敌人不能领取居民任务。");w.Enemies.Add(Restore(enemy,0,true));}
+        w.RallyPoint=s.RallyPoint;w.CivilianAlert=s.CivilianAlert;w._raidSerial=s.RaidSerial;w.BattleOutcome=s.BattleOutcome;
+        foreach(var actor in w.Workers.Concat(w.Enemies))
+            if(!(w.Workers.Contains(actor)?w.Enemies:w.Workers).Any(o=>o.Id==actor.Combat.Target&&!o.Person.Incapacitated))actor.Combat.Target="";
+        var residents=w.Workers.Concat(w._removedResidents??new()).Concat(w.Enemies).ToArray();
         if(residents.Select(a=>a.Id).Distinct().Count()!=residents.Length)throw new InvalidDataException("居民 ID 重复。");
         foreach(var item in w.Items)
         {
@@ -189,6 +208,9 @@ public sealed partial class DemoWorld
             if(resident.Person.Talents.Any(t=>t.Value>=2&&!w.Research.Completed.Contains(ResidentCatalog.Talents.First(n=>n.Skill==t.Key&&n.Rank==t.Value).Research)))throw new InvalidDataException("技能缺少研究前置。");
             w.RefreshWeight(resident);
         }
+        foreach(var medic in w.Workers.Where(a=>a.Person.Activity?.Kind=="care_supply").ToArray())
+            if(!w.Items.Any(i=>i.Id==medic.Person.Activity!.ItemId&&i.Item=="bandage"&&i.Owner=="")||!w.Workers.Any(a=>a.Id==medic.Person.Activity!.Target&&!a.Person.Dead))w.CancelResidentActivity(medic);
+        if(w.Items.Any(i=>w.Reserved(i.Id)>i.Count)||w.Workers.Where(a=>a.Person.Activity is {Kind:"treat" or "care_supply"}).GroupBy(a=>a.Person.Activity!.Target).Any(g=>g.Count()>1))throw new InvalidDataException("护理预约冲突。");
         if(w.Jobs.Any(j=>j.Worker>=0&&w.Workers[j.Worker].Job!=j))throw new InvalidDataException("任务重复指派。");
         w.Blueprint=s.Blueprint.ToList();foreach(var p in w.Blueprint)BlockCatalog.Get(p.Kind);
         if(s.DemoStage is int ds){if(ds is <0 or >5)throw new InvalidDataException("示例阶段无效。");w.Demo=new TwoStoreyDemo(w.Camp);w.Demo.RestoreStage(ds);}

@@ -1,0 +1,28 @@
+{
+	"animation_samples": 120,
+	"individual_slots": 9,
+	"max_blender_reference_error_m": 0.00463821738958359,
+	"presets": {
+		"base": {
+			"bones": 23,
+			"surfaces": 2,
+			"triangles": 2748
+		},
+		"casual": {
+			"bones": 23,
+			"surfaces": 8,
+			"triangles": 2896
+		},
+		"guard": {
+			"bones": 23,
+			"surfaces": 13,
+			"triangles": 3808
+		},
+		"miner": {
+			"bones": 23,
+			"surfaces": 11,
+			"triangles": 3268
+		}
+	},
+	"socket_checks": 600
+}
