@@ -26,3 +26,9 @@ export_credentials.cfg
 /dist/
 __pycache__/
 *.pyc
+
+# Local Blender working copies and downloaded source archive
+/art/dwarf/mcp_work/
+/art/dwarf/asset_candidates/oga_dwarf/fixeddwarf.zip
+/art/dwarf/asset_candidates/oga_dwarf/fixed.blend
+/art/dwarf/asset_candidates/oga_dwarf/whitebody-work.blend

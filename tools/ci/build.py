@@ -161,9 +161,11 @@ def build(target):
     # Exercise the actual self-contained export, including assets and bundled .NET.
     checked_game(executable, "--smoke-test", "SMOKE_OK:")
     checked_game(executable, "--interaction-test", "INTERACTION_OK:")
+    checked_game(executable, "--tool-equipment-test", "TOOL_MODELS_OK:")
     shutil.copy2(ROOT / "docs/PLAYER-README.txt", output / "README.txt")
     shutil.copy2(PROJECT / "Assets/Textures/PureBDcraft/terms of use.txt", output / "PureBDcraft-terms.txt")
     shutil.copy2(PROJECT / "Assets/Fonts/NotoSansCJK/LICENSE.txt", output / "NotoSansCJK-LICENSE.txt")
+    shutil.copy2(PROJECT / "Assets/Characters/Whitebody/male/SOURCE.txt", output / "Dwarf-SOURCE.txt")
     DIST.mkdir(exist_ok=True)
     archive = DIST / f"NoDwarf-{version}-{platform}.zip"
     if archive.exists():
