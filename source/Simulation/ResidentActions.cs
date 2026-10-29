@@ -59,7 +59,7 @@ public sealed partial class DemoWorld
         if(!Workers.Contains(worker))return; // Creative completion never creates character XP.
         worker.Person.Earn(skill,amount);TryAutoTalents(worker);
     }
-    private string JobSkill(DemoJob job)=>job.Processing?(ProcessingCatalog.Find(job.Recipe)?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",_=>"woodwork"}):job.Farming||job.PlantTree?"growing":job.Chop?"woodwork":job.Demolish?"construction":job.Cook?"cooking":job.Dig?"mining":job.Smelt?"smelting":job.Forge?"smithing":
+    private string JobSkill(DemoJob job)=>job.Processing?(ProcessingCatalog.Find(job.Recipe)?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",BuildKind.Furnace=>"smelting",_=>"woodwork"}):job.Farming||job.PlantTree?"growing":job.Chop?"woodwork":job.Demolish?"construction":job.Cook?"cooking":job.Dig?"mining":job.Smelt?"smelting":job.Forge?"smithing":
         job.Build is BuildKind.Ladder or BuildKind.Log or BuildKind.Planks or BuildKind.PlankStairs or BuildKind.LogStairs?"woodwork":"construction";
     internal double GearWorkBonus(DemoWorker worker,DemoJob job)
     {
@@ -298,8 +298,8 @@ public sealed partial class DemoWorld
                 {
                     double quality=HealthCare.Quality(w.Person);
                     string condition=HealthCare.Treat(target.Person,quality);AwardWork(w,"medicine",40);
-                    target.Person.Remember("care:"+w.Id,$"{w.Name}护理了{condition}，治疗质量 {quality:P0}。",_simulationTime);
-                    if(target!=w)ChangeOpinion(target,w,8,"照料");target.Person.DecisionVersion++;
+                    target.Person.Remember("care:"+w.Id,$"{w.Name}护理了{condition}，治疗质量 {quality:P0}。",_simulationTime,target:w.Id,actor:w.Id);
+                    if(target!=w){ChangeOpinion(target,w,8,"照料");p.Remember("helped:"+target.Id,"完成了对"+target.Name+"的护理。",_simulationTime,target:target.Id,actor:w.Id,importance:75);}target.Person.DecisionVersion++;
                 }break;
             case "social":
                 if(target is not null&&!target.Person.Incapacitated&&target.Job is null&&target.Person.Activity is null&&target.Path.Count==0&&
@@ -317,7 +317,7 @@ public sealed partial class DemoWorld
         var r=from.Person.Relations.FirstOrDefault(r=>r.Target==to.Id);
         if(r is null){if(from.Person.Relations.Count>=32)return;r=new(){Target=to.Id};from.Person.Relations.Add(r);}
         r.Opinion=Math.Clamp(r.Opinion+delta,-100,100);if(reason=="交流")r.LastSocial=_simulationTime;
-        from.Person.Remember(reason+":"+to.Id,$"与{to.Name}：{reason}，好感 {delta:+0;-0}。",_simulationTime);from.Person.DecisionVersion++;
+        from.Person.Remember(reason+":"+to.Id,$"与{to.Name}：{reason}，好感 {delta:+0;-0}。",_simulationTime,target:to.Id,actor:to.Id);from.Person.DecisionVersion++;
     }
     private void UpdateResidentNeeds(double elapsed)
     {

@@ -6,8 +6,9 @@ public partial class Main
     private static void LayoutCatalogPanel(Control panel)
     {
         var size=panel.GetParent<Control>().Size;
-        float width=Math.Min(900,Math.Max(720,size.X-24));
-        float height=Math.Min(470,Math.Max(320,size.Y-150));
+        float width=Math.Min(1100,Math.Max(720,size.X-24));
+        float height=Math.Min(520,Math.Max(320,size.Y-150));
+        panel.ZIndex=20;
         panel.AnchorLeft=panel.AnchorRight=panel.AnchorTop=panel.AnchorBottom=0;
         panel.Position=new(12,Math.Max(90,size.Y-height-48));panel.Size=new(width,height);
     }
@@ -37,7 +38,7 @@ public partial class Main
     private bool _architectList;
     private readonly List<(Button Button,string Category,string Name,string Help,string Icon)> _architectEntries=new();
     private void ShowArchitectDetail(string name,string icon,string help)
-    {_architectDetailTitle.Text=name;_architectDetailIcon.Show();_architectDetailIcon.Texture=UiIcons.Get(icon);_architectDescription.Text=help;}
+    {_architectDetailTitle.Text=name;_architectDetailIcon.Show();_architectDetailIcon.Texture=UiIcons.Get(icon);_architectDescription.Text=help;MintStatRows(icon);}
     private void FilterArchitect()
     {
         if(_architectSearch is null)return;
@@ -56,21 +57,24 @@ public partial class Main
         }
         foreach(var (key,button) in _categoryButtons)button.AddThemeStyleboxOverride("normal",ButtonStyle(key==(searching?"全部":_buildCategory)?"66583d":"303942"));
         _architectEmpty.Visible=count==0&&(_buildCategory!="规划"||searching);
+        _mintCategoryTitle.Text=searching?"搜索结果":_buildCategory;
+        foreach(var (key,header) in _mintSectionHeaders)header.Visible=searching||_buildCategory=="全部";
         SortArchitectResults();
         _architectScroll.ScrollVertical=0;
     }
     private void SetArchitectList(bool list)
     {
         _architectSorted.Columns=list?1:3;
-        _architectList=list;_architectListButton.Text=list?"网格":"列表";
+        _architectList=list;_architectListButton.Icon=MintTexture(list?"ViewGrid":"ViewList");
         foreach(var grid in _buildPages.Values.SelectMany(p=>p.GetChildren().OfType<GridContainer>()))grid.Columns=list?1:3;
         foreach(var e in _architectEntries)
         {
-            e.Button.CustomMinimumSize=list?new(316,42):new(104,92);
+            e.Button.CustomMinimumSize=list?new(0,40):new(80,80);
             e.Button.IconAlignment=list?HorizontalAlignment.Left:HorizontalAlignment.Center;
             e.Button.VerticalIconAlignment=list?VerticalAlignment.Center:VerticalAlignment.Top;
             e.Button.Alignment=list?HorizontalAlignment.Left:HorizontalAlignment.Center;
-            e.Button.AddThemeConstantOverride("icon_max_width",list?28:44);
+            e.Button.AddThemeConstantOverride("icon_max_width",list?28:48);
         }
+        ResizeMintGrid();
     }
 }

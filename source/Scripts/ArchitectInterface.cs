@@ -21,36 +21,51 @@ public partial class Main
     {
         _buildMenu=Panel(root,Vector2.Zero,Vector2.Zero);
         LayoutCatalogPanel(_buildMenu);
-        _buildMenu.AddThemeStyleboxOverride("panel",RStyle("171e24f5","817457",10,8));
-        var column=new VBoxContainer();column.AddThemeConstantOverride("separation",8);_buildMenu.AddChild(column);
-        var heading=new HBoxContainer();column.AddChild(heading);
-        heading.AddChild(Text("建筑规划",17,Accent));
-        _architectSearch=CatalogSearch(heading,"搜索建筑、材料或命令");
-        _architectListButton=Button(heading,"列表",()=>SetArchitectList(!_architectList));
-        UiAccess.Name(_architectListButton,"切换建筑列表与图标网格");
-        _architectSort=new OptionButton{CustomMinimumSize=new(112,32)};heading.AddChild(_architectSort);
-        foreach(string label in new[]{"默认排序","按名称","耐久 ↓","耐久 ↑","耗料 ↑","耗料 ↓"})_architectSort.AddItem(label);
-        UiAccess.Name(_architectSort,"建筑排序方式","按名称、方块耐久或总材料数量排序；全部分类按属性排序时只显示有该属性的建筑。");
-        _architectSort.ItemSelected+=i=>{_architectSortMode=(int)i;FilterArchitect();};
-        _architectAutoClose=new CheckBox{Text="选择后关闭",ButtonPressed=true};heading.AddChild(_architectAutoClose);UiAccess.Name(_architectAutoClose,"选择工具后关闭建筑菜单");
-        UiAccess.Name(Button(heading,"×",()=>_buildMenu.Hide()),"关闭建筑规划");
+        _buildMenu.VisibilityChanged+=()=>{if(_buildMenu.Visible)_buildMenu.MoveToFront();};
+        _buildMenu.AddThemeStyleboxOverride("panel",RStyle("202329fa","62666b",10,8));
+        var column=new VBoxContainer();column.AddThemeConstantOverride("separation",6);_buildMenu.AddChild(column);
+        var heading=new HBoxContainer();heading.AddThemeConstantOverride("separation",0);column.AddChild(heading);
+        var searchBox=new HBoxContainer{CustomMinimumSize=new(200,0)};searchBox.AddThemeConstantOverride("separation",0);heading.AddChild(searchBox);
+        _architectSearch=CatalogSearch(searchBox,"搜索");_architectSearch.CustomMinimumSize=new(148,26);_architectSearch.ClearButtonEnabled=false;
+        MintButton(searchBox,"","清除建筑搜索",()=>{_architectSearch.Text="";FilterArchitect();},"×");
+        MintButton(searchBox,"az","按名称排序",()=>{_architectSortMode=_architectSortMode==1?0:1;_architectSort.Select(_architectSortMode);FilterArchitect();});
+        var settings=new PopupPanel();_buildMenu.AddChild(settings);
+        var settingsBox=new VBoxContainer();settings.AddChild(settingsBox);
+        _architectAutoClose=new CheckBox{Text="选择后关闭菜单",ButtonPressed=true};settingsBox.AddChild(_architectAutoClose);UiAccess.Name(_architectAutoClose,"选择工具后关闭建筑菜单");
+        MintButton(heading,"MenuSett","菜单设置",()=>settings.Popup(new Rect2I((Vector2I)(_buildMenu.GlobalPosition+new Vector2(200,36)),new Vector2I(220,56))));
+        var drag=new Label{Text="建筑规划",HorizontalAlignment=HorizontalAlignment.Center,SizeFlagsHorizontal=Control.SizeFlags.ExpandFill,MouseFilter=Control.MouseFilterEnum.Stop};heading.AddChild(drag);MintDrag(drag,_buildMenu);
+        MintButton(heading,"","显示或隐藏建筑详情",()=>{_mintArchitectDetail.Visible=!_mintArchitectDetail.Visible;CallDeferred(nameof(ResizeMintGrid));},"i");
+        MintButton(heading,"","关闭建筑规划",()=>_buildMenu.Hide(),"×");
         var body=new HBoxContainer{SizeFlagsVertical=Control.SizeFlags.ExpandFill};body.AddThemeConstantOverride("separation",10);column.AddChild(body);
-        var categories=new VBoxContainer{CustomMinimumSize=new(112,0)};_architectCategories=categories;body.AddChild(categories);
-        _categoryButtons["全部"]=Button(categories,"全部",()=>{SelectTool("select");ShowBuildPage("全部");});
+        var categoryPanel=new PanelContainer{CustomMinimumSize=new(190,0)};categoryPanel.AddThemeStyleboxOverride("panel",RStyle("24272b","53575b",4,4));body.AddChild(categoryPanel);
+        var categoryScroll=new ScrollContainer{HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled};categoryPanel.AddChild(categoryScroll);
+        var categories=new VBoxContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};categories.AddThemeConstantOverride("separation",0);_architectCategories=categories;categoryScroll.AddChild(categories);
+        _categoryButtons["全部"]=Button(categories,"全部",()=>{SelectTool("select");ShowBuildPage("全部");});_categoryButtons["全部"].CustomMinimumSize=new(0,30);
         _architectTools=new PanelContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};_architectTools.AddThemeStyleboxOverride("panel",new StyleBoxEmpty());body.AddChild(_architectTools);
-        _architectScroll=new ScrollContainer{HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled};_architectTools.AddChild(_architectScroll);
+        var center=new VBoxContainer();_architectTools.AddChild(center);
+        var gridHeader=new HBoxContainer();center.AddChild(gridHeader);
+        _mintCategoryTitle=Text("全部",14,Ink);_mintCategoryTitle.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;gridHeader.AddChild(_mintCategoryTitle);
+        MintButton(gridHeader,"Pin","置顶当前分类",()=>{if(_categoryRows.ContainsKey(_buildCategory))PinArchitectCategory(_buildCategory);});
+        _architectListButton=MintButton(gridHeader,"ViewList","切换建筑列表与图标网格",()=>SetArchitectList(!_architectList));
+        _architectSort=new OptionButton{CustomMinimumSize=new(136,28)};gridHeader.AddChild(_architectSort);
+        foreach(string label in new[]{"按属性排序","按名称","耐久 ↓","耐久 ↑","耗料 ↑","耗料 ↓"})_architectSort.AddItem(label);
+        UiAccess.Name(_architectSort,"建筑排序方式");_architectSort.ItemSelected+=i=>{_architectSortMode=(int)i;FilterArchitect();};
+        _architectScroll=new ScrollContainer{HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,SizeFlagsVertical=Control.SizeFlags.ExpandFill};center.AddChild(_architectScroll);
         var pages=new VBoxContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};pages.AddThemeConstantOverride("separation",8);_architectScroll.AddChild(pages);
         _architectSorted=new GridContainer{Columns=3,SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};pages.AddChild(_architectSorted);_architectSorted.Hide();
         var detail=CatalogDetail(body,out _architectDetailIcon,out _architectDetailTitle,out var detailActions);
-        _architectDescription=Text("选择建筑或命令查看用途与材料。",14,Ink,true);detail.AddChild(_architectDescription);
+        _mintArchitectDetail=(Control)detail.GetParent().GetParent().GetParent();_mintArchitectDetail.CustomMinimumSize=new(338,0);
+        _architectDescription=Text("",14,Ink,true);detail.AddChild(_architectDescription);
+        detail.AddChild(new HSeparator());_mintStats=new VBoxContainer();detail.AddChild(_mintStats);
         _architectHint=Text("",12,Muted,true);detailActions.AddChild(_architectHint);
-        _architectEmpty=Text("没有匹配项，试试材料名或其他关键词。",14,Muted,true);pages.AddChild(_architectEmpty);_architectEmpty.Hide();
+        _architectEmpty=Text("没有匹配项",14,Muted,true);pages.AddChild(_architectEmpty);_architectEmpty.Hide();
         foreach(var name in new[]{"命令","区域","结构","家具","楼梯","生产","规划"})
         {
             var page=new VBoxContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};pages.AddChild(page);_buildPages[name]=page;
-            var row=new HBoxContainer();row.AddThemeConstantOverride("separation",2);categories.AddChild(row);_categoryRows[name]=row;
-            var button=Button(row,name,()=>{SelectTool("select");ShowBuildPage(name);});button.CustomMinimumSize=new(72,36);button.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;_categoryButtons[name]=button;
-            var pin=Button(row,"☆",()=>PinArchitectCategory(name));pin.CustomMinimumSize=new(26,36);UiAccess.Name(pin,"置顶"+name+"分类");pin.TooltipText="将此分类固定到顶部；再次点击取消置顶。";_categoryPins[name]=pin;
+            var row=new HBoxContainer();row.AddThemeConstantOverride("separation",0);categories.AddChild(row);_categoryRows[name]=row;
+            var button=Button(row,name,()=>{SelectTool("select");ShowBuildPage(name);});button.CustomMinimumSize=new(140,30);button.Alignment=HorizontalAlignment.Left;button.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;_categoryButtons[name]=button;
+            var pin=MintButton(row,"Pin","置顶"+name+"分类",()=>PinArchitectCategory(name));pin.Hide();_categoryPins[name]=pin;
+            var section=new HBoxContainer();page.AddChild(section);section.AddChild(Text(name,14,Muted));MintButton(section,"Pin","置顶"+name+"分类",()=>PinArchitectCategory(name));_mintSectionHeaders[name]=section;
         }
         _architectSearch.TextChanged+=_=>FilterArchitect();
         _structureTab=_categoryButtons["结构"];_stairsTab=_categoryButtons["楼梯"];
@@ -58,7 +73,7 @@ public partial class Main
         {
             var button=IconButton(parent,icon,name,()=>{SelectTool(id);ShowArchitectDetail(name,icon,help);buttonFocusRelease();if(_architectAutoClose.ButtonPressed)_buildMenu.Hide();},true);_toolButtons[id]=button;
             void buttonFocusRelease()=>GetViewport().GuiGetFocusOwner()?.ReleaseFocus();
-            button.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;button.CustomMinimumSize=new(104,92);button.AddThemeConstantOverride("icon_max_width",44);
+            button.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;button.CustomMinimumSize=new(80,80);button.AddThemeConstantOverride("icon_max_width",48);
             button.AutowrapMode=TextServer.AutowrapMode.WordSmart;
             string category=_buildPages.First(p=>p.Value==parent.GetParent()).Key;
             _architectEntries.Add((button,category,name,help,icon));
@@ -99,7 +114,8 @@ public partial class Main
         var blueprints=new VBoxContainer();planning.AddChild(blueprints);
         IconButton(blueprints,"blueprint","保存蓝图",()=>{_world.SaveBlueprint();RefreshUi();});
         IconButton(blueprints,"blueprint","放置蓝图",()=>{if(_world.Blueprint.Count>0){SelectTool("blueprint");if(_architectAutoClose.ButtonPressed)_buildMenu.Hide();}else _world.Log("先建好工坊，再保存蓝图。");});
-        ShowBuildPage("命令");
+        ShowBuildPage("全部");
+        _architectScroll.Resized+=ResizeMintGrid;SetArchitectList(false);
         root.Resized+=()=>LayoutCatalogPanel(_buildMenu);
     }
 }

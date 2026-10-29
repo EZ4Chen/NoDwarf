@@ -35,8 +35,8 @@ public partial class Main
             _growingCrop.EmitSignal(OptionButton.SignalName.ItemSelected,(long)Array.IndexOf(GrowingCrops,"pine_sapling"));
             if(SelectedGrowingZone?.Crop!="pine_sapling"||_world.Farms[origin+new Cell(2,0)].Crop!="cotton")throw new InvalidOperationException("Changing target must retain existing cotton");
             _selectionPanel.Hide();_world.SpawnItem("cotton",4,origin);if(!_world.QueueProcessing("cloth"))throw new InvalidOperationException("Weaving order");
-            _inspector.Show();RefreshUi();_inspector.GetChild<ScrollContainer>(0).ScrollVertical=10000;await Snap("crop-processing-orders");
-            if(!_orderRows.Values.Any(r=>r.Label.Text.Contains("织布")))throw new InvalidOperationException("Recipe name missing from orders");
+            _inspector.Show();RefreshUi();_billOrderScroll.ScrollVertical=10000;await Snap("crop-processing-orders");
+            if(!_billRows.Values.Any(r=>r.Name.Text.Contains("织布")))throw new InvalidOperationException("Recipe name missing from orders");
             _inspector.Hide();var tree=_world.Trees.Values.OrderBy(t=>Math.Abs(t.Cell.X-origin.X)+Math.Abs(t.Cell.Z-origin.Z)).First();
             _focus=WorldPosition(tree.Cell)+Vector3.Up*3;_camera.Size=35;PositionCamera();SyncWorld();await Snap("sparse-forest");
             GD.Print("CROP_PRODUCTION_UI_OK: crop catalog, retained crops on zone change, staged textured plants, mill/loom, recipe order and sparse forest");GetTree().Quit();

@@ -1,4 +1,4 @@
-Dubs Mint Menus — menu logic port study
+Dubs Mint Menus — Godot UI port (private development copy)
 Original author: Dubwise
 Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=1446523594
 Repository: https://github.com/Dubwise56/Dubs-Mint-Menus
@@ -7,8 +7,15 @@ SHA-256: 155b7762c1fb9ff927d7c5d9c561d97baf0950b34e91e0e55e8ec9180707ae2f
 
 MenuLogic/MintMenuLogic.cs adapts the search predicates, stable nullable-stat ordering
 and pinned-category ordering inspected with ILSpy 9.1.0.7988. Godot controls and
-NoDwarf definition adapters are separate implementations. No original DLL or
-textures are bundled in the game. Decompiled inspection files remain in .local.
+NoDwarf definition adapters are separate implementations. The original DLL is not bundled. Textures/ViewGrid.png, ViewList.png, Pin.png,
+az.png, MenuSett.png and MintSearch.png are copied from the supplied mod. Decompiled inspection files remain in .local.
+
+ArchitectInterface/CatalogLayout/MintWindow translate the architect window
+coordinates, grid header, category list, search toolbar and information card
+from MainTabWindow_MintArchitect. ProductionBrowser translates the adjacent
+order/list/info arrangement of Patch_BillStack_DoListing. The production UI now follows the user-supplied bill-list and bill-details
+screenshots. Count/maintain/forever, worker and material constraints are
+implemented against NoDwarf simulation. A session clipboard copies bill settings.
 
 The supplied package contained no license file. This notice records provenance,
 not a grant of redistribution rights. Resolve permission before distributing

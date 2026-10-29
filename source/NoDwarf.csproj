@@ -10,4 +10,5 @@
   </ItemGroup>
   <ItemGroup><EmbeddedResource Include="Assets/Combat/equipment-geometry.json" LogicalName="NoDwarf.equipment-geometry.json" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="Assets/Combat/grip-poses.json" LogicalName="NoDwarf.grip-poses.json" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Assets/Definitions/production.xml" LogicalName="NoDwarf.production.xml" /><Content Include="Assets/Definitions/production.xml" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

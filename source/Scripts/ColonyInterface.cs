@@ -27,29 +27,6 @@ public partial class Main
     private readonly Dictionary<Cell,Node3D> _stockNodes=new();
     private VBoxContainer _orderList=null!;
     private Label _emptyOrders=null!;
-    private DemoWorld? _orderWorld;
-    private readonly Dictionary<int,(Label Label,Control Row)> _orderRows=new();
-    private void RefreshOrders()
-    {
-        if(_orderList is null||!_inspector.Visible)return;
-        RefreshProductionTargets();
-        if(_orderWorld!=_world){Clear(_orderList);_orderRows.Clear();_orderWorld=_world;}
-        var orders=_world.Jobs.Where(j=>j.Production).ToArray();
-        _emptyOrders.Visible=orders.Length==0;
-        foreach(int id in _orderRows.Keys.Where(id=>!orders.Any(j=>j.Id==id)).ToArray())
-        {var row=_orderRows[id].Row;_orderList.RemoveChild(row);row.QueueFree();_orderRows.Remove(id);}
-        foreach(var job in orders)
-        {
-            if(!_orderRows.TryGetValue(job.Id,out var entry))
-            {
-                var row=new HBoxContainer();_orderList.AddChild(row);
-                var label=Text("",13,Ink,true);label.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;row.AddChild(label);
-                Button(row,"取消",()=>{_world.CancelJob(job);RefreshUi();});
-                entry=(label,row);_orderRows[job.Id]=entry;
-            }
-            entry.Label.Text=$"#{job.Id} · {(job.Processing?ProcessingCatalog.Find(job.Recipe)!.Name:job.Cook?"烹饪 2 口粮":job.Smelt?"熔炼 2 铁锭":"打造铁剑")}\n{_world.OrderStatus(job)}";
-        }
-    }
     private void DrawItems()
     {
         using var timing = _world.Probe?.Measure("view.sync-items") ?? default;
@@ -230,9 +207,9 @@ public partial class Main
             var legacy=JsonSerializer.Deserialize<SessionState>("{}",DemoWorld.SaveOptions)!;
             if(legacy.Pitch!=DefaultCameraPitch)throw new InvalidOperationException("Old saves must retain the original camera angle");
             var order=_world.Jobs.Single(j=>j.Smelt);
-            if(!_orderRows.TryGetValue(order.Id,out var row)||!row.Label.Text.Contains("尚未启用居民"))throw new InvalidOperationException("Order list must show individual waiting reason");
-            row.Row.GetChild<Button>(1).EmitSignal(Godot.Button.SignalName.Pressed);
-            if(_world.Jobs.Any(j=>j.Smelt)||_world.Available("raw_iron")!=7||_orderRows.ContainsKey(order.Id))throw new InvalidOperationException("Per-order cancel must release reservations and remove its row");
+            if(!_billRows.TryGetValue(order.ProductionOrderId,out var row)||!row.Count.TooltipText.Contains("尚未启用居民"))throw new InvalidOperationException("Order list must show individual waiting reason");
+            _world.RemoveProductionOrder(order.ProductionOrderId);RefreshOrders();
+            if(_world.Jobs.Any(j=>j.Smelt)||_world.Available("raw_iron")!=7||_billRows.ContainsKey(order.ProductionOrderId))throw new InvalidOperationException("Per-order cancel must release reservations and remove its row");
             if(_inspector.GetGlobalRect().Intersects(_buildTab.GetGlobalRect()))throw new InvalidOperationException("Order panel blocks bottom tabs");
             _inspector.Hide();_worldMenu.Show();await Snap("colony-save-menu");
             if(_worldMenu.GetGlobalRect().Intersects(_buildTab.GetGlobalRect()))throw new InvalidOperationException("Save panel blocks bottom tabs");

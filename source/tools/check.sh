@@ -23,6 +23,8 @@ grep 'BOX_SELECTION_OK:' "$PROJECT_DIR/.local/box-selection.log"
 grep 'DESIGNATION_OK:' "$PROJECT_DIR/.local/designation.log"
 "$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --level-guide-test > "$PROJECT_DIR/.local/level-guide.log" 2>&1
 grep 'LEVEL_GUIDE_OK:' "$PROJECT_DIR/.local/level-guide.log"
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --corner-hud-test > "$PROJECT_DIR/.local/corner-hud.log" 2>&1
+grep 'CORNER_HUD_OK:' "$PROJECT_DIR/.local/corner-hud.log"
 "$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --object-commands-test > "$PROJECT_DIR/.local/object-commands.log" 2>&1
 grep 'OBJECT_COMMANDS_OK:' "$PROJECT_DIR/.local/object-commands.log"
 
@@ -62,3 +64,9 @@ grep 'MAP_DISPLAY_OK:' "$PROJECT_DIR/.local/map-display.log"
 # Generated river/lake geometry, water minimap and natural cavern visibility.
 "$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --geography-preview-test > "$PROJECT_DIR/.local/geography-render.log" 2>&1
 grep 'GEOGRAPHY_UI_OK:' "$PROJECT_DIR/.local/geography-render.log"
+
+# Resident personality: real actions, memory retrieval, save receipts and offline UI.
+dotnet run --project "$WORKSPACE_DIR/tools/checks/personality/PersonalityChecks.csproj" > "$PROJECT_DIR/.local/personality-checks.log" 2>&1
+grep "PERSONALITY_OK:" "$PROJECT_DIR/.local/personality-checks.log"
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" --log-file "$PROJECT_DIR/.local/personality-engine.log" -- --personality-test > "$PROJECT_DIR/.local/personality-ui.log" 2>&1
+grep "PERSONALITY_UI_OK:" "$PROJECT_DIR/.local/personality-ui.log"

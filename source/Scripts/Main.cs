@@ -111,9 +111,12 @@ public partial class Main : Node3D
         if (OS.GetCmdlineUserArgs().Contains("--mining-cutaway-test")) ReviewMiningCutaway();
         if (OS.GetCmdlineUserArgs().Contains("--designation-test")) ReviewDesignations();
         if (OS.GetCmdlineUserArgs().Contains("--level-guide-test")) ReviewLevelGuide();
+        if (OS.GetCmdlineUserArgs().Contains("--corner-hud-test")) ReviewCornerHud();
         if (OS.GetCmdlineUserArgs().Contains("--object-commands-test")) ReviewObjectCommands();
         if (OS.GetCmdlineUserArgs().Contains("--melee-test")) ReviewMelee();
         if (OS.GetCmdlineUserArgs().Contains("--sprite-integration-test")) ReviewSpriteIntegration();
+        if (OS.GetCmdlineUserArgs().Contains("--storyteller-test")) ReviewStoryteller();
+        if (OS.GetCmdlineUserArgs().Contains("--personality-test")) ReviewResidentMind();
         if (OS.GetCmdlineUserArgs().Contains("--dwarf-integration-test")) ReviewSpriteIntegration();
         if (OS.GetCmdlineUserArgs().Contains("--complex-combat-test")) ReviewComplexCombat();
         if (OS.GetCmdlineUserArgs().Contains("--combat-test")) ReviewCombat();
@@ -122,6 +125,7 @@ public partial class Main : Node3D
         if (OS.GetCmdlineUserArgs().Contains("--crop-climate-preview-test")) CaptureCropClimatePreview();
         if (OS.GetCmdlineUserArgs().Contains("--fluid-preview-test")) CaptureFluidPreview();
         if (OS.GetCmdlineUserArgs().Contains("--production-target-preview-test")) CaptureProductionTargets();
+        if (OS.GetCmdlineUserArgs().Contains("--production-bill-test")) { try { ProductionBillChecks.Run(); CropProductionChecks.Run(); LogisticsChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
         if (OS.GetCmdlineUserArgs().Contains("--production-target-test")) { try { ProductionOrderChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
         if (OS.GetCmdlineUserArgs().Contains("--fluid-test")) { try { FluidChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
         if (OS.GetCmdlineUserArgs().Contains("--weather-test")) { try { WeatherChecks.Run(); CropClimateChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
@@ -419,6 +423,8 @@ public partial class Main : Node3D
         if(!_depthReviewActive)MoveCamera(delta);
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
         int ticks = _clock.Advance(delta);
+        PumpStoryteller(ticks > 0);
+        PumpResidentMind(ticks > 0);
         if(_creative&&_clock.Paused)_world.AdvanceSupport();
         try { for (int i = 0; i < ticks; i++) { if (_tpsReview is null) _world.Update(1.0 / SimulationClock.BaseTicksPerSecond); else ReviewTick(); } }
         catch(Exception e) { _clock.Paused=true;_sessionLog.Write(_clock.Tick,"ERROR","模拟",e.ToString());GD.PushError(e.ToString()); }
@@ -450,6 +456,11 @@ public partial class Main : Node3D
 
     public override void _Input(InputEvent input)
     {
+        if(input is InputEventKey{Pressed:true,Keycode:Key.Escape}&&_billDetails is not null)
+        {CloseBillDetails();GetViewport().SetInputAsHandled();return;}
+        if(input is InputEventKey{Pressed:true,Keycode:Key.F} findKey&&(findKey.CtrlPressed||findKey.MetaPressed)&&(_buildMenu?.Visible==true||_inspector?.Visible==true))
+        {if(_buildMenu?.Visible==true)_architectSearch.GrabFocus();else _recipeSearch.GrabFocus();GetViewport().SetInputAsHandled();return;}
+
         if(_depthReviewActive){GetViewport().SetInputAsHandled();return;}
         // Benchmarks own their camera/clock; incidental keyboard or GUI input must
         // not resume a frozen scene or change the workload being compared.
@@ -487,7 +498,7 @@ public partial class Main : Node3D
     {
         if (editor == _seed.GetLineEdit()) _seed.Apply();
         if (editor == _floorHeight.GetLineEdit()) _floorHeight.Apply();
-        if (editor == _targetCount.GetLineEdit()) _targetCount.Apply();
+        if (editor.GetParent() is SpinBox numeric) numeric.Apply();
         editor.ReleaseFocus();
     }
 
@@ -632,6 +643,7 @@ public partial class Main : Node3D
     private void TogglePanel(PanelContainer panel)
     {
         bool open = !panel.Visible;
+        if(panel==_inspector){_billStation=null;FilterRecipes();}
         _combatPanel?.Hide();
         if(DossierOpen)CloseResidentPanel();
         _buildMenu.Hide(); _inspector.Hide(); _worldMenu.Hide(); _selectionPanel.Hide();
@@ -658,7 +670,7 @@ public partial class Main : Node3D
     private void MoveCamera(double delta)
     {
         if (_tpsReview is not null) return;
-        if (_consolePanel.Visible||_removeGrowingDialog?.Visible==true) return;
+        if (_consolePanel.Visible||_removeGrowingDialog?.Visible==true||_billDetails is not null) return;
         if (DossierOpen || _characterEditor is not null && _characterEditor.Visible) return;
         if (!GetWindow().HasFocus()) { _dragging = false; return; }
         if (GetViewport().GuiGetFocusOwner() is LineEdit) return;
@@ -1098,13 +1110,13 @@ public partial class Main : Node3D
         layer.AddChild(root);root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         root.Theme=new Theme{DefaultFont=GameFont.Regular,DefaultFontSize=14};
         var resources=Panel(root,new Vector2(8,8),new Vector2(78,0));
-        resources.AddThemeStyleboxOverride("panel",HudStyle("151a20b8",4));
+        resources.Name="ResourceHud";resources.AddThemeStyleboxOverride("panel",new StyleBoxEmpty());
         var stock=new VBoxContainer();resources.AddChild(stock);
         foreach(var (id,name) in new[]{("stone","石料"),("wood","木料"),("iron","铁锭"),("coal","煤炭"),("sword","铁剑"),("raw_iron","粗铁"),("deep_rubble","深板岩碎石"),("soil","土壤"),("sand","沙子"),("raw_food","食材（含小麦、面粉、土豆、蘑菇）"),("meal","口粮"),("cotton","棉絮"),("cloth","布")})
         {
             var row=new HBoxContainer{TooltipText=name+" · 实体物资总数（含已预留与搬运中）"};stock.AddChild(row);
             row.AddChild(new TextureRect{Texture=UiIcons.Get(id),CustomMinimumSize=new Vector2(22,22),ExpandMode=TextureRect.ExpandModeEnum.IgnoreSize,StretchMode=TextureRect.StretchModeEnum.KeepAspectCentered,MouseFilter=Control.MouseFilterEnum.Pass});
-            var value=Text("",14,Ink);row.AddChild(value);_resourceCounts.Add(value);
+            var value=Text("",14,Ink);StyleFloatingText(value);row.AddChild(value);_resourceCounts.Add(value);
         }
         _devBadge=Text("",12,Accent);stock.AddChild(_devBadge);
         var portraits=new HBoxContainer{Position=new Vector2(-108,8),AnchorLeft=.5f,AnchorRight=.5f};
@@ -1127,7 +1139,7 @@ public partial class Main : Node3D
         _colonyTabs[8]=HudTab(tabs,"工作",()=>OpenColonyPage(8),"各类工作的优先级");
         _colonyTabs[7]=HudTab(tabs,"作息",()=>OpenColonyPage(7),"每日 24 小时安排");
         _colonyTabs[6]=HudTab(tabs,"研究",()=>OpenColonyPage(6),"聚落研究与解锁");
-        HudTab(tabs,"生产",()=>TogglePanel(_inspector),"工坊与生产订单");
+        HudTab(tabs,"生产",()=>OpenProductionBills(),"工坊与生产订单");
         HudTab(tabs,"地图 / 存档",()=>TogglePanel(_worldMenu),"区域地图、保存与读取");
         HudTab(tabs,"回到营地",()=>{if(DossierOpen)CloseResidentPanel();FocusCamp();},"定位营地 [F]");
         HudTab(tabs,"视图",()=>{if(DossierOpen)CloseResidentPanel();_viewControls.Visible=!_viewControls.Visible;},"楼层、旋转、切墙与俯视");
@@ -1167,12 +1179,14 @@ public partial class Main : Node3D
         IconButton(saveRow,"save","存档 [F5]",SaveSession);
         IconButton(saveRow,"map","读档 [F9]",RequestLoadSession);
         Button(worldColumn,"返回开始菜单",RequestTitleScreen);
+        BuildStoryInterface(root,worldColumn);
+        BuildResidentMindInterface(root,worldColumn);
         _resetDialog = new ConfirmationDialog { Title = "重新生成地图", OkButtonText = "清空并生成", CancelButtonText = "保留当前营地" };
         AddChild(_resetDialog); _resetDialog.Confirmed += ConfirmReset; _resetDialog.Canceled += CancelReset;
 
         _viewControls=Panel(root,Vector2.Zero,new Vector2(288,154));
         _viewControls.AnchorLeft=_viewControls.AnchorRight=_viewControls.AnchorTop=_viewControls.AnchorBottom=1;
-        _viewControls.OffsetLeft=-300;_viewControls.OffsetRight=-12;_viewControls.OffsetTop=-390;_viewControls.OffsetBottom=-196;
+        _viewControls.OffsetLeft=-300;_viewControls.OffsetRight=-12;_viewControls.OffsetTop=-490;_viewControls.OffsetBottom=-196;
         var viewColumn=new VBoxContainer();_viewControls.AddChild(viewColumn);
         var viewHeading=new HBoxContainer();viewColumn.AddChild(viewHeading);
         var viewTitle=Text("视角与楼层",14,Accent);viewTitle.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;viewHeading.AddChild(viewTitle);
@@ -1190,21 +1204,7 @@ public partial class Main : Node3D
         UiAccess.Name(gridToggle,"显示当前层网格");
         gridToggle.Toggled+=enabled=>{_showLevelGuide=enabled;UpdateLevelGuide();};
         _viewControls.Hide();
-        var controls=Panel(root,Vector2.Zero,new Vector2(292,132));
-        controls.AddThemeStyleboxOverride("panel",HudStyle("151a20c9",8));
-        controls.AnchorLeft=controls.AnchorRight=controls.AnchorTop=controls.AnchorBottom=1;
-        controls.OffsetLeft=-304;controls.OffsetRight=-12;controls.OffsetTop=-184;controls.OffsetBottom=-48;
-        var controlColumn=new VBoxContainer();controlColumn.AddThemeConstantOverride("separation",3);controls.AddChild(controlColumn);
-        _calendarLabel=Text("",12,Ink);_calendarLabel.HorizontalAlignment=HorizontalAlignment.Right;controlColumn.AddChild(_calendarLabel);
-        var timeRow=new HBoxContainer{Alignment=BoxContainer.AlignmentMode.End};controlColumn.AddChild(timeRow);
-        _timeStatus=Text("",17,Ink);_timeStatus.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;timeRow.AddChild(_timeStatus);
-        _pause=IconButton(timeRow,"pause","",TogglePause);_pause.TooltipText="暂停 / 继续 [空格]";UiAccess.Name(_pause,"暂停或继续模拟");
-        _normalSpeed=IconButton(timeRow,"play","1×",()=>{_clock.SetSpeed(1);_clock.Paused=false;RefreshUi();});
-        _fastSpeed=IconButton(timeRow,"fast","3×",()=>{_clock.SetSpeed(3);_clock.Paused=false;RefreshUi();});
-        var display=new HBoxContainer{Alignment=BoxContainer.AlignmentMode.End};controlColumn.AddChild(display);
-        _layerStatus=Text("",12,Muted);_layerStatus.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;display.AddChild(_layerStatus);
-        _cutButton=Button(display,"精确",ToggleWalls);_cutButton.TooltipText="H 循环：全貌 / 本层完整墙 / 自动切墙 / 精确施工";
-        Button(display,"概览",()=>_mapPanel.Visible=!_mapPanel.Visible);
+        BuildCornerStatus(root,viewColumn);
         _mapPanel=Panel(root,Vector2.Zero,new Vector2(204,208));
         _mapPanel.AnchorLeft=_mapPanel.AnchorRight=_mapPanel.AnchorTop=_mapPanel.AnchorBottom=1;
         _mapPanel.OffsetLeft=-216;_mapPanel.OffsetRight=-12;_mapPanel.OffsetTop=-494;_mapPanel.OffsetBottom=-286;
@@ -1226,7 +1226,7 @@ public partial class Main : Node3D
         _hint=Text("",12,Ink);_hint.MouseFilter=Control.MouseFilterEnum.Ignore;_hint.Hide();root.AddChild(_hint);
         _hint.AnchorTop=_hint.AnchorBottom=1;_hint.OffsetLeft=12;_hint.OffsetRight=700;_hint.OffsetTop=-100;_hint.OffsetBottom=-42;_hint.AutowrapMode=TextServer.AutowrapMode.WordSmart;_hint.AddThemeStyleboxOverride("normal",RStyle("181e26","66727a",8,5));
         BuildActionFeedback(root);
-        _location=Text("",11,Muted);_location.HorizontalAlignment=HorizontalAlignment.Right;controlColumn.AddChild(_location);
+        _location=Text("",11,Muted);viewColumn.AddChild(_location);
         var credit=new LinkButton{Text="PureBDcraft 材质鸣谢",Uri="https://bdcraft.net",TooltipText="Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net"};
         UiAccess.Name(credit,"PureBDcraft 材质鸣谢","在浏览器中打开材质作者网站。");
         credit.AddThemeFontSizeOverride("font_size",11);worldColumn.AddChild(credit);
@@ -1318,6 +1318,8 @@ public partial class Main : Node3D
     }
     private void RefreshUi()
     {
+        RefreshStoryInterface();
+        RefreshResidentMindInterface();
         if (_selectedWorker >= _world.Workers.Count)_selectedWorker=-1;
         RefreshDeveloperUi();
         _hint.TooltipText=_hint.Text;
@@ -1381,10 +1383,7 @@ public partial class Main : Node3D
             _residentButtons[i].AddThemeStyleboxOverride("normal", ButtonStyle(IsResidentSelected(i) ? "566c7b" : "303942"));
         }
         _buildTab.AddThemeStyleboxOverride("normal", ButtonStyle(_buildMenu.Visible ? "566c7b" : "303942"));
-        _pause.Text="";_pause.Icon=UiIcons.Get(_clock.Paused?"play":"pause");
-        _pause.AddThemeStyleboxOverride("normal",ButtonStyle(_clock.Paused?"6b5541":"303942"));
-        _normalSpeed.AddThemeStyleboxOverride("normal",ButtonStyle(!_clock.Paused&&_clock.Speed==1?"566c7b":"303942"));
-        _fastSpeed.AddThemeStyleboxOverride("normal",ButtonStyle(!_clock.Paused&&_clock.Speed==3?"566c7b":"303942"));
+        RefreshTimeControls();
         RefreshCalendar();
         _devBadge.Text=_developerMode?"开发模式":"";_devBadge.Visible=_developerMode;
         int[] stocks={_world.Total("cobblestone"),_world.Total("wood"),_world.Total("iron"),_world.Total("coal"),_world.Swords,_world.Total("raw_iron"),_world.Total("deep_rubble"),_world.Total("soil"),_world.Total("sand"),new[]{"raw_food","wheat","flour","potato","mushroom"}.Sum(_world.Total),_world.Total("meal"),_world.Total("cotton"),_world.Total("cloth")};

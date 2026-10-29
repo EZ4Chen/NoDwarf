@@ -9,6 +9,7 @@ public partial class Main
         {
             void Check(bool ok,string message){if(!ok)throw new Exception(message);}
             Check(ActorModelView.LoadDefinition().Renderer=="sprite4","Default renderer must use current 2D sprites");
+            FlatPawnAppearanceChecks.Run();
             ToolEquipmentChecks.Run();
             ProductionOrderChecks.Run();
             ResidentChecks.Run();

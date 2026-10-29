@@ -11,6 +11,7 @@ public partial class DirectionalDwarfView : Node3D
     private const string HeldRoot="res://Assets/Characters/Sprites4/";
     private static readonly Dictionary<string,Texture2D> Textures=new();
     private static readonly Dictionary<string,ImageTexture> Wardrobes=new();
+    private static readonly Dictionary<string,ImageTexture> Hands=new();
     private readonly Dictionary<string,Node3D> _hands=new();
     private readonly Dictionary<string,string> _equipment=new();
     private CharacterAppearance _appearance=new();
@@ -57,6 +58,16 @@ public partial class DirectionalDwarfView : Node3D
         {
             bool main=slot=="main";var hand=_hands[slot];var palm=hand.GetNode<Sprite3D>("Palm");
             palm.Texture=Atlas($"hand-{(Wears("gloves")?"glove":"bare")}-{frame}");
+            if(!Wears("gloves"))
+            {
+                string key=$"{frame}|{_appearance.Skin}";
+                if(!Hands.TryGetValue(key,out var handTexture))
+                {
+                    handTexture=ImageTexture.CreateFromImage(PawnColors.Recolor(palm.Texture.GetImage(),PawnColors.Skin(_appearance.Skin),"skin"));
+                    if(Hands.Count>=48)Hands.Clear();Hands[key]=handTexture;
+                }
+                palm.Texture=handTexture;
+            }
             palm.PixelSize=(Wears("gloves")?48:42)*Pixel/palm.Texture.GetHeight();
             // Front right hand is screen-left; rear reverses the anatomical ordering.
             palm.FlipH=frame==1?flip:(!main)^(frame==2);
@@ -73,7 +84,7 @@ public partial class DirectionalDwarfView : Node3D
     {
         _tint=color;if(_body is null)return;_body.Modulate=color;
         foreach(var hand in _hands.Values)
-        {hand.GetNode<Sprite3D>("Held").Modulate=color;hand.GetNode<Sprite3D>("Palm").Modulate=Wears("gloves")?color:color*SkinTint(_appearance.Skin);}
+        {hand.GetNode<Sprite3D>("Held").Modulate=color;hand.GetNode<Sprite3D>("Palm").Modulate=color;}
     }
     public static int SelectDirection(Vector3 facing,Basis camera)
     {
@@ -131,32 +142,16 @@ public partial class DirectionalDwarfView : Node3D
     }
     private static string Body(CharacterAppearance a)=>a.Normalize().Body;
     private static string Head(CharacterAppearance a)=>a.Face switch{"square"=>"square","oval"=>"lean",_=>"round"};
-    private static string Hair(CharacterAppearance a)=>a.Hair switch{"bald"=>"none","braid"=>"braids","bob"=>"waves",_=>"swept"};
-    private static Color SkinTint(string skin)=>skin switch{"porcelain"=>new(1,.94f,.88f),"tan"=>new(.88f,.81f,.73f),"brown"=>new(.65f,.55f,.45f),"deep"=>new(.42f,.34f,.28f),_=>Colors.White};
-    private static Color HairTint(string color)=>color switch{"black"=>new(.35f,.35f,.36f),"gold"=>new(1,.88f,.57f),"auburn"=>new(.85f,.48f,.3f),"silver"=>new(.86f,.9f,1),"white"=>new(1,1,1),_=>Colors.White};
-    private static Image Tinted(Image image,Color color)
-    {
-        if(color==Colors.White)return image;
-        // Work on packed bytes instead of one native GetPixel/SetPixel call per pixel.
-        byte[] data=image.GetData();
-        for(int i=0;i<data.Length;i+=4)
-        {
-            if(data[i+3]==0)continue;
-            data[i]=(byte)Math.Clamp((int)(data[i]*color.R),0,255);
-            data[i+1]=(byte)Math.Clamp((int)(data[i+1]*color.G),0,255);
-            data[i+2]=(byte)Math.Clamp((int)(data[i+2]*color.B),0,255);
-        }
-        return Image.CreateFromData(image.GetWidth(),image.GetHeight(),false,Image.Format.Rgba8,data);
-    }
+    private static string Hair(CharacterAppearance a)=>a.Hair switch{"bald"=>"none","braid"=>"braids","bob"=>"waves","sweep"=>"swept",_=>a.Hair};
     private static ImageTexture Composite(CharacterAppearance a,IEnumerable<string> items,int d)
     {
         var worn=items.ToHashSet();string key=$"{a}|{d}|"+string.Join(';',worn.Where(n=>n is "shirt" or "trousers" or "armor" or "helmet" or "cap").OrderBy(n=>n));
         if(Wardrobes.TryGetValue(key,out var cache))return cache;
         var image=Image.CreateEmpty(200,280,false,Image.Format.Rgba8);
-        void Layer(string name,Color? tint=null)
+        void Layer(string name,Color? tint=null,string material="hair")
         {
             var src=Atlas(name).GetImage().GetRegion(new Rect2I(d*200,0,200,280));src.Convert(Image.Format.Rgba8);
-            if(tint is {} c)src=Tinted(src,c);
+            if(tint is {} c)src=PawnColors.Recolor(src,c,material);
             image.BlendRect(src,new Rect2I(0,0,200,280),Vector2I.Zero);
         }
         string body=Body(a);
@@ -166,13 +161,17 @@ public partial class DirectionalDwarfView : Node3D
         else if(worn.Contains("shirt"))Layer((a.Outfit=="apron"?"apron-":"work-")+body);
         else
         {
-            Layer("body-"+body,SkinTint(a.Skin));
+            Layer("body-"+body,PawnColors.Skin(a.Skin),"skin");
             if(a.BodySex=="female"&&body!="female")Layer("underwear-"+body);
             if(worn.Contains("trousers"))Layer("trousers-"+body);
         }
-        Layer("head-"+Head(a),SkinTint(a.Skin));
-        if(Hair(a)!="none"&&!worn.Contains("helmet")&&!worn.Contains("cap"))Layer("hair-"+Hair(a),HairTint(a.HairColor));
-        if(a.Beard!="none"&&d!=2)Layer("beard-"+(a.Beard=="full"?"full":"short"),HairTint(a.HairColor));
+        Layer("head-"+Head(a),PawnColors.Skin(a.Skin),"skin");
+        if(Hair(a)!="none"&&!worn.Contains("helmet")&&!worn.Contains("cap"))
+        {
+            Layer("roots-"+Head(a),PawnColors.Hair(a.HairColor));
+            Layer("hair-"+Hair(a),PawnColors.Hair(a.HairColor));
+        }
+        if(a.Beard!="none"&&d!=2)Layer("beard-"+(a.Beard=="full"?"full":"short"),PawnColors.Hair(a.BeardColor),"beard");
         if(worn.Contains("helmet"))Layer("helmet");else if(worn.Contains("cap"))Layer("cap");
         image.GenerateMipmaps();var result=ImageTexture.CreateFromImage(image);
         if(Wardrobes.Count>=48)Wardrobes.Clear();Wardrobes[key]=result;return result;

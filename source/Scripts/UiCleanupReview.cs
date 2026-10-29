@@ -22,12 +22,7 @@ public partial class Main
             _world.Enemies.Clear();RefreshUi();Check(_locateEnemy.Disabled,"Empty enemy locator must be disabled");
             _developerMode=true;RefreshUi();Check(_raidTools.Visible,"Developer raid tools missing");
             TogglePanel(_inspector);RefreshUi();await Frame();Check(!_combatPanel.Visible&&_inspector.Visible,"Production must replace defense");
-            var production=_productionTabs;
             await Snap("ui-cleanup-orders");
-            production.CurrentTab=1;await Frame();
-            SelectRecipe("sword");
-            await Snap("ui-cleanup-recipes");
-            production.CurrentTab=2;await Snap("ui-cleanup-targets");
             Check(_seed.MinValue==int.MinValue&&_seed.MaxValue==int.MaxValue,"Map seed range differs from startup");
             FocusLifeAlert(new("water","饮水不足",2));await Frame();Check(!_worldMenu.Visible&&_inspector.Visible&&_actionFeedback.Visible,"Water alert routed to unrelated menu");
             TogglePanel(_buildMenu);SelectTool("dig");await Frame();Check(_architectHint.Text.Contains("左键"),"Dig instructions hidden");

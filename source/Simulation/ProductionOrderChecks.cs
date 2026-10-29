@@ -25,7 +25,7 @@ public static class ProductionOrderChecks
         var pending=new DemoWorld(flat:true);pending.DeveloperResidents(false);pending.Items.Clear();pending.Stockpiles.Clear();pending.Buildings[station]=new(station,BuildKind.Loom);pending.SpawnItem("cloth",4,new(3,9));
         pending.SetProductionTarget("shirt",1);pending.Update(1);pending.Update(1);Check(pending.Jobs.Count(j=>j.Recipe=="shirt")==1&&pending.PendingOutput("shirt")==1,"In-flight output counts toward target");
         var job=pending.Jobs.Single(j=>j.Recipe=="shirt");pending.CancelJob(job);pending.Update(1);Check(pending.Jobs.Count(j=>j.Recipe=="shirt")==1,"Canceled batches can replenish without duplicate reservations");
-        pending.SetProductionTarget("shirt",0);pending.CancelJob(pending.Jobs.Single(j=>j.Recipe=="shirt"));pending.Update(1);Check(pending.Jobs.Count==0,"Removed target stays removed");
+        pending.SetProductionTarget("shirt",0);Check(!pending.ProductionOrders.Any(o=>o.Recipe=="shirt")&&!pending.Jobs.Any(j=>j.Recipe=="shirt"),"Removing target cancels its queued batches");pending.Update(1);Check(pending.Jobs.Count==0,"Removed target stays removed");
         var transit=new DemoWorld(flat:true);transit.Items.Clear();transit.Jobs.Clear();transit.SpawnItem("cloth",5,new(3,9));transit.Jobs.Add(new DemoJob{Id=987,Cell=new(5,9),Haul=true,Materials=new(){new(){Item="cloth",Count=2,Stage=1}}});
         Check(transit.ProductionStock("cloth")==7,"Hauling cargo counts as stock");
         var bad=System.Text.Json.Nodes.JsonNode.Parse(w.SaveJson())!;bad["ProductionOrders"]![0]!["Target"]=-1;

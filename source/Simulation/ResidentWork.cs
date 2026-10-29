@@ -14,7 +14,7 @@ public static class ResidentWork
     public static string[] FreeDay()=>Enumerable.Repeat("anything",24).ToArray();
     public static string[] DayShift()=>Enumerable.Range(0,24).Select(h=>h<6||h>=22?"sleep":h>=8&&h<18?"work":h>=18&&h<20?"recreation":"anything").ToArray();
     public static string ModeName(string mode)=>mode switch{"sleep"=>"休息","work"=>"工作","recreation"=>"娱乐",_=>"无固定"};
-    public static string JobType(DemoJob job)=>job.Processing?(ProcessingCatalog.Find(job.Recipe)?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",_=>"crafting"}):job.Haul||job.Refuel?"hauling":job.Farming||job.PlantTree?"growing":job.Chop?"forestry":job.Demolish||job.Build is not null?"construction":job.Dig?"mining":job.Cook?"cooking":job.Smelt?"smelting":"smithing";
+    public static string JobType(DemoJob job)=>job.Processing?(ProcessingCatalog.Find(job.Recipe)?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",BuildKind.Furnace=>"smelting",_=>"crafting"}):job.Haul||job.Refuel?"hauling":job.Farming||job.PlantTree?"growing":job.Chop?"forestry":job.Demolish||job.Build is not null?"construction":job.Dig?"mining":job.Cook?"cooking":job.Smelt?"smelting":"smithing";
     public static int Rank(ResidentProfile p,string type)
     {
         int index=-1;
@@ -72,7 +72,7 @@ public sealed partial class DemoWorld
         // Direct player orders and essential self-care take precedence until complete.
         if(a is not null&&a.Origin is "manual" or "need")return false;
         if(w.Job is not null)Release(w.Job);
-        if(a?.Origin=="work")
+        if(a?.Origin is "work" or "personality")
         {
             if(a.Kind=="research")p.PausedResearch=a;
             CancelResidentActivity(w);a=null;
@@ -94,7 +94,7 @@ public sealed partial class DemoWorld
             (o==medic||o.Job is null&&o.Path.Count==0)&&
             !Workers.Any(other=>other!=medic&&other.Person.Activity is {Kind:"treat" or "care_supply"} care&&care.Target==o.Id)&&
             CanReachAny(medic.Tile,ItemPositions(o.Tile).Where(Walkable).ToArray()))
-            .OrderBy(o=>HealthCare.Urgency(o.Person)).ThenBy(o=>HealthCare.TimeToBleedOut(o.Person)).ThenBy(o=>Math.Abs(o.Tile.X-medic.Tile.X)+Math.Abs(o.Tile.Z-medic.Tile.Z)).FirstOrDefault();
+            .OrderBy(o=>HealthCare.Urgency(o.Person)).ThenBy(o=>HealthCare.TimeToBleedOut(o.Person)).ThenByDescending(o=>medic.Person.Affinity(o.Id)).ThenBy(o=>Math.Abs(o.Tile.X-medic.Tile.X)+Math.Abs(o.Tile.Z-medic.Tile.Z)).FirstOrDefault();
     }
     private bool AssignPersonalWork(DemoWorker w,int ordinaryRank)
     {

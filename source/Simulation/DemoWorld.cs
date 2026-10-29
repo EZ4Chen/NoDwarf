@@ -15,6 +15,7 @@ public sealed class DemoJob
 {
     public int Id { get; init; }
     public int Facing { get; init; }
+    public int ProductionOrderId {get;set;}
     public int ConstructionGroup { get; set; }
     public string DigRegion { get; set; } = "";
     public Cell? DigRegionMin { get; set; }
@@ -301,11 +302,11 @@ public sealed partial class DemoWorld
     public bool QueueSword()
     {
         if (!WorkshopReady) { Log("工坊尚未就绪：" + WorkshopIssue); return false; }
-        if (Iron < 2 || Coal < 1) { Log("锻造需要 2 铁锭和 1 煤炭。"); return false; }
+        if (ProductionCatalog.Get("sword").Inputs.Any(p=>Available(p.Key)<p.Value)) { Log("锻造需要 2 铁锭和 1 煤炭。"); return false; }
         if (Jobs.Count(j => j.Forge) >= 3) { Log("锻造队列已满，先等当前订单完成。"); return false; }
         var job=new DemoJob { Id = ++_nextJob, Cell = _forgeAnvil!.Value };
-        if(!Reserve(job,new(){{"iron",2},{"coal",1}}))return false;
-        Jobs.Add(job);Revision++;
+        if(!Reserve(job,ProductionCatalog.Get("sword").Inputs))return false;
+        job.ProductionOrderId=AddProductionOrder("sword",station:job.Cell).Id;Jobs.Add(job);Revision++;
         Log("铁剑订单已下达，原料已预留。");
         return true;
     }
@@ -358,6 +359,7 @@ public sealed partial class DemoWorld
         _orderedJobs = null;
         _supportSafety.Clear();
         _simulationTime += dt;
+        AdvanceStoryEvents();
         foreach(var actor in Actors)actor.Combat.Cooldown=Math.Max(0,actor.Combat.Cooldown-dt);
         AdvanceSupport();
         Fluids.Advance(dt);
@@ -420,7 +422,7 @@ public sealed partial class DemoWorld
             if (job is null) continue;
             if(job.Refuel&&(!Buildings.TryGetValue(job.Cell,out var fire)||fire.Kind!=BuildKind.Campfire)||job.Forestry&&!ForestryReady(job)){CancelJob(job);continue;}
             if(job.Farming&&!FarmReady(job)){CancelJob(job);continue;}
-            if (job.Production && !ProductionReady(job))
+            if (job.Production && (!ProductionReady(job)||!BillAllowsWorker(job,worker)))
             {
                 Release(job);
                 worker.Status = "等待工坊恢复";
@@ -443,7 +445,7 @@ public sealed partial class DemoWorld
             worker.Status = job.Processing ? "加工物资" : job.Refuel ? "添柴" : job.Chop ? "伐木" : job.PlantTree ? "种树" : job.Sow ? "播种" : job.Harvest ? "收获" : job.Demolish ? "拆除方块" : job.Dig ? "挖掘岩土" : job.Cook ? "烹制口粮" : job.Smelt ? "熔炼粗铁" : job.Forge ? "锻造铁剑" : $"建造{NameOf(job.Build!.Value)}";
             double work=dt * worker.Person.WorkRate(JobSkill(job)) * (1+GearWorkBonus(worker,job));
             job.Progress += work;
-            if(job.Chop ? DamageBlock(job.Cell,work*20) : job.Dig ? MineStep(job,work) : job.Progress >= (job.Chop ? TreeHeight(job.Cell)*.8 : job.PlantTree?3 : job.Farming ? 2.0 : job.Production ? 5.0 : DemoJob.BuildWorkRequired))Complete(job,worker);
+            if(job.Chop ? DamageBlock(job.Cell,work*20) : job.Dig ? MineStep(job,work) : job.Progress >= (job.Chop ? TreeHeight(job.Cell)*.8 : job.PlantTree?3 : job.Farming ? 2.0 : job.Production ? ProductionCatalog.Get(ProductionCatalog.RecipeOf(job)).Work : DemoJob.BuildWorkRequired))Complete(job,worker);
         }
         AdvanceMelee(dt);
         UpdateBattleOutcome();
@@ -475,13 +477,13 @@ public sealed partial class DemoWorld
         int component=Navigation.ComponentAt(worker.Tile);
         foreach (var job in OrderedJobs())
         {
-            if (job.Worker >= 0 || !CheckDigWater(job)) continue;
+            if (job.Worker >= 0 || !BillAllowsWorker(job,worker) || !CheckDigWater(job)) continue;
             int rank=ResidentWork.Rank(worker.Person,ResidentWork.JobType(job));
             if(rank==int.MaxValue||rank>bestRank)continue;
             if (job.Build is BuildKind.Furnace or BuildKind.Anvil && PendingConstructionShell(job)) continue;
             if(job.Forestry&&!ForestryReady(job))continue;
             if(job.Farming&&!FarmReady(job))continue;
-            if (job.Production && !ProductionReady(job)) continue;
+            if (job.Production && (!ProductionReady(job)||!BillAllowsWorker(job,worker))) continue;
             if (job.Build is not null && (Fluids.Amount(job.Cell)>0 || !Supported(job.Cell))) continue;
             if(job.Build==BuildKind.Ladder&&!Solid(job.Cell+StairDirection(job.Facing)))continue;
             if(job.Dig && !DigSafe(job, _residentFootCells)) continue;
@@ -620,16 +622,16 @@ public sealed partial class DemoWorld
         else if(job.Processing)CompleteProcessing(job,worker);
         else if(job.Cook)
         {
-            ConsumeMaterials(job);SpawnItem("meal",2,worker.Tile);Log($"{worker.Name}做好了 2 份口粮。");
+            ConsumeMaterials(job);var recipe=ProductionCatalog.Get("cook");SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);Log($"{worker.Name}做好了 2 份口粮。");
         }
         else if(job.Smelt)
         {
-            ConsumeMaterials(job);SpawnItem("iron",2,worker.Tile);
+            ConsumeMaterials(job);var recipe=ProductionCatalog.Get("smelt");SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);
             Log($"{worker.Name}熔炼出了 2 铁锭。");
         }
         else if (job.Forge)
         {
-            ConsumeMaterials(job);SpawnItem("sword",1,worker.Tile);
+            ConsumeMaterials(job);var recipe=ProductionCatalog.Get("sword");SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);
             Log($"{worker.Name}完成了一把铁剑！这间工坊开始运转了。");
         }
         else
@@ -641,6 +643,7 @@ public sealed partial class DemoWorld
         }
         AwardWork(worker,JobSkill(job),job.Dig?20*job.DigHeight:job.Smelt?80:job.Forge?100:20);
         if(job.Forge&&Workers.Contains(worker))worker.Person.Remember("first_sword","亲手锻造出了铁剑。",_simulationTime);
+        if(job.Production)CompleteProductionOrder(job);
         Release(job); Jobs.Remove(job);
         ValidateWorkshop();
     }

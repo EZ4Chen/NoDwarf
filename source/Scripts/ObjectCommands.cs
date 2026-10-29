@@ -5,6 +5,7 @@ public partial class Main
 {
     private HFlowContainer _objectCommands=null!;
     private Label _selectionTitle=null!;
+    private Button _productionBillAction=null!;
     private Button _mineSelectionAction=null!,_chopSelectionAction=null!,_cancelChopAction=null!,_locateSelectionAction=null!;
     private void BuildObjectCommands(Control root)
     {
@@ -17,6 +18,7 @@ public partial class Main
             StyleObjectCommand(button,icon);
             button.TooltipText=help;UiAccess.Name(button,name,help);return button;
         }
+        _productionBillAction=Command("清单","workbench",()=>OpenProductionBills(_selectedCell),"查看该设施的制作清单、原料和工作者设置。");
         _mineSelectionAction=Command("开采","dig",()=>OrderSelectedObject("dig"),"安排居民开采这个方块；完成后移除岩土并掉落材料，开始前可取消。");
         _demolishAction=Command("拆除","erase",()=>OrderSelectedObject("erase"),"安排居民拆除选中的建筑并回收材料；开始前可取消。");
         _chopSelectionAction=Command("伐木","chop",()=>OrderSelectedObject("chop"),"安排居民砍倒这棵树，产出木料和树苗；开始前可取消。");
@@ -54,6 +56,7 @@ public partial class Main
     {
         foreach(var button in new[]{_medicalBedAction,_waterPointAction,_gateAction})UiAccess.Name(button,button.Text,button.TooltipText);
         _locateSelectionAction.Visible=_selectedWorker>=0;
+        _productionBillAction.Visible=_selectedCell is Cell station&&_world.Buildings.TryGetValue(station,out var bench)&&ProductionCatalog.All.Any(r=>r.Station==bench.Kind);
         _mineSelectionAction.Hide();_demolishAction.Hide();_chopSelectionAction.Hide();_cancelChopAction.Hide();
         if(_selectedWorker<0&&_selectedCell is Cell cell&&CurrentView.Known(_world,cell)&&SelectedGrowingZone is null&&SelectedDigRegion is null)
         {

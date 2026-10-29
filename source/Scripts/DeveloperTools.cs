@@ -113,14 +113,14 @@ public partial class Main
         switch(a[0].ToLowerInvariant())
         {
             case "help":
-                Count(1);RecordWorldEvent("～ 开关控制台；↑↓ 历史；Esc 关闭\n新增：lua help | stats | stats on/off | filter all/info/warn/error | selected | demo single/two/underground | play | speed 1/3 | water selected [升] | drain selected | logs open\n人物调试（开发模式）：disease 居民ID fever/wound_infection | personxp 居民ID 技能ID 经验 | injure 居民ID 部位ID cut/fracture/burn/missing 严重度 | give 物品ID 数量\n" + "region [类型] [种子]（region 查看全部类型） | weather [auto/clear/cloudy/rain/fog] | water X Z Y 升 | drain X Z Y | aquifer X Z Y 储量 水头 流量 补给 温度 | gate X Z Y | fluidstats | help | status | navstats | navmode exact/hierarchy | dev on/off | creative on/off | fog on/off\npause | resume | step [1..300] | level 高度 | residents on/off | finish\nplace 方块ID X Z 高度 [朝向0..3] | dig X Z 高度 [stairs 朝向0..3]\nerase X Z 高度 | clear | logs\n直接放置不耗料；直接挖掘天然方块会掉落物品；finish 完成已有规划，沿用其材料结算。");break;
+                Count(1);RecordWorldEvent("～ 开关控制台；↑↓ 历史；Esc 关闭\n新增：lua help | stats | stats on/off | filter all/info/warn/error | selected | demo single/two/underground | play | speed 1/2/3 | water selected [升] | drain selected | logs open\n人物调试（开发模式）：disease 居民ID fever/wound_infection | personxp 居民ID 技能ID 经验 | injure 居民ID 部位ID cut/fracture/burn/missing 严重度 | give 物品ID 数量\n" + "region [类型] [种子]（region 查看全部类型） | weather [auto/clear/cloudy/rain/fog] | water X Z Y 升 | drain X Z Y | aquifer X Z Y 储量 水头 流量 补给 温度 | gate X Z Y | fluidstats | help | status | navstats | navmode exact/hierarchy | dev on/off | creative on/off | fog on/off\npause | resume | step [1..300] | level 高度 | residents on/off | finish\nplace 方块ID X Z 高度 [朝向0..3] | dig X Z 高度 [stairs 朝向0..3]\nerase X Z 高度 | clear | logs\n直接放置不耗料；直接挖掘天然方块会掉落物品；finish 完成已有规划，沿用其材料结算。");break;
             case "selected":
                 Count(1);RecordWorldEvent(_selectedCell is Cell selected?$"选中格 X={selected.X} Z={selected.Z} Y={selected.Level}":"未选中地格。");break;
             case "filter":
                 Count(2);_logFilter=a[1].ToLowerInvariant() switch{"all"=>"all","info"=>"INFO","warn"=>"WARN","error"=>"ERROR",_=>throw new ArgumentException("filter all/info/warn/error")};_shownLog=-1;break;
             case "stats":
                 if(a.Length==1)RecordWorldEvent(_stats.Text);else _diagnosticsPanel.Visible=Switch();break;
-            case "speed":Count(2);int speed=Number(1,1,3);if(speed is not (1 or 3))throw new ArgumentException("speed 1/3");_clock.SetSpeed(speed);break;
+            case "speed":Count(2);int speed=Number(1,1,3);_clock.SetSpeed(speed);break;
             case "play":
                 Dev();Count(1);_world.DeveloperResidents(true);_developerMode=false;_creative=false;_revealUnknown=false;_clock.Paused=false;CreatePeople();break;
             case "demo":

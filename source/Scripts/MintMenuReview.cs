@@ -1,4 +1,5 @@
 using Godot;
+using NoDwarf.Simulation;
 namespace NoDwarf;
 public partial class Main
 {
@@ -11,6 +12,13 @@ public partial class Main
             void Click(Control c){var p=c.GetGlobalRect().GetCenter();GetViewport().PushInput(new InputEventMouseMotion{Position=p,GlobalPosition=p},true);foreach(bool down in new[]{true,false})GetViewport().PushInput(new InputEventMouseButton{Position=p,GlobalPosition=p,ButtonIndex=MouseButton.Left,Pressed=down},true);}
             async Task Snap(string name){await Frame();await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);GetViewport().GetTexture().GetImage().SavePng("res://.local/"+name+".png");}
             _clock.Paused=true;TogglePanel(_buildMenu);ShowBuildPage("结构");await Frame();
+            Button Named(string name)=>_buildMenu.FindChildren("*","Button",true,false).OfType<Button>().Single(b=>b.AccessibilityName==name);
+            Check(_mintArchitectDetail.Size.X>=338,"Mint information card width lost");
+            Check(_architectSearch.Size.X<180,"Search must stay above categories, not span the window");
+            Click(Named("显示或隐藏建筑详情"));await Frame();Check(!_mintArchitectDetail.Visible,"Information toggle failed");
+            Click(Named("显示或隐藏建筑详情"));await Frame();Check(_mintArchitectDetail.Visible,"Information card did not reopen");
+            GetViewport().PushInput(new InputEventKey{Keycode=Key.F,PhysicalKeycode=Key.F,MetaPressed=true,Pressed=true},true);await Frame();
+            Check(_architectSearch.HasFocus(),"Command+F must focus menu search");_architectSearch.ReleaseFocus();
             Check(_buildMenu.GetGlobalRect().Encloses(_toolButtons["StoneBricks"].GetGlobalRect()),"Building grid overflow");
             PinArchitectCategory("家具");Check(_architectCategories.GetChild(1)==_categoryRows["家具"],"Pinned category did not move to top");PinArchitectCategory("家具");
             ShowBuildPage("全部");_architectSortMode=2;_architectSort.Select(2);FilterArchitect();await Frame();
@@ -31,16 +39,7 @@ public partial class Main
             _architectSearch.Text="";ShowBuildPage("楼梯");SetArchitectList(false);await Frame();
             _architectAutoClose.ButtonPressed=true;Click(_toolButtons["PlankStairs"]);await Frame();
             Check(!_buildMenu.Visible&&_tool=="PlankStairs"&&GetViewport().GuiGetFocusOwner() is not LineEdit,"Selecting tool must return to map");
-            TogglePanel(_inspector);_productionTabs.CurrentTab=1;await Frame();
-            _recipeSearch.Text="棉";_recipeSearch.EmitSignal(LineEdit.SignalName.TextChanged,_recipeSearch.Text);await Frame();Check(_recipeButtons["cloth"].Visible&&!_recipeButtons["sword"].Visible,"Ingredient search failed");
-            Click(_recipeButtons["cloth"]);await Frame();Check(_recipeSelected=="cloth"&&_recipeDetails.Text.Contains("棉"),"Recipe details not updated");
-            Check(_inspector.GetGlobalRect().Encloses(_recipeQueue.GetGlobalRect()),"Recipe detail action outside panel");
-            await Snap("mint-production-search");
-            var target=_recipeQueue.GetParent().GetChildren().OfType<Button>().Single(b=>b.Text=="设置补产目标");Click(target);await Frame();
-            Check(_productionTabs.CurrentTab==2&&NoDwarf.Simulation.ProductionCatalog.All[_targetRecipe.Selected].Id=="cloth","Recipe target shortcut lost recipe");
-            Check(!_world.ProductionOrders.Any(o=>o.Recipe=="cloth"),"Opening target settings must not create an order");
-            _targetCount.Value=12;Click(_applyProductionTarget);await Frame();Check(_world.ProductionOrders.Any(o=>o.Recipe=="cloth"&&o.Target==12),"Target apply broken");
-            await Snap("mint-production-targets");
+            await VerifyProductionBillsUi();
             GD.Print("MINT_MENU_OK: ported attribute sorting and category pinning, category/grid/list bounds, cross-category search, input focus, auto close, recipe ingredient search and target handoff");GetTree().Quit();
         }
         catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}

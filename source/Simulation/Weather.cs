@@ -45,6 +45,7 @@ public sealed partial class DemoWorld
         get
         {
             if(WeatherOverride is not null)return WeatherState.Get(WeatherOverride);
+            if(Story.ActiveWeather!=""&&SimulationTime<Story.WeatherUntil)return WeatherState.Get(Story.ActiveWeather);
             if(ClimateVersion==0)return WeatherState.Get("clear");
             var date=Calendar;
             if(_weatherMinute!=date.TotalMinutes)

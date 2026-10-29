@@ -21,7 +21,7 @@ public partial class Startup : Control
     {
         GetTree().AutoAcceptQuit=true;
         var args=OS.GetCmdlineUserArgs();
-        if(args.Any(a=>a.EndsWith("-test")||a.EndsWith("-review"))&&!args.Contains("--startup-preview-test"))
+        if(args.Any(a=>a.EndsWith("-test")||a.EndsWith("-review"))&&!args.Contains("--startup-preview-test")&&!args.Contains("--llm-settings-test"))
         {Callable.From(()=>GetTree().ChangeSceneToFile("res://Scenes/Main.tscn")).CallDeferred();return;}
         GetWindow().Title="NoDwarf · 开始";
         Theme=new Theme{DefaultFont=GameFont.Regular,DefaultFontSize=16};
@@ -33,8 +33,10 @@ public partial class Startup : Control
         _step=Label("",14,Muted);_step.SizeFlagsHorizontal=SizeFlags.ExpandFill;_step.HorizontalAlignment=HorizontalAlignment.Right;header.AddChild(_step);
         _content=new VBoxContainer{SizeFlagsVertical=SizeFlags.ExpandFill};_content.AddThemeConstantOverride("separation",16);column.AddChild(_content);
         column.AddChild(Label("一片土地，几位居民。故事从这里开始。",13,Muted));
+        InitializeLlm();
         Resized+=QueueRedraw;ShowHome();
         if(args.Contains("--startup-preview-test"))RunStartupPreview();
+        if(args.Contains("--llm-settings-test"))RunLlmSettingsReview();
     }
     public override void _Draw()
     {
@@ -62,6 +64,7 @@ public partial class Startup : Control
     }
     private void ClearPage(string step)
     {
+        CancelLlmTest();
         foreach(var node in _content.GetChildren()){_content.RemoveChild(node);node.QueueFree();}
         _actions.Clear();_options.Clear();_step.Text=step;
     }
@@ -78,7 +81,7 @@ public partial class Startup : Control
         var choices=Card(row,340);choices.Alignment=BoxContainer.AlignmentMode.Center;
         var menuPanel=choices.GetParent<Control>();menuPanel.SizeFlagsHorizontal=SizeFlags.ShrinkEnd;menuPanel.SizeFlagsVertical=SizeFlags.ShrinkCenter;menuPanel.CustomMinimumSize=new(340,380);
         choices.AddChild(Label("新的故事",22,Gold));Action(choices,"new","新游戏",ShowSettings,true);
-        Action(choices,"load","读取存档",()=>ShowSaves());Action(choices,"quit","退出游戏",()=>GetTree().Quit());
+        Action(choices,"load","读取存档",()=>ShowSaves());Action(choices,"settings","设置",ShowLlmSettings);Action(choices,"quit","退出游戏",()=>GetTree().Quit());
         choices.AddChild(Label("新游戏不会覆盖已有存档。",13,Muted));
     }
     private void ShowSettings()

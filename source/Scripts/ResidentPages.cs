@@ -159,14 +159,17 @@ public partial class Main
             int opinion=relation?.Opinion??0;RT(row,opinion.ToString("+0;-0;0"),15,opinion>0?RGreen:opinion<0?RRed:RMuted);
             RB(row,"交流",()=>ResidentDo("social",other.Id),"前往交流，增加娱乐并留下经历");RRule(relations);
         }
-        RSection(right,"重要经历");var history=RScroll(right);
+        RSection(right,"人格与重要经历");
+        RT(right,p.Personality().Preference+" · "+p.Personality().Voice,13,RMuted,true);
+        var history=RScroll(right);
         foreach(var memory in p.Memories)
         {
             var when=GameCalendar.At(Math.Min(memory.Time,_world.SimulationTime));
             RT(history,when.DateText+" · "+when.TimeText,12,RMuted);
-            RT(history,memory.Text,14,RInk,true);RRule(history);
+            RT(history,memory.Text+(memory.Count>1?$"（累计 {memory.Count} 次）":""),14,RInk,true);RRule(history);
         }
         if(p.Memories.Count==0)RT(history,"尚无记录。",14,RMuted);
+        foreach(var summary in p.MemorySummaries){RT(history,"归档 · "+summary.Text,12,RMuted,true);RRule(history);}
     }
     private void RenderResidentGrowth(DemoWorker w)
     {

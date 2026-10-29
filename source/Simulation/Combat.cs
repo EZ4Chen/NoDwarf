@@ -101,6 +101,11 @@ public sealed partial class DemoWorld
     public ResidentResult StartTestRaid(int count=1)
     {
         if(count is <1 or >3)return new(false,"测试袭击人数为 1—3");
+        return StartRaid(count);
+    }
+    public ResidentResult StartRaid(int count)
+    {
+        if(count is <1 or >MaxStoryRaid)return new(false,$"袭击人数为 1—{MaxStoryRaid}");
         if(Enemies.Any(Fighting))return new(false,"已有未结束的袭击");
         var resident=Workers.FirstOrDefault(Fighting);if(resident is null)return new(false,"需要至少一位可行动居民");
         // Probe bounded samples along all four actual map edges, then pick the nearest reachable entry.
@@ -112,7 +117,7 @@ public sealed partial class DemoWorld
         Enemies.Clear();_raidSerial++;BattleOutcome="";
         for(int i=0;i<count;i++)Enemies.Add(new(){Id=$"raider-{_raidSerial}-{i}",Name=$"袭击者 {i+1}",X=starts[i].X,Z=starts[i].Z,Level=starts[i].Level,Combat=new(){Drafted=true},Person=new()});
         var entry=starts[0];
-        Revision++;Log($"测试袭击：{count} 名敌人从 {entry.X}, {entry.Z} 进入地图。");return new(true,"测试袭击已生成");
+        Revision++;Log($"袭击：{count} 名敌人从 {entry.X}, {entry.Z} 进入地图。");return new(true,"袭击已生成");
     }
     private void CombatStrike(DemoWorker attacker,DemoWorker victim)=>BeginMelee(attacker,victim);
     private bool UpdateMilitary(DemoWorker w,double dt,ref int budget,bool enemy=false)

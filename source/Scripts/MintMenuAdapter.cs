@@ -15,7 +15,7 @@ public partial class Main
     private void PinArchitectCategory(string name)
     {
         if(!_pinnedCategories.Add(name))_pinnedCategories.Remove(name);
-        foreach(var key in _categoryRows.Keys)_categoryPins[key].Text=_pinnedCategories.Contains(key)?"★":"☆";
+        foreach(var key in _categoryRows.Keys)_categoryButtons[key].Text=(_pinnedCategories.Contains(key)?"• ":"")+key;
         int index=1; // Keep “all” at the top.
         foreach(var key in MintMenuLogic.Categories(_categoryRows.Keys,k=>_pinnedCategories.Contains(k)))
             _architectCategories.MoveChild(_categoryRows[key],index++);

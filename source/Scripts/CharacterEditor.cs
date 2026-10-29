@@ -13,6 +13,8 @@ public partial class Main
     private int _editingWorker = -1;
     private bool _editorWasPaused, _updatingOptions;
     private readonly List<(OptionButton Button, string[] Ids, Func<CharacterAppearance, string> Get)> _appearanceOptions = new();
+    private readonly List<(ColorPickerButton Button,Func<CharacterAppearance,string> Get,Func<string,Color> Resolve)> _appearanceColors = new();
+    private int _characterPreviewDirection;
     private bool IsCheck => OS.GetCmdlineUserArgs().Any(a => a.EndsWith("-test"));
     private string AppearancePath => ProjectSettings.GlobalizePath("user://characters-v1.json");
 
@@ -28,7 +30,7 @@ public partial class Main
     {
         _characterEditor = new Window
         {
-            Title = "居民外观", Size = new Vector2I(620, 590), MinSize = new Vector2I(540, 560),
+            Title = "居民外观", Size = new Vector2I(740, 680), MinSize = new Vector2I(680, 640),
             Visible = false, Transient = true, Exclusive = true, Unresizable = true, Theme = root.Theme
         };
         AddChild(_characterEditor);
@@ -42,8 +44,11 @@ public partial class Main
         var previewColumn = new VBoxContainer(); row.AddChild(previewColumn);
         _characterPreview = new TextureRect { CustomMinimumSize = new Vector2(190, 310), ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered };
         previewColumn.AddChild(_characterPreview);
+        var turnPreview=new Button{Text="朝向：正面"};previewColumn.AddChild(turnPreview);UiAccess.Name(turnPreview,"切换人物预览朝向");
+        turnPreview.Pressed+=()=>{_characterPreviewDirection=(_characterPreviewDirection+1)%4;turnPreview.Text="朝向："+new[]{"正面","右侧","背面","左侧"}[_characterPreviewDirection];UpdateCharacterPreview();};
         previewColumn.AddChild(Text("预览 · 应用后同步头像与人物", 12, Muted));
-        var options = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill }; row.AddChild(options);
+        var optionsScroll=new ScrollContainer{CustomMinimumSize=new(320,430),SizeFlagsHorizontal=Control.SizeFlags.ExpandFill,HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled};row.AddChild(optionsScroll);
+        var options = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill }; optionsScroll.AddChild(options);
         void Add(string label, string[] ids, string[] names, Func<CharacterAppearance,string> get, Func<CharacterAppearance,string,CharacterAppearance> set)
         {
             var line = new HBoxContainer(); options.AddChild(line);
@@ -53,11 +58,21 @@ public partial class Main
             line.AddChild(choice);UiAccess.Name(choice,label); _appearanceOptions.Add((choice, ids, get));
             choice.ItemSelected += index => { if (!_updatingOptions) { _draft = set(_draft, ids[(int)index]); UpdateCharacterPreview(); } };
         }
+        void AddColor(string label,Func<CharacterAppearance,string> get,Func<CharacterAppearance,string,CharacterAppearance> set,Func<string,Color> resolve,string[] presets)
+        {
+            var line=new HBoxContainer();options.AddChild(line);
+            line.AddChild(new Label{Text=label,CustomMinimumSize=new(64,36)});
+            var choice=new ColorPickerButton{EditAlpha=false,SizeFlagsHorizontal=Control.SizeFlags.ExpandFill,CustomMinimumSize=new(160,36)};
+            line.AddChild(choice);UiAccess.Name(choice,label+"，点击选择颜色");
+            foreach(string value in presets)choice.GetPicker().AddPreset(resolve(value));
+            _appearanceColors.Add((choice,get,resolve));
+            choice.ColorChanged+=color=>{if(!_updatingOptions){_draft=set(_draft,"#"+color.ToHtml(false));UpdateCharacterPreview();}};
+        }
         Add("基础形象", ["male","female"], ["男矮人","女矮人"], a=>a.BodySex, (a,v)=>a with {BodySex=v});
         if(ActorModelView.LoadDefinition().Renderer!="sprite4")
         {
         Add("肤色", CharacterAppearance.Skins, ["瓷白", "暖肤", "小麦", "棕色", "深棕"], a=>a.Skin, (a,v)=>a with {Skin=v});
-        Add("发型", CharacterAppearance.Hairs, ["短发", "侧分", "齐颈发", "辫子", "光头"], a=>a.Hair, (a,v)=>a with {Hair=v});
+        Add("发型", CharacterAppearance.Hairs, CharacterAppearance.HairNames, a=>a.Hair, (a,v)=>a with {Hair=v});
         Add("发色", CharacterAppearance.HairColors, ["栗棕", "墨黑", "麦金", "赤褐", "银灰", "霜白"], a=>a.HairColor, (a,v)=>a with {HairColor=v});
         Add("脸型", CharacterAppearance.Faces, ["圆脸", "长脸", "方脸"], a=>a.Face, (a,v)=>a with {Face=v});
         Add("服装", CharacterAppearance.Outfits, ["工匠围裙", "束腰衫", "马甲", "长外套"], a=>a.Outfit, (a,v)=>a with {Outfit=v});
@@ -69,8 +84,11 @@ public partial class Main
         {
             Add("体型", CharacterAppearance.Bodies, ["男体", "女体", "瘦型", "壮型", "胖型"], a=>a.Body, (a,v)=>a with {Body=v});
             Add("脸型", CharacterAppearance.Faces, ["圆脸", "长脸", "方脸"], a=>a.Face, (a,v)=>a with {Face=v});
-            Add("发型", ["sweep","bob","braid","bald"], ["侧分短发","蓬松卷发","双辫","光头"], a=>a.Hair=="crop"?"sweep":a.Hair, (a,v)=>a with {Hair=v});
+            Add("发型", CharacterAppearance.Hairs, CharacterAppearance.HairNames, a=>a.Hair, (a,v)=>a with {Hair=v});
+            AddColor("发色",a=>a.HairColor,(a,v)=>a with{HairColor=v},PawnColors.Hair,CharacterAppearance.HairColors);
             Add("胡须", CharacterAppearance.Beards, ["无胡须","短胡须","长胡须"], a=>a.Beard, (a,v)=>a with {Beard=v});
+            AddColor("胡须颜色",a=>a.BeardColor,(a,v)=>a with{BeardColor=v},PawnColors.Hair,CharacterAppearance.HairColors);
+            AddColor("肤色",a=>a.Skin,(a,v)=>a with{Skin=v},PawnColors.Skin,CharacterAppearance.Skins);
             Add("布衣款式", ["tunic","apron"], ["工作衫","工匠围裙"], a=>a.Outfit=="apron"?"apron":"tunic", (a,v)=>a with {Outfit=v});
             options.AddChild(Text("衣服与武器在装备栏穿脱", 14, Muted, true));
         }
@@ -96,8 +114,10 @@ public partial class Main
     {
         _updatingOptions = true;
         foreach (var option in _appearanceOptions) option.Button.Select(Array.IndexOf(option.Ids, option.Get(_draft)));
+        foreach(var option in _appearanceColors)option.Button.Color=option.Resolve(option.Get(_draft));
         _updatingOptions = false;
-        _characterPreview.Texture = EquipmentArt.Texture(_draft, _editingWorker >= 0 ? _world.Inventory(_world.Workers[_editingWorker]) : Array.Empty<ItemStack>());
+        var items=_editingWorker >= 0 ? _world.Inventory(_world.Workers[_editingWorker]) : Array.Empty<ItemStack>();
+        _characterPreview.Texture = ActorModelView.LoadDefinition().Renderer=="sprite4"?DirectionalDwarfView.Preview(_draft,items,_characterPreviewDirection):EquipmentArt.Texture(_draft,items);
     }
     private void ApplyCharacterAppearance()
     {
@@ -127,10 +147,19 @@ public partial class Main
         if (!_clock.Paused || _characterPreview.Texture is null) throw new InvalidOperationException("Character preview/pause");
         _appearanceOptions[0].Button.EmitSignal(OptionButton.SignalName.ItemSelected, 1L);
         if (_draft.BodySex != "female") throw new InvalidOperationException("Body selector must update draft");
+        if(ActorModelView.LoadDefinition().Renderer=="sprite4")
+        {
+            if(_appearanceColors.Count!=3)throw new InvalidOperationException("Missing independent palette controls");
+            _appearanceColors[0].Button.EmitSignal(ColorPickerButton.SignalName.ColorChanged,new Color("abcdef"));
+            _appearanceColors[1].Button.EmitSignal(ColorPickerButton.SignalName.ColorChanged,new Color("654321"));
+            _appearanceColors[2].Button.EmitSignal(ColorPickerButton.SignalName.ColorChanged,new Color("ba9876"));
+            if(_draft.HairColor!="#abcdef"||_draft.BeardColor!="#654321"||_draft.Skin!="#ba9876")throw new InvalidOperationException("Palette controls must be independent");
+        }
         _draft = _draft with { Cloth = "plum", Body = "broad" }; UpdateCharacterPreview(); CloseCharacterEditor();
         if (worker.Appearance != before || _clock.Paused != paused) throw new InvalidOperationException("Cancel must preserve appearance and pause state");
-        OpenCharacterEditor(); _draft = before with { BodySex = "female" }; ApplyCharacterAppearance();
+        OpenCharacterEditor(); _draft = before with { BodySex = "female",Hair="topknot",HairColor="#abcdef",BeardColor="#654321",Skin="#ba9876" }; ApplyCharacterAppearance();
         if (worker.Appearance.BodySex != "female" || _residentButtons[0].Icon != _people[0].GetChild<Sprite3D>(0).Texture) throw new InvalidOperationException("Applied portrait and world sprite must match");
+        if(worker.Appearance.Hair!="topknot"||worker.Appearance.HairColor!="#abcdef"||worker.Appearance.BeardColor!="#654321"||worker.Appearance.Skin!="#ba9876")throw new InvalidOperationException("Applied palette mismatch");
         worker.Appearance = before; UpdateCharacterVisual(0);
         foreach (var sex in new[]{"male","female"})
             _ = EquipmentArt.Texture(before with { BodySex = sex }, _world.Inventory(worker));
@@ -141,6 +170,7 @@ public partial class Main
         try
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            CheckCharacterEditor();
             SelectResident(0); OpenCharacterEditor();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);

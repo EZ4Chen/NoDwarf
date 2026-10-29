@@ -37,7 +37,7 @@ public sealed partial class DemoWorld
     {
         if(ResidentWork.Rank(helper.Person,"care")>=ordinaryRank||helper.Person.Hunger<25||helper.Person.Rest<10||_simulationTime<helper.NextCareCheck)return false;
         helper.NextCareCheck=_simulationTime+3;
-        foreach(var patient in Workers.Where(w=>w!=helper&&NeedsFeeding(w)&&!FoodCareBusy(w.Id,helper)).OrderBy(w=>w.Person.Hunger).ThenBy(w=>w.Id))
+        foreach(var patient in Workers.Where(w=>w!=helper&&NeedsFeeding(w)&&!FoodCareBusy(w.Id,helper)).OrderBy(w=>w.Person.Hunger).ThenByDescending(w=>helper.Person.Affinity(w.Id)).ThenBy(w=>w.Id))
             if(BeginFoodSupply(helper,patient))return true;
         return false;
     }
@@ -73,7 +73,8 @@ public sealed partial class DemoWorld
             food.Count--;if(food.Count==0)Items.Remove(food);RefreshWeight(helper);Revision++;
             patient.Person.Hunger=Math.Min(100,patient.Person.Hunger+45);patient.Person.FoodIssue="";
             patient.Person.Feeling("fed","得到同伴送饭照料",4,_simulationTime+180);
-            patient.Person.Remember("fed:"+helper.Id,helper.Name+"送来了口粮。",_simulationTime);
+            patient.Person.Remember("fed:"+helper.Id,helper.Name+"送来了口粮。",_simulationTime,target:helper.Id,actor:helper.Id,importance:85);
+            helper.Person.Remember("helped:"+patient.Id,"给"+patient.Name+"送达了一份口粮。",_simulationTime,target:patient.Id,actor:helper.Id,importance:75);
         }
         CancelResidentActivity(helper);return true;
     }

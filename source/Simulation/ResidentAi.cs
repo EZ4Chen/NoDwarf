@@ -38,7 +38,7 @@ public sealed partial class DemoWorld
             health=new{deathCause=p.DeathCause,isolated=p.Isolated,prostheses=p.Prostheses,dead=p.Dead,incapacitated=p.Incapacitated,mobility=Math.Round(p.Mobility,2),manipulation=Math.Round(p.Manipulation,2),
                 blood=p.Blood,malnutrition=p.Malnutrition,conditions=HealthConditions.States(p).Select(c=>new{id=c.Definition.Id,part=c.Part,severity=c.Severity,stage=c.Stage.Name,immunity=c.Immunity,treatment=c.Treatment,effects=c.Stage.Effects}),
                 needsCare=HealthCare.Needed(p),untreated=p.Injuries.Count(HealthCare.WoundNeedsCare)},
-            points=p.Points,route=p.AutoSkill,traits=p.Traits,
+            points=p.Points,route=p.AutoSkill,traits=p.Traits,mind=MindContext(w),
             skills=ResidentCatalog.Skills.Select(s=>new{id=s.Id,level=p.Level(s.Id),rank=p.Talents.GetValueOrDefault(s.Id),active=s.HasWork}),
             talents=ResidentCatalog.Talents.Where(n=>TalentIssue(w,n)=="").Select(n=>new{id=n.Id,cost=n.Cost,effect=n.Effect}),
             inventory=new{offset,total=owned.Length,nextOffset=offset+12<owned.Length?(int?)(offset+12):null,

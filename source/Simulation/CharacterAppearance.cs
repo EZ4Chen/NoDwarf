@@ -9,6 +9,7 @@ public sealed record CharacterAppearance
     public string Skin { get; init; } = "warm";
     public string Hair { get; init; } = "crop";
     public string HairColor { get; init; } = "chestnut";
+    public string BeardColor { get; init; } = "silver";
     public string Face { get; init; } = "round";
     public string Outfit { get; init; } = "apron";
     public string Cloth { get; init; } = "sage";
@@ -16,7 +17,8 @@ public sealed record CharacterAppearance
     public string Beard { get; init; } = "none";
 
     public static readonly string[] Skins = ["porcelain", "warm", "tan", "brown", "deep"];
-    public static readonly string[] Hairs = ["crop", "sweep", "bob", "braid", "bald"];
+    public static readonly string[] Hairs = ["crop", "sweep", "bob", "braid", "curls", "ponytail", "topknot", "bald"];
+    public static readonly string[] HairNames = ["短寸", "侧分短发", "蓬松长发", "双辫", "短卷发", "马尾", "发髻", "光头"];
     public static readonly string[] HairColors = ["chestnut", "black", "gold", "auburn", "silver", "white"];
     public static readonly string[] Faces = ["round", "oval", "square"];
     public static readonly string[] Outfits = ["apron", "tunic", "vest", "coat"];
@@ -26,17 +28,20 @@ public sealed record CharacterAppearance
     public CharacterAppearance Normalize() => this with
     {
         BodySex = BodySex == "female" ? "female" : "male",
-        Skin = Valid(Skin, Skins, "warm"), Hair = Valid(Hair, Hairs, "crop"),
-        HairColor = Valid(HairColor, HairColors, "chestnut"), Face = Valid(Face, Faces, "round"),
+        Skin = ValidColor(Skin, Skins, "warm"), Hair = Valid(Hair, Hairs, "crop"),
+        HairColor = ValidColor(HairColor, HairColors, "chestnut"), BeardColor = ValidColor(BeardColor, HairColors, "silver"), Face = Valid(Face, Faces, "round"),
         Outfit = Valid(Outfit, Outfits, "apron"), Cloth = Valid(Cloth, Cloths, "sage"),
         Body = Valid(Body switch { "regular" or "standard" => BodySex == "female" ? "female" : "male", "slim" => "thin", "broad" => "hulk", "round" => "fat", _ => Body }, Bodies, BodySex == "female" ? "female" : "male"), Beard = Valid(Beard, Beards, "none")
     };
     private static string Valid(string value, string[] values, string fallback) => values.Contains(value) ? value : fallback;
+    private static string ValidColor(string value, string[] presets, string fallback) =>
+        value is { Length:7 } && value[0]=='#' && value.AsSpan(1).ToString().All(Uri.IsHexDigit)
+            ? value.ToLowerInvariant() : Valid(value,presets,fallback);
     public static CharacterAppearance Randomize(Random random) => new()
     {
         BodySex = random.Next(2) == 0 ? "male" : "female",
         Skin = Skins[random.Next(Skins.Length)], Hair = Hairs[random.Next(Hairs.Length)],
-        HairColor = HairColors[random.Next(HairColors.Length)], Face = Faces[random.Next(Faces.Length)],
+        HairColor = HairColors[random.Next(HairColors.Length)], BeardColor = HairColors[random.Next(HairColors.Length)], Face = Faces[random.Next(Faces.Length)],
         Outfit = Outfits[random.Next(Outfits.Length)], Cloth = Cloths[random.Next(Cloths.Length)],
         Body = Bodies[random.Next(Bodies.Length)], Beard = Beards[random.Next(Beards.Length)]
     };

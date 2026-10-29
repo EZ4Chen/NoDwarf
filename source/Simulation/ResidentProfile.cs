@@ -51,7 +51,19 @@ public sealed class ResidentInjury
     public bool FreshAmputation {get;set;}
     public bool Treated {get;set;}
 }
-public sealed record ResidentMemory(string Key,string Text,double Time);
+public sealed record ResidentMemory(string Key,string Text,double Time)
+{
+    public string EventId {get;init;}="";
+    public string Kind {get;init;}="experience";
+    public string Target {get;init;}="";
+    public string Actor {get;init;}="";
+    public string Source {get;init;}="simulation";
+    public string Perspective {get;init;}="self";
+    public int Importance {get;init;}=30;
+    public int Count {get;init;}=1;
+    public double FirstTime {get;init;}
+    public double LastUsed {get;init;}
+}
 public sealed class ResidentRelation
 {
     public string Target {get;set;}="";
@@ -73,7 +85,7 @@ public sealed class ResidentActivity
     public Cell Destination {get;set;}
     public double Progress {get;set;}
 }
-public sealed class ResidentProfile
+public sealed partial class ResidentProfile
 {
     public int Age {get;set;}=25;
     public string Childhood {get;set;}="聚落孩子";
@@ -109,6 +121,8 @@ public sealed class ResidentProfile
     public double Recreation {get;set;}=80;
     public List<MoodEffect> MoodEffects {get;set;}=new();
     public List<ResidentMemory> Memories {get;set;}=new();
+    public List<ResidentMemorySummary> MemorySummaries {get;set;}=new();
+    public Dictionary<string,double> HelpedAt {get;set;}=new();
     public List<ResidentRelation> Relations {get;set;}=new();
     public ResidentActivity? Activity {get;set;}
     // One suspended research activity only; ordinary needs remain locally controlled.
@@ -161,12 +175,6 @@ public sealed class ResidentProfile
         // Small XP ticks do not invalidate an otherwise unchanged AI decision.
         if(Level(skill)!=previousLevel||Points!=previousPoints)DecisionVersion++;
     }
-    public void Remember(string key,string text,double time)
-    {
-        // Repeated routine events replace their earlier entry; the dossier remains bounded.
-        Memories.RemoveAll(m=>m.Key==key);Memories.Insert(0,new(key,text,time));
-        if(Memories.Count>24)Memories.RemoveRange(24,Memories.Count-24);
-    }
     public void Feeling(string key,string text,int amount,double until)
     { MoodEffects.RemoveAll(e=>e.Key==key);MoodEffects.Add(new(key,text,amount,until));if(MoodEffects.Count>8)MoodEffects.RemoveAt(0); }
     public static ResidentProfile Create(int index)
@@ -183,7 +191,8 @@ public sealed class ResidentProfile
     public void Validate()
     {
         static bool Valid(double v,double max=100)=>double.IsFinite(v)&&v>=0&&v<=max;
-        static bool ValidOrigin(string origin)=>origin is "manual" or "need" or "schedule" or "work" or "emergency";
+        static bool ValidOrigin(string origin)=>origin is "manual" or "need" or "schedule" or "work" or "emergency" or "personality";
+        ValidateMemory();
         if(Age is <0 or >200 || Childhood is null || Adulthood is null || Childhood.Length>100 || Adulthood.Length>100 ||
             Schedule is null||Schedule.Length!=24||Schedule.Any(h=>!ResidentWork.Modes.Contains(h))||
             MedicalBed is Cell medicalBed&&!TerrainMap.InBounds(medicalBed)||

@@ -10,6 +10,10 @@ public static class UiIcons
         if(Cache.TryGetValue(name,out var texture))return texture;
         string shape=name.ToLowerInvariant() switch
         {
+            "bill_delete" => "<path fill='#c5c7ca' stroke='#26282b' d='M12 13h24l-2 30H14Z'/><path fill='#c5c7ca' d='M9 8h30v5H9Zm10-5h10v5H19Z'/><path stroke='#53565b' stroke-width='3' d='M20 18v19m8-19v19'/>",
+            "bill_copy" => "<path fill='#a6a8ab' d='M8 5h23v30H8Z'/><path fill='#e1e3e4' stroke='#222629' stroke-width='2' d='M18 12h16l8 8v24H18Z'/><path fill='none' stroke='#55595c' d='M33 12v9h9'/>",
+            "bill_allow" => "<path fill='none' stroke='#37d34a' stroke-width='7' d='m8 25 11 11L40 11'/>",
+            "bill_deny" => "<path fill='none' stroke='#e43e39' stroke-width='7' d='m10 9 28 30M38 9 10 39'/>",
             "select" => "<path fill='#e4e9dd' stroke-width='2.5' d='M9 4v35l9-9 7 14 7-4-8-13 14-1Z'/>",
             "wall" => "<path fill='#939f99' d='M5 7h38v34H5Z'/><path stroke='#303a34' d='M5 18h38M5 30h38M24 7v11M15 18v12m18-12v12M24 30v11'/><path stroke='#c1c9bb' d='M8 10h32M8 33h12'/>",
             "mill" => "<ellipse fill='#8b989a' cx='24' cy='32' rx='20' ry='11'/><ellipse fill='#b3bcb5' cx='24' cy='24' rx='20' ry='11'/><path fill='#5b665f' d='M20 21h8v8h-8Z'/><path stroke='#b38b58' stroke-width='5' d='M24 23V9h15V4'/>",
@@ -75,6 +79,7 @@ public static class UiIcons
             "play" => "<path fill='#c1d1c1' d='m13 7 27 17-27 17Z'/>",
             "pause" => "<path fill='#e2bf7f' d='M10 8h10v32H10zm18 0h10v32H28Z'/>",
             "fast" => "<path fill='#c1d1c1' d='m5 9 18 15L5 39Zm20 0 18 15-18 15Z'/>",
+            "fastest" => "<path fill='#c1d1c1' d='m2 9 13 15L2 39Zm15 0 13 15-13 15Zm15 0 13 15-13 15Z'/>",
             "dev" => "<path stroke='#a5b7c6' stroke-width='6' d='M9 39 34 14'/><path fill='#a5b7c6' d='M28 5v12h12l-8 9-12-5-3-11Z'/>",
             "console" => "<path fill='#27343f' d='M4 8h40v32H4Z'/><path stroke='#a4d7b0' stroke-width='3' d='m11 16 8 8-8 8m13 0h12'/>",
             _ => "<path fill='#9eb1bb' d='m24 4 19 11v22L24 46 5 37V15Z'/><path d='m5 15 19 11 19-11M24 26v20'/>"

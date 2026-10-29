@@ -14,7 +14,7 @@ public sealed class SimulationClock
 
     public void SetSpeed(int speed)
     {
-        if (speed is not (1 or 3)) throw new ArgumentOutOfRangeException(nameof(speed));
+        if (speed is <1 or >3) throw new ArgumentOutOfRangeException(nameof(speed));
         Speed = speed;
     }
 

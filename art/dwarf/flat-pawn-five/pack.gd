@@ -16,6 +16,10 @@ func _initialize():
 		assert(source != null and not source.is_empty(), filename)
 		source.convert(Image.FORMAT_RGBA8)
 		sources[filename] = source
+	for filename in ["roots","styles"]:
+		var source=Image.load_from_file(ProjectSettings.globalize_path(ART+"hair-update/"+filename+"-source.png"))
+		source.convert(Image.FORMAT_RGBA8)
+		sources[filename]=source
 	for row in range(5):
 		for kind in ["body", "work", "apron", "armor"]:
 			var frames: Array[Image] = []
@@ -55,6 +59,33 @@ func _initialize():
 			place(frame,cell("hair",row,d),rect)
 			frames.append(frame)
 		atlas("hair-"+["swept","waves","braids"][row],frames)
+	# Root coverage stays in the original head's coordinates, including its face
+	# opening. Tight-cropping it independently would shift the hairline/ear cutout.
+	for row in range(3):
+		var frames: Array[Image]=[]
+		for d in range(3):
+			var frame=blank()
+			var head: Image=sources["heads"]
+			var box=Rect2i(d*head.get_width()/3,row*head.get_height()/3,head.get_width()/3,head.get_height()/3)
+			var root: Image=sources["roots"]
+			var part=root.get_region(box).get_region(tight_rect(head.get_region(box)))
+			place(frame,part,Rect2i(48 if d!=1 else 54,28,104 if d!=1 else 100,100))
+			frames.append(frame)
+		atlas("roots-"+["round","square","lean"][row],frames)
+	for row in range(4):
+		var frames: Array[Image]=[]
+		for d in range(3):
+			var frame=blank()
+			var rect: Rect2i
+			if d==0:
+				rect=[Rect2i(46,17,108,74),Rect2i(41,12,118,86),Rect2i(46,16,108,82),Rect2i(45,0,110,105)][row]
+			elif d==1:
+				rect=[Rect2i(49,16,91,91),Rect2i(45,13,98,98),Rect2i(27,16,113,120),Rect2i(48,0,93,117)][row]
+			else:
+				rect=[Rect2i(46,17,108,112),Rect2i(41,12,118,117),Rect2i(46,16,108,136),Rect2i(45,0,110,133)][row]
+			place(frame,cell("styles",row,d),rect)
+			frames.append(frame)
+		atlas("hair-"+["crop","curls","ponytail","topknot"][row],frames)
 	for row in range(4):
 		var frames: Array[Image] = []
 		for d in range(3):
@@ -89,8 +120,13 @@ func cell(name: String,row: int,col: int) -> Image:
 	elif name == "accessories":
 		xs=[0.0,344.0/887,588.0/887,1.0]
 		ys=[0.0,400.0/1774,680.0/1774,950.0/1774,1220.0/1774,1490.0/1774,1.0]
+	elif name=="styles":
+		ys=[0.0,365.0/1448,695.0/1448,1040.0/1448,1.0]
 	var box=Rect2i(int(xs[col]*source.get_width()),int(ys[row]*source.get_height()),int((xs[col+1]-xs[col])*source.get_width()),int((ys[row+1]-ys[row])*source.get_height()))
 	var part=source.get_region(box)
+	return part.get_region(tight_rect(part))
+
+func tight_rect(part: Image) -> Rect2i:
 	# Ignore nearly invisible generation fringe when finding the placement box.
 	# Keep original RGBA pixels, including their antialiasing, within that box.
 	var lo=Vector2i(part.get_width(),part.get_height())
@@ -100,7 +136,7 @@ func cell(name: String,row: int,col: int) -> Image:
 			if part.get_pixel(x,y).a > 0.35:
 				lo.x=mini(lo.x,x);lo.y=mini(lo.y,y)
 				hi.x=maxi(hi.x,x);hi.y=maxi(hi.y,y)
-	return part.get_region(Rect2i(lo,hi-lo+Vector2i.ONE))
+	return Rect2i(lo,hi-lo+Vector2i.ONE)
 
 func place(frame: Image,part: Image,rect: Rect2i):
 	part.resize(rect.size.x,rect.size.y,Image.INTERPOLATE_LANCZOS)
