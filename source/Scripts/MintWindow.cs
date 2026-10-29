@@ -8,7 +8,7 @@ public partial class Main
     private Label _mintCategoryTitle=null!;
     private VBoxContainer _mintStats=null!;
     private readonly Dictionary<string,Control> _mintSectionHeaders=new();
-    private static Texture2D MintTexture(string name)=>ImageTexture.CreateFromImage(Image.LoadFromFile(ProjectSettings.GlobalizePath("res://ThirdParty/DubsMintMenus/Textures/"+name+".png")));
+    private static Texture2D MintTexture(string name)=>GD.Load<Texture2D>("res://ThirdParty/DubsMintMenus/Textures/"+name+".png");
     private Button MintButton(Node parent,string texture,string name,Action action,string fallback="")
     {
         var button=Button(parent,fallback,action);button.CustomMinimumSize=new(26,26);button.Flat=true;
