@@ -1,11 +1,19 @@
 .tools/
 source/.godot/
-source/bin/
-source/obj/
 source/builds/
 source/.local/
-benchmarks/bin/
-benchmarks/obj/
+
+# .NET build output, including projects under tools/checks/
+bin/
+obj/
+
+# Node and Python dependencies / caches
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
 .DS_Store
 *.user
 
@@ -24,8 +32,6 @@ export_credentials.cfg
 *.pfx
 *.p12
 /dist/
-__pycache__/
-*.pyc
 
 # Local Blender working copies and downloaded source archive
 /art/dwarf/mcp_work/
