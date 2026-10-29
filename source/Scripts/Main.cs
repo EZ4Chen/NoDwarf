@@ -112,12 +112,9 @@ public partial class Main : Node3D
         if (OS.GetCmdlineUserArgs().Contains("--designation-test")) ReviewDesignations();
         if (OS.GetCmdlineUserArgs().Contains("--level-guide-test")) ReviewLevelGuide();
         if (OS.GetCmdlineUserArgs().Contains("--object-commands-test")) ReviewObjectCommands();
-        if (OS.GetCmdlineUserArgs().Contains("--tool-equipment-test")) ReviewToolEquipment();
-        if (OS.GetCmdlineUserArgs().Contains("--equipment-dimensions-test")) ReviewEquipmentDimensions();
         if (OS.GetCmdlineUserArgs().Contains("--melee-test")) ReviewMelee();
-        if (OS.GetCmdlineUserArgs().Contains("--actor-model-test")) ReviewActorModel();
         if (OS.GetCmdlineUserArgs().Contains("--sprite-integration-test")) ReviewSpriteIntegration();
-        if (OS.GetCmdlineUserArgs().Contains("--dwarf-integration-test")) ReviewDwarfIntegration();
+        if (OS.GetCmdlineUserArgs().Contains("--dwarf-integration-test")) ReviewSpriteIntegration();
         if (OS.GetCmdlineUserArgs().Contains("--complex-combat-test")) ReviewComplexCombat();
         if (OS.GetCmdlineUserArgs().Contains("--combat-test")) ReviewCombat();
         if (OS.GetCmdlineUserArgs().Contains("--ladder-test")) ReviewLadders();

@@ -25,11 +25,6 @@ public partial class Main
                 view.Present(a,_world.SimulationTime,null,0);
                 if(hand.Transform!=pose)throw new Exception("Paused sprite attack changed pose");
             }
-            else
-            {
-                var player=ActorModelView.Descendants(view).OfType<AnimationPlayer>().Single();
-                if(Math.Abs(player.CurrentAnimationPosition-a.Combat.AttackTime)>.001)throw new Exception("Attack animation diverged from simulation");
-            }
             for(int i=0;i<4;i++)await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
             GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath("res://.local/melee-windup.png"));

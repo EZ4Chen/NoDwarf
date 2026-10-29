@@ -55,7 +55,7 @@ bash -c 'source source/tools/env.sh; dotnet build; "$GODOT_BIN" --headless --pat
 
 ## 当前人物显示：四方向 2D（2026-10-29）
 
-正式人物入口使用 `Assets/Characters/dwarf.json` 中的 `Renderer: sprite4`，男女贴图按镜头方向显示正面、背面和左右侧身。衣裤、皮帽、靴子、手套和手持工具接入真实装备槽，头像同步；动作采用纸片起伏和工具挥动。`bash tools/sprite-demo.sh` 打开可操作演示，`--sprite-integration-test` 验证营地接入（保留 `--dwarf-integration-test` 旧入口兼容）。默认 `tools/check.sh` 使用无窗口 2D 接入检查，不再自动验证旧人物骨架。素材、当前限制和旧 3D 资源的保留用途见 [人物显示文档](../docs/3D人物与剑盾近战.md)。下文旧 SVG／3D 显示章节为开发历史。
+正式人物入口使用 `Assets/Characters/dwarf.json` 中的 `Renderer: sprite4`，男女贴图按镜头方向显示正面、背面和左右侧身。衣裤、皮帽、靴子、手套和手持工具接入真实装备槽，头像同步；动作采用纸片起伏和工具挥动。`bash tools/sprite-demo.sh` 打开可操作演示，`--sprite-integration-test` 验证营地接入（保留 `--dwarf-integration-test` 旧入口兼容）。默认 `tools/check.sh` 使用无窗口 2D 接入检查，不再自动验证旧人物骨架。旧 3D 模型、源文件、专用入口及缓存已清理；当前身体使用 FlatPawn，手持贴图复用 Sprites4。资源与模拟数据边界见 [人物显示文档](../docs/3D人物与剑盾近战.md)。下文旧 SVG／3D 显示章节为开发历史。
 
 当前已接通 0.5 的征召、近战与战后护理，正在补充居民生活闭环：进食保障、伤员送饭、床位归属和篝火休闲。营养不良进度已接通，仓储容量和长局平衡仍待完成；云端 LLM 排在 0.6，魔法实验排在 0.8，详见 [开发版本计划](../docs/开发版本计划.md)。
 
@@ -1288,25 +1288,13 @@ Tab 用于切换控件焦点，不再作为生产面板快捷键。按钮与输�
 
 森林实测：Apple M2、Compatibility、雨林 1333 棵树、3 名征召居民对 3 名敌人、相机范围 90、预热 2 秒后采样 5 秒。1×：58.8 FPS／30.1 TPS，最长观测帧 25.1 ms；3×：58.7 FPS／90.4 TPS，最长观测帧 26.2 ms。两档分别从同一初始存档加载，均实际产生交战伤势。日志 `.local/complex-combat.log`；这是小规模战斗实测，不是百人作战或长局性能保证。
 
-### 可选 3D 矮人显示（模型待接入）
+### 当前人物与工具显示
 
-模型配置：`Assets/Characters/dwarf.json`，空 `Scene` 保留当前纸片人物。填入 GLB 或包装场景后重新启动即可接入居民与敌人；头像仍沿用现有图片。尺寸、原点、手部挂点、动画名及单手剑＋盾牌的后续接触判定方案见 [人物显示文档](../docs/3D人物与剑盾近战.md)。
+角色已统一使用新版 2D 纸片。旧 3D 模型、制作文件、骨架演示、专用检查和网格烘焙工具均已清理。`Assets/Characters/dwarf.json` 只选择 sprite4；当前身体来自 FlatPawn，手持工具复用 Sprites4。详细资源关系见 [人物显示与近战](../docs/3D人物与剑盾近战.md)。
 
-`--actor-model-test` 用程序生成的测试场景检查模型加载、模拟时间动画、暂停、朝向、脚底定位、缺失动画回退、装备挂点装卸。未提供正式模型，不能替代最终模型的视觉验收。当前只做显示适配，挥剑仍触发现有战斗表现；盾牌格挡状态机和真实扫掠命中尚未实现。
+铁斧、双刃战斧、锻锤、铲和锄的生产、装备、用途加成与双手限制继续生效。二维图标与原始来源记录在 `Assets/Textures/Items/`；预留远程装备仍只有素材，不代表玩法已实现。默认 `--sprite-integration-test` 检查工具图、换装与模拟状态。
 
-第二版矮人已默认启用：`Scenes/Characters/Dwarf.tscn`。`--dwarf-integration-test --keep-dwarf-preview` 可打开主地图模型验收场景。女版可将 `Assets/Characters/dwarf.json` 的 Scene 改为 `res://Scenes/Characters/DwarfFemale.tscn`。装备和身体遮挡复用 CharacterLabV2 的骨骼装配；详情和暂未映射的外观见 [人物显示文档](../docs/3D人物与剑盾近战.md)。
-
-通用近战已接入：攻击阶段、轨迹扫掠、主动盾挡、限时武器招架、体力与破防。防卫面板可调整主选居民的防御策略。配置/模型同步边界见 `../docs/3D人物与剑盾近战.md`；单手剑采样现有 Attack 动画，其余新增武器仍为数据模板，未增加生产配方。`bash tools/navigation-check.sh --combat-checks` 回归模拟；`--melee-test` 运行真实模型专项检查。存档版本 16，兼容旧档。
-
-装备尺寸统一入口：`Assets/Combat/equipment-geometry.json`。Size（米）、模型原始包围盒与有效接触段共同决定显示缩放、轨迹与自动推导的近战范围；更改后重新构建并启动。骨骼动作采样改为 `grip-poses.json`，只改武器尺寸不需要重烘焙。`--equipment-dimensions-test` 校验真实模型与判定一致性；`bash tools/navigation-check.sh --equipment-dimensions-checks` 验证尺寸和属性物流。
-
-物品属性接口含材质、品质、当前/最大耐久，存档版本 17；旧档默认兼容，磨损与属性加成未启用。不同属性不能合堆，搬运/拆分/取消/读档保留属性。
-
-### 工具与武器扩充（2026-10-28）
-
-新增铁斧、双刃战斧、铁铲、铁锄的制造/装备，补齐锻锤的真实 3D 手持显示。铁砧生产和库存补产可选择新工具，人物装备页沿用拾取、装备、卸下流程；玩家与 AI 共用原有命令接口。工作加成限定用途：斧头伐木、铲子挖土砂、锄头播种/种树，均为 +15%。双手战斧、铲、锄与盾牌互斥。铁剑、矿镐、木盾保留已有模型。
-
-工具贴图取自原始 PureBDcraft 包，按透明轮廓离线生成有厚度的共享网格。弓、弩、剪刀、钓竿的图标、模型和相关状态贴图已准备，玩法与生产入口尚未启用；长矛暂缓。来源、重建方法和资源接口见 `Assets/Equipment/README.md`。`--tool-equipment-test` 覆盖生产、用途加成、装备/存档、真实挥击与男女模型挂点；窗口模式输出素材及握持预览。
+近战的攻击阶段、轨迹扫掠、主动盾挡、限时招架、体力与破防保持不变。`Assets/Combat/equipment-geometry.json`、`grip-poses.json` 为模拟数据，未随模型删除。`tools/navigation-check.sh --equipment-dimensions-checks` 验证尺寸与物流属性，`--melee-checks` 验证近战。模型专用的三个旧测试入口已移除。
 
 ### 开采时的前墙遮挡（2026-10-29）
 

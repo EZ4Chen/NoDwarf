@@ -34,7 +34,7 @@ grep 'MINING_CUTAWAY_OK:' "$PROJECT_DIR/.local/mining-cutaway.log"
 grep 'DIG_VOLUME_OK:' "$PROJECT_DIR/.local/dig-volume.log"
 
 # Current 2D residents: tool rules, equipment art, directions, pause and movement.
-# The old rig/mesh checks remain explicit authoring reviews, outside this default suite.
+# Legacy rig/mesh assets and their authoring reviews have been removed.
 "$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --sprite-integration-test > "$PROJECT_DIR/.local/sprite-integration.log" 2>&1
 grep 'SPRITE_INTEGRATION_OK:' "$PROJECT_DIR/.local/sprite-integration.log"
 

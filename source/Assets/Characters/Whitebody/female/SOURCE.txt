@@ -1,4 +1,0 @@
-Dwarf - fixed: thecubber; commissioned by OpenGameArt.org; modifications by Beast.
-https://opengameart.org/content/dwarf-fixed
-CC BY 3.0: https://creativecommons.org/licenses/by/3.0/
-Local changes: modern materials, underwear, metre normalization, retargeted colony animations, fitted clothes and game export.
