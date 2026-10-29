@@ -17,8 +17,5 @@ macOS 包使用 ad-hoc 签名，尚未通过 Apple 公证；Windows 包尚未代
 Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net
 相关原始条款见同目录 PureBDcraft-terms.txt。
 中文字体 Noto Sans CJK SC Regular，许可证见 NotoSansCJK-LICENSE.txt。
-矮人底模 Dwarf - fixed：thecubber 创作，OpenGameArt.org 社区委托，Beast 修改。
-来源：https://opengameart.org/content/dwarf-fixed
-采用 CC BY 3.0：https://creativecommons.org/licenses/by/3.0/
-本项目修改了材质、基础衣物、尺寸、骨架动作及装备适配；详情见 Dwarf-SOURCE.txt。
+菜单移植与图标来源：Dubs Mint Menus（Dubwise），来源记录见 DubsMintMenus-NOTICE.txt。
 代码与第三方素材分别授权；当前尚未选择项目开源许可证。

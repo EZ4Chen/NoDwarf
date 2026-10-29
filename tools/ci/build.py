@@ -9,7 +9,10 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
+
+from macos_sign import sign_app, verify_app
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = ROOT / "source"
@@ -155,23 +158,30 @@ def build(target):
     executable = output / filename
     if target == "macos":
         executable = output / filename / "Contents/MacOS/NoDwarf"
-        run(["codesign", "--verify", "--deep", "--strict", output / filename])
+        # Regenerate the built-in signer's DER using Apple's native tool.
+        sign_app(output / filename, LOCAL)
     if not executable.is_file():
         raise RuntimeError("Export did not produce a runnable game")
     # Exercise the actual self-contained export, including assets and bundled .NET.
     checked_game(executable, "--smoke-test", "SMOKE_OK:")
     checked_game(executable, "--interaction-test", "INTERACTION_OK:")
-    checked_game(executable, "--tool-equipment-test", "TOOL_MODELS_OK:")
+    checked_game(executable, "--sprite-integration-test", "SPRITE_INTEGRATION_OK:")
     shutil.copy2(ROOT / "docs/PLAYER-README.txt", output / "README.txt")
     shutil.copy2(PROJECT / "Assets/Textures/PureBDcraft/terms of use.txt", output / "PureBDcraft-terms.txt")
     shutil.copy2(PROJECT / "Assets/Fonts/NotoSansCJK/LICENSE.txt", output / "NotoSansCJK-LICENSE.txt")
-    shutil.copy2(PROJECT / "Assets/Characters/Whitebody/male/SOURCE.txt", output / "Dwarf-SOURCE.txt")
+    shutil.copy2(PROJECT / "ThirdParty/DubsMintMenus/NOTICE.txt", output / "DubsMintMenus-NOTICE.txt")
     DIST.mkdir(exist_ok=True)
     archive = DIST / f"NoDwarf-{version}-{platform}.zip"
     if archive.exists():
         archive.unlink()
     if target == "macos":
         run(["ditto", "-c", "-k", "--sequesterRsrc", output, archive])
+        # Validate what players receive, including ZIP permissions and signing.
+        with tempfile.TemporaryDirectory(prefix="unpacked-macos-", dir=LOCAL) as folder:
+            run(["ditto", "-x", "-k", archive, folder])
+            app = Path(folder) / filename
+            verify_app(app)
+            checked_game(app / "Contents/MacOS/NoDwarf", "--smoke-test", "SMOKE_OK:")
     else:
         shutil.make_archive(str(archive.with_suffix("")), "zip", output)
     manifest = {"platform": platform, "commit": commit, "version": version,
