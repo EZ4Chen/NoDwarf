@@ -1,0 +1,20 @@
+{
+  "defaultWiki": "df-en",
+  "allowWikiManagement": false,
+  "wikis": {
+    "df-en": {
+      "sitename": "Dwarf Fortress Wiki (English)",
+      "server": "https://www.dwarffortresswiki.org",
+      "articlepath": "/index.php",
+      "scriptpath": "",
+      "readOnly": true
+    },
+    "df-zh": {
+      "sitename": "矮人要塞中文维基",
+      "server": "https://dfzh.huijiwiki.com",
+      "articlepath": "/wiki",
+      "scriptpath": "",
+      "readOnly": true
+    }
+  }
+}

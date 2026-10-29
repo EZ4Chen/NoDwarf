@@ -1,0 +1,8 @@
+{
+  "name": "nodwarf-wiki-mcp-tools",
+  "private": true,
+  "description": "Read-only Wiki research tooling; independent of the game runtime",
+  "dependencies": {
+    "@professional-wiki/mediawiki-mcp-server": "0.20.0"
+  }
+}
