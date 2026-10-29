@@ -1,14 +1,17 @@
 # NoDwarf
 
-开发中的 Godot / C# 方块世界殖民地模拟游戏。当前仓库用于私人备份和协作，尚未公开发布，也尚未选择项目开源许可证。
+开发中的 Godot / C# 方块世界殖民地模拟游戏。仓库已公开，提供免费的 Windows 和 macOS 开发预览版，欢迎通过 Issue 反馈问题、通过 PR 参与开发。
+
+从 [Releases](https://github.com/EZ4Chen/NoDwarf/releases) 下载对应平台的 ZIP，完整解压后运行。玩家无需安装 Godot 或 .NET；操作方式见 [游戏说明](source/README.md)。
 
 ## 项目入口
 
 - [`source/`](source/)：Godot 工程、C# 源码、场景和运行所需资源。
 - [`source/README.md`](source/README.md)：功能说明、操作方式、验证入口及开发记录。
 - [`benchmarks/`](benchmarks/)：寻路、模拟与性能检查。
-- [开发版本计划](开发版本计划.md)：版本目标与待完成工作。
-- [开发任务清单](开发任务清单与多Agent分工.md)、[方块世界与多层寻路](方块世界与多层寻路.md)、[流体系统设计与实施](流体系统设计与实施.md)：设计文档。
+- [文档目录](docs/README.md)：玩家说明、版本计划与设计文档。
+- [开发版本计划](docs/开发版本计划.md)：版本目标与待完成工作。
+- [开发任务清单](docs/开发任务清单与多Agent分工.md)、[方块世界与多层寻路](docs/方块世界与多层寻路.md)、[流体系统设计与实施](docs/流体系统设计与实施.md)：设计文档。
 
 ## 开发环境
 
@@ -63,7 +66,7 @@ git push origin v0.1.0-alpha.1
 
 两个平台都导出成功且安装包运行检查通过后，工作流才会创建 Release、上传两个 ZIP 和 `SHA256SUMS.txt`，最后发布。若上传中断，Release 保持草稿，重新运行失败任务可重试；已发布的同名版本不会被覆盖，应创建新版本标签。
 
-工作流使用仓库自带的 `GITHUB_TOKEN`，无需个人访问令牌。仓库为私有时，Release 和测试包也需要仓库访问权限。组织或仓库策略若禁止 Actions 写入，需要允许该工作流的 `contents: write` 发布任务。私人仓库的构建和存储计入账户的 Actions 用量。
+Release 下载包公开可用，无需仓库访问授权。工作流使用仓库自带的 `GITHUB_TOKEN`，无需个人访问令牌；仓库策略需要允许发布任务的 `contents: write` 权限。
 
 Mac 包仅作 ad-hoc 签名，未做 Apple 公证；Windows 包未做发行证书签名，系统可能显示来源验证提示。当前没有 Intel Mac 构建。自动检查不替代真实窗口、音频和长时间游玩验收。
 
@@ -77,4 +80,4 @@ Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net
 
 中文字体随游戏附带 Noto Sans CJK SC Regular（SIL Open Font License 1.1），来源与许可证见 [`source/Assets/Fonts/NotoSansCJK/`](source/Assets/Fonts/NotoSansCJK/)。
 
-私人仓库不代表这些素材已获得开源授权。未来公开仓库或发布游戏前，应确认各项素材的适用许可及署名要求。
+仓库公开可见，当前尚未选择项目开源许可证。代码与第三方素材分别适用各自的授权说明，第三方素材的原始条款和署名应予保留。
