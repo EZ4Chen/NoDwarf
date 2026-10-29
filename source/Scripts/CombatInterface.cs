@@ -6,10 +6,12 @@ public partial class Main
     private PanelContainer _combatPanel=null!;
     private Button _draftButton=null!,_combatStop=null!,_alertButton=null!;
     private Label _combatSummary=null!;
+    private HBoxContainer _raidTools=null!;
+    private Button _locateEnemy=null!;
     private OptionButton _defenseMode=null!;
     private readonly Dictionary<string,Node3D> _enemyVisuals=new();
     private DemoWorld? _combatVisualWorld;
-    private void CombatNotice(ResidentResult r){_world.Log(r.Message);RefreshUi();}
+    private void CombatNotice(ResidentResult r){ShowActionFeedback(r.Message,!r.Ok);RefreshUi();}
     private void BuildCombatInterface(Control root,HBoxContainer tabs,HBoxContainer selected)
     {
         _draftButton=IconButton(selected,"sword","征召",DraftSelectedResidents);
@@ -17,7 +19,7 @@ public partial class Main
         _combatStop=Button(selected,"停止",StopSelectedResidents);
         _combatPanel=Panel(root,Vector2.Zero,new Vector2(350,280));BottomLeft(_combatPanel,480,350);
         var column=new VBoxContainer();column.AddThemeConstantOverride("separation",8);_combatPanel.AddChild(column);
-        column.AddChild(Text("防卫 · 第一场近战",18,Ink));
+        column.AddChild(Text("防卫",18,Ink));
         _combatSummary=Text("",14,Ink,true);column.AddChild(_combatSummary);
         Button(column,"⚑ 设置集合点",()=>{SelectTool("rally");_combatPanel.Hide();_hint.Text="左键地面设置平民集合点；右键取消。";});
         _alertButton=Button(column,"开启集合警报",()=>CombatNotice(_world.SetCivilianAlert(!_world.CivilianAlert)));
@@ -27,10 +29,10 @@ public partial class Main
         foreach(var label in new[]{"自动选择","优先盾挡","只用招架","不主动防御"})_defenseMode.AddItem(label);
         UiAccess.Name(_defenseMode,"主选居民的近战防御方式","格挡与招架需要准备时间、朝向和体力；没有盾牌不能盾挡。");
         _defenseMode.ItemSelected+=index=>{if(_selectedWorker>=0)CombatNotice(_world.SetCombatDefense(_world.Workers[_selectedWorker].Id,new[]{"auto","block","parry","none"}[(int)index]));};
-        var raid=new HBoxContainer();column.AddChild(raid);
+        var raid=new HBoxContainer();_raidTools=raid;column.AddChild(raid);
         foreach(int count in new[]{1,3}){int n=count;var b=Button(raid,$"测试袭击 · {n} 人",()=>ConfirmTestRaid(n));UiAccess.Name(b,$"生成 {n} 名敌人的测试袭击","确认后敌人从地图边缘入场，可能导致居民受伤或死亡。");}
-        Button(column,"定位敌人",()=>{var e=_world.Enemies.FirstOrDefault(e=>!e.Person.Incapacitated);if(e is not null){_focus=WorldPosition(e.Tile);PositionCamera();}});
-        HudTab(tabs,"防卫",()=>{bool show=!_combatPanel.Visible;_combatPanel.Visible=show;_buildMenu.Hide();_worldMenu.Hide();RefreshUi();},"征召、平民集合与测试袭击");
+        _locateEnemy=Button(column,"定位敌人",()=>{var e=_world.Enemies.FirstOrDefault(e=>!e.Person.Incapacitated);if(e is not null){_focus=WorldPosition(e.Tile);PositionCamera();}});
+        HudTab(tabs,"防卫",()=>{TogglePanel(_combatPanel);RefreshUi();},"征召与平民集合");
         _combatPanel.Hide();
     }
     private void ConfirmTestRaid(int count)
@@ -50,6 +52,7 @@ public partial class Main
         _draftButton.TooltipText="R 切换选中居民的征召状态；右键地面移动，右键敌人攻击。";
         _alertButton.Text=_world.CivilianAlert?"解除集合警报":"开启集合警报";
         int active=_world.Enemies.Count(e=>!e.Person.Incapacitated);
+        _raidTools.Visible=_developerMode;_locateEnemy.Disabled=active==0;_locateEnemy.TooltipText=active==0?"当前没有活动敌人":"定位最近列出的活动敌人";
         _combatSummary.Text=$"征召 {_world.Workers.Count(w=>w.Combat.Drafted)} 人 · 活动敌人 {active}\n集合点：{(_world.RallyPoint is Cell c?$"{c.X}, {c.Z} / {c.Level}m":"未设置")}\n选中居民后按 R 征召；右键地面移动，右键敌人攻击。";
         if(w is not null)_combatSummary.Text+=$"\n{w.Name} · 体力 {w.Combat.Stamina:0}/100 · {w.Status}";
         if(_world.Enemies.Count>0&&_world.Workers.Count>0&&_world.Workers.All(w=>w.Person.Incapacitated))_combatSummary.Text+="\n全员失能：可暂停并读取此前存档。";

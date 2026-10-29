@@ -14,7 +14,9 @@ public partial class Main
             {var item=_world.SpawnItem(name,1,actor.Tile);item.Owner=actor.Id;item.Slot=ResidentGear.Get(name)!.Slot;}
             _focus=WorldPosition(actor.Tile);_camera.Size=4;PositionCamera();SyncWorld();_terrainView.FlushMeshes();
             var holder=new Node3D{Position=WorldPosition(actor.Tile)};AddChild(holder);
-            var view=new ActorModelView();holder.AddChild(view);view.Initialize();view.UpdateEquipment(_world.Inventory(actor));
+            // This verifies the retained 3D collision-authoring rig, independently of the live sprite renderer.
+            var config=ActorModelView.LoadLegacyDefinition();
+            var view=new ActorModelView();holder.AddChild(view);view.Initialize(new(){Scene=config.Scene,Scale=config.Scale,YawDegrees=config.YawDegrees,Animations=config.Animations});view.UpdateEquipment(_world.Inventory(actor));
             var rig=ActorModelView.Descendants(view).OfType<Skeleton3D>().Single();
             var right=ActorModelView.Descendants(rig).OfType<BoneAttachment3D>().Single(b=>b.BoneName=="slot_hand_r");
             var left=ActorModelView.Descendants(rig).OfType<BoneAttachment3D>().Single(b=>b.BoneName=="slot_hand_l");

@@ -16,6 +16,19 @@ internal sealed class InteriorOcclusionScratch
 internal static class InteriorOcclusionBuilder
 {
     private static readonly Cell[] Directions={new(1,0),new(-1,0),new(0,1),new(0,-1)};
+    // Mining visibility follows real excavated floor cells, including open trenches.
+    // No exterior flood fill or undiscovered solid targets are needed.
+    public static InteriorTopology ExcavatedFloors(InteriorOcclusionInput input,int floor,CancellationToken token=default)
+    {
+        var members=new bool[TerrainMap.Size*TerrainMap.Size];var cells=new List<Cell>();int visits=0;
+        foreach(var c in input.Terrain.Excavated.Concat(input.Terrain.DiscoveredCavernFloors))
+        {
+            if((visits++&127)==0)token.ThrowIfCancellationRequested();
+            if(c.Level!=floor||input.Solid(c)||input.Terrain.Ramp(c)||input.Doors.Contains(c)||!input.Solid(c+new Cell(0,0,-1)))continue;
+            cells.Add(c);members[c.X*TerrainMap.Size+c.Z]=true;
+        }
+        return new(cells,members,visits);
+    }
     public static InteriorTopology Rooms(InteriorOcclusionInput input,int floor,CancellationToken token=default)
     {
         bool Open(Cell c)=>DemoWorld.Inside(c)&&!input.Terrain.Solid(c)&&!input.Terrain.Ramp(c)
@@ -25,7 +38,7 @@ internal static class InteriorOcclusionBuilder
         // connected to the escape, and later searches can stop when they reach it.
         var visited=new byte[TerrainMap.Size*TerrainMap.Size];var members=new bool[visited.Length];
         var cells=new List<Cell>();var component=new List<Cell>();var frontier=new Stack<Cell>();int visits=0;
-        var seeds=input.Terrain.Excavated.Where(c=>c.Level==floor)
+        var seeds=input.Terrain.Excavated.Concat(input.Terrain.DiscoveredCavernFloors).Where(c=>c.Level==floor)
             .Concat(input.BuildingCells.Where(c=>c.Level==floor).SelectMany(c=>Directions.Select(d=>c+d)));
         foreach(var seed in seeds)
         {
@@ -57,7 +70,7 @@ internal static class InteriorOcclusionBuilder
         return new(cells,members,visits);
     }
     public static Dictionary<Cell,float> Caps(InteriorOcclusionInput input,InteriorTopology topology,int floor,int height,
-        (int X,int Z)[] offsets,InteriorOcclusionScratch scratch,CancellationToken token=default)
+        (int X,int Z)[] offsets,InteriorOcclusionScratch scratch,CancellationToken token=default,float rimHeight=.2f)
     {
         foreach(int id in scratch.Touched)scratch.Columns[id]=false;
         scratch.Touched.Clear();int visited=0;
@@ -80,7 +93,7 @@ internal static class InteriorOcclusionBuilder
             bool rim=(x>0&&topology.Membership[id-TerrainMap.Size])||(x+1<TerrainMap.Size&&topology.Membership[id+TerrainMap.Size])
                 ||(z>0&&topology.Membership[id-1])||(z+1<TerrainMap.Size&&topology.Membership[id+1]);
             for(int y=floor;y<floor+height-1;y++)
-            {var block=new Cell(x,z,y);if(DemoWorld.Inside(block)&&input.Solid(block))caps[block]=floor+(y==floor&&rim?.2f:0f);}
+            {var block=new Cell(x,z,y);if(DemoWorld.Inside(block)&&input.Solid(block))caps[block]=floor+(y==floor&&rim?rimHeight:0f);}
         }
         return caps;
     }

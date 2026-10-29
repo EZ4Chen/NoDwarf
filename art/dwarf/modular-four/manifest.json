@@ -1,0 +1,62 @@
+{
+  "renderer": "DirectionalDwarfView; default sprite4 gameplay path",
+  "directions": [
+    "front",
+    "right",
+    "back",
+    "left (mirror of right, anatomical depth reordered)"
+  ],
+  "frame_size": [
+    200,
+    280
+  ],
+  "atlas_size": [
+    600,
+    280
+  ],
+  "body_shapes": [
+    "standard",
+    "broad",
+    "round"
+  ],
+  "sex": "shared body shape; female undershirt overlay",
+  "animation": [
+    "idle",
+    "walk",
+    "carry",
+    "two-hand pickaxe work",
+    "one-hand work",
+    "attack",
+    "block_hold",
+    "parry",
+    "down"
+  ],
+  "runtime": "One cached body/head/apparel sprite, two animated palms, two animated feet, up to two held sprites. 48-entry composite cache; no per-frame image assembly.",
+  "portrait": "Same front composite with hands and feet",
+  "art": "Existing approved front artwork retained; new side/back images generated with built-in imagegen. See prompts.json.",
+  "pack": "pack.py",
+  "launch": "bash source/tools/sprite-demo.sh",
+  "main_review": "--sprite-integration-test --keep-dwarf-preview",
+  "legacy": "slim body normalizes to regular; existing sprite4 config now uses modular art.",
+  "verification": {
+    "build": "passed, zero warnings/errors",
+    "sprite_integration": "passed: equipment, directions, save migration, independent hand/foot poses, two-hand mining grips, real movement",
+    "smoke": "SMOKE_OK",
+    "appearance_editor": "CHARACTER_PREVIEW_OK; layout fits window",
+    "recording": {
+      "frames": 240,
+      "fps": 24,
+      "seconds": 10,
+      "size": [
+        1280,
+        800
+      ]
+    },
+    "screenshots": [
+      "four-directions.png",
+      "female-directions.png",
+      "in-game.png",
+      "appearance-editor.png"
+    ]
+  }
+}

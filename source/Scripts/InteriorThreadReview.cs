@@ -38,8 +38,8 @@ public partial class Main
                     }
                     rows.Add(new{scene,step=i,mainMs,readyMs=Stopwatch.GetElapsedTime(start).TotalMilliseconds,
                         snapshotBytes,caps=_wallCaps?.Count??0,signature=CapSignature(_wallCaps),background=_backgroundInterior,
-                        visited=_interiorTopologies[ActiveLevel].Data.Visits});
-                    if(outside&&_interiorTopologies[ActiveLevel].Data.Visits>=TerrainMap.Size*TerrainMap.Size/10)
+                        visited=_interiorTopologies[(ActiveLevel,false)].Data.Visits});
+                    if(outside&&_interiorTopologies[(ActiveLevel,false)].Data.Visits>=TerrainMap.Size*TerrainMap.Size/10)
                         throw new Exception("Exterior search did not stop at a connected escape witness");
                     await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
                 }

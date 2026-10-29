@@ -5,8 +5,8 @@ namespace NoDwarf;
 public partial class Main
 {
     private (DemoWorld,long,int)? _interiorCacheEpoch;
-    private readonly Dictionary<int,(InteriorTopology Data,LinkedListNode<int> Age)> _interiorTopologies=new();
-    private readonly LinkedList<int> _topologyLru=new();
+    private readonly Dictionary<(int Floor,bool Mining),(InteriorTopology Data,LinkedListNode<(int Floor,bool Mining)> Age)> _interiorTopologies=new();
+    private readonly LinkedList<(int Floor,bool Mining)> _topologyLru=new();
     private sealed class InteriorFootprint : IEquatable<InteriorFootprint>
     {
         public readonly (int X,int Z)[] Offsets;
@@ -24,7 +24,7 @@ public partial class Main
         public override bool Equals(object? other)=>other is InteriorFootprint footprint&&Equals(footprint);
         public override int GetHashCode()=>_hash;
     }
-    private readonly record struct InteriorCutKey(int Floor,int Height,InteriorFootprint Footprint);
+    private readonly record struct InteriorCutKey(int Floor,int Height,InteriorFootprint Footprint,bool Mining);
     private readonly Dictionary<InteriorCutKey,(Dictionary<Cell,float> Caps,LinkedListNode<InteriorCutKey> Age)> _interiorCuts=new();
     private readonly LinkedList<InteriorCutKey> _cutLru=new();
     private int _cachedInteriorCaps,_interiorOcclusionBuilds,_interiorCacheHits;
@@ -34,7 +34,7 @@ public partial class Main
     private TerrainMap? _interiorTerrainSource,_interiorTerrainSnapshot;
     private int _interiorTerrainRevision=-1;
     private long _interiorGeneration;
-    private InteriorCutKey InteriorKey(int floor,int height)=>new(floor,height,new InteriorFootprint(CameraBack,(height-1+.5f)/Mathf.Tan(_cameraPitch)));
+    private InteriorCutKey InteriorKey(int floor,int height)=>new(floor,height,new InteriorFootprint(CameraBack,(height-1+.5f)/Mathf.Tan(_cameraPitch)),MiningCutaway&&!_interiorView);
     private InteriorOcclusionInput CaptureInteriorInput()
     {
         if(_interiorSnapshot is not null)return _interiorSnapshot;
@@ -59,19 +59,19 @@ public partial class Main
         _interiorTopologies.Clear();_topologyLru.Clear();
         _interiorCuts.Clear();_cutLru.Clear();_cachedInteriorCaps=0;
     }
-    private InteriorTopology InteriorRooms(int floor)
+    private InteriorTopology InteriorRooms(int floor,bool mining=false)
     {
-        if(_interiorTopologies.TryGetValue(floor,out var cached))
+        if(_interiorTopologies.TryGetValue((floor,mining),out var cached))
         {_topologyLru.Remove(cached.Age);_topologyLru.AddLast(cached.Age);return cached.Data;}
-        var topology=InteriorOcclusionBuilder.Rooms(CaptureInteriorInput(),floor);
-        StoreInteriorTopology(floor,topology);return topology;
+        var topology=mining?InteriorOcclusionBuilder.ExcavatedFloors(CaptureInteriorInput(),floor):InteriorOcclusionBuilder.Rooms(CaptureInteriorInput(),floor);
+        StoreInteriorTopology(floor,topology,mining);return topology;
     }
-    private void StoreInteriorTopology(int floor,InteriorTopology topology)
+    private void StoreInteriorTopology(int floor,InteriorTopology topology,bool mining=false)
     {
-        if(_interiorTopologies.ContainsKey(floor))return;
+        if(_interiorTopologies.ContainsKey((floor,mining)))return;
         _roomTopologyBuilds++;_world.Probe?.Count("view.interior-visited-cells",topology.Visits);
-        _interiorTopologies[floor]=(topology,_topologyLru.AddLast(floor));
-        if(_topologyLru.Count>8){int oldest=_topologyLru.First!.Value;_topologyLru.RemoveFirst();_interiorTopologies.Remove(oldest);}
+        _interiorTopologies[(floor,mining)]=(topology,_topologyLru.AddLast((floor,mining)));
+        if(_topologyLru.Count>8){var oldest=_topologyLru.First!.Value;_topologyLru.RemoveFirst();_interiorTopologies.Remove(oldest);}
     }
     private bool TryInteriorCaps(InteriorCutKey key,out Dictionary<Cell,float> caps)
     {
@@ -88,8 +88,8 @@ public partial class Main
         var key=InteriorKey(floor,height);
         if(TryInteriorCaps(key,out var cached))return cached;
         _interiorOcclusionBuilds++;_world.Probe?.Count("view.interior-cache-miss");
-        var topology=InteriorRooms(floor);
-        var caps=InteriorOcclusionBuilder.Caps(CaptureInteriorInput(),topology,floor,height,key.Footprint.Offsets,_interiorSyncScratch);
+        var topology=InteriorRooms(floor,key.Mining);
+        var caps=InteriorOcclusionBuilder.Caps(CaptureInteriorInput(),topology,floor,height,key.Footprint.Offsets,_interiorSyncScratch,rimHeight:key.Mining?.1f:.2f);
         _world.Probe?.Count("view.interior-columns-tested",_interiorSyncScratch.Touched.Count);
         StoreInteriorCaps(key,caps);return caps;
     }

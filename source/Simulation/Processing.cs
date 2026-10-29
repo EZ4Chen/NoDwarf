@@ -3,6 +3,10 @@ public sealed record ProcessingRecipe(string Id,string Name,BuildKind Station,Di
 public static class ProcessingCatalog
 {
     public static readonly ProcessingRecipe[] All={
+        new("splint","夹板：1 木料 + 1 布 → 2 夹板",BuildKind.Workbench,new(){{"wood",1},{"cloth",1}},"splint",2),
+        new("prosthesis","木制义肢：3 木料 + 1 布 → 义肢",BuildKind.Workbench,new(){{"wood",3},{"cloth",1}},"prosthesis",1),
+        new("bucket","水桶：2 木料 → 水桶",BuildKind.Workbench,new(){{"wood",2}},"bucket",1),
+        new("compost","处理腐败物：2 腐败物 → 土壤",BuildKind.Workbench,new(){{"rot",2}},"soil",1),
         new("flour","磨粉：2 小麦 → 2 面粉",BuildKind.Mill,new(){{"wheat",2}},"flour",2),
         new("bread","烘焙：2 面粉 + 1 木料 → 3 口粮",BuildKind.Stove,new(){{"flour",2},{"wood",1}},"meal",3),
         new("potato_meal","煮土豆：2 土豆 + 1 木料 → 2 口粮",BuildKind.Stove,new(){{"potato",2},{"wood",1}},"meal",2),

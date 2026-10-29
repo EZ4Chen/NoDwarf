@@ -95,7 +95,7 @@ public partial class Main
             if(onCharacters&&pair.Value.Playable)
             {
                 var holder=new Node3D{Position=new(0,-.7f,0)};viewport.AddChild(holder);
-                var actor=new ActorModelView();holder.AddChild(actor);actor.Initialize();
+                var actor=new ActorModelView();holder.AddChild(actor);actor.Initialize(ActorModelView.LoadLegacyDefinition());
                 var worn=new[]{"shirt","trousers","boots",pair.Key}.Select(id=>new ItemStack{Item=id,Slot=ResidentGear.Get(id)!.Slot,Count=1});
                 actor.UpdateEquipment(worn);actor.Present(new DemoWorker{Name="展示居民"},0,Vector3.Back,0);
             }

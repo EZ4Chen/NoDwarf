@@ -1,0 +1,17 @@
+{
+  "Scene": "res://Scenes/Characters/Dwarf.tscn",
+  "Scale": 1.0,
+  "YawDegrees": 180,
+  "Animations": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "combat_idle": "Idle",
+    "work": "Mine",
+    "carry": "Carry",
+    "attack": "Attack",
+    "block_hold": "Guard",
+    "parry": "Guard"
+  },
+  "EquipmentScenes": {},
+  "Renderer": "model3d"
+}

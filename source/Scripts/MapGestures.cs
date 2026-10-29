@@ -60,7 +60,7 @@ public partial class Main
                     {
                         _orbitPitch=Mathf.Clamp(_cameraPitch+delta.Y*.006f,MinCameraPitch,MaxCameraPitch);
                         _topDown=false;_angleButton.Text="俯视";
-                        if(_interiorView)_revision=-1;
+                        if(LocalWallCutaway)_revision=-1;
                     }
                     _digStart=null;_digEnd=null;PositionCamera();_hoverCell=null;Clear(_hover);
                 }
@@ -77,13 +77,14 @@ public partial class Main
         {
             if(input is InputEventMouseMotion motion)
             {
-                if(PlanePick(motion.Position,start.Level+1) is Cell end)_digEnd=end with{Level=start.Level};
+                if(PlanePick(motion.Position,(_digEnd??start).Level+1) is Cell end)_digEnd=end with{Level=(_digEnd??start).Level};
                 _hoverCell=null;GetViewport().SetInputAsHandled();return true;
             }
-            if(input is InputEventMouseButton{ButtonIndex:MouseButton.Left,Pressed:false} release)
+            if(input is InputEventMouseButton{ButtonIndex:MouseButton.Left,Pressed:true} release)
             {
+                if(GetViewport().GuiGetHoveredControl() is not null)return false;
                 var end=_digEnd??start;_digStart=null;_digEnd=null;
-                if(GetViewport().GuiGetHoveredControl() is null)CommitDigDrag(start,end);
+                CommitDigDrag(start,end);
                 Clear(_hover);_hoverCell=null;GetViewport().SetInputAsHandled();return true;
             }
             if(input is InputEventKey{Pressed:true,Keycode:Key.Escape} || input is InputEventMouseButton{ButtonIndex:MouseButton.Right,Pressed:true})
@@ -93,30 +94,63 @@ public partial class Main
     }
     private void CommitDigDrag(Cell start,Cell end)
     {
+        if(_tool=="canceldig"){CommitCancelDig(start,end);return;}
+        string region=Guid.NewGuid().ToString("N");
+        var regionMin=new Cell(Math.Min(start.X,end.X),Math.Min(start.Z,end.Z),Math.Min(start.Level,end.Level));
+        var regionMax=new Cell(Math.Max(start.X,end.X),Math.Max(start.Z,end.Z),Math.Max(start.Level,end.Level)+(_tool=="digstairs"?2:0));
         int count=0,skipped=0;bool stairs=_tool=="digstairs";
+        long volume=(long)(Math.Abs(start.X-end.X)+1)*(Math.Abs(start.Z-end.Z)+1)*(Math.Abs(start.Level-end.Level)+1);
+        if(volume>4096){_world.Log("挖掘选区超过 4096 格，请分批规划。");RefreshUi();return;}
         for(int x=Math.Min(start.X,end.X);x<=Math.Max(start.X,end.X);x++)
         for(int z=Math.Min(start.Z,end.Z);z<=Math.Max(start.Z,end.Z);z++)
+        for(int y=Math.Max(start.Level,end.Level);y>=Math.Min(start.Level,end.Level);y-=stairs?3:1)
         {
-            var c=new Cell(x,z,start.Level);
+            var c=new Cell(x,z,y);
             if(!_world.CanDig(c,stairs)){skipped++;continue;}
             bool ok=_developerMode&&_creative?_world.DeveloperDig(c,stairs,_facing):_world.QueueDig(c,stairs,_facing,false);
-            if(ok)count++;else skipped++;
+            if(ok)
+            {
+                count++;
+                if(!(_developerMode&&_creative)&&_world.Jobs.LastOrDefault() is {Dig:true,Demolish:false} job&&job.Cell==c)
+                {job.DigRegion=region;job.DigRegionMin=regionMin;job.DigRegionMax=regionMax;}
+            }
+            else skipped++;
         }
-        _world.Log($"挖掘：{count} 格{(_developerMode&&_creative?"已挖除":"已规划")}，跳过 {skipped} 格；目标高度 {start.Level} m，深度 {(stairs?3:1)} 格。");
+        _world.Log($"挖掘：{count} 格{(_developerMode&&_creative?"已挖除":"已规划")}，跳过 {skipped} 格；高度 {Math.Min(start.Level,end.Level)} 至 {Math.Max(start.Level,end.Level)+(stairs?2:0)} m。");
+        SyncWorld();RefreshUi();
+    }
+    private void CommitCancelDig(Cell start,Cell end)
+    {
+        // Intersect task volume too: legacy three-metre excavations can start below the selection.
+        var jobs=_world.Jobs.Where(j=>j.Dig&&!j.Demolish&&j.Cell.X>=Math.Min(start.X,end.X)&&j.Cell.X<=Math.Max(start.X,end.X)
+            &&j.Cell.Z>=Math.Min(start.Z,end.Z)&&j.Cell.Z<=Math.Max(start.Z,end.Z)
+            &&j.Cell.Level<=Math.Max(start.Level,end.Level)&&j.Cell.Level+j.DigHeight-1>=Math.Min(start.Level,end.Level)).ToArray();
+        foreach(var job in jobs)_world.CancelJob(job,false);
+        _world.Log($"已取消 {jobs.Length} 个挖掘任务；已有建筑、其他规划与已挖地形保持不变。");
         SyncWorld();RefreshUi();
     }
     private void DrawDigDrag(Cell start,Cell end)
     {
         if(_hoverCell==end)return;_hoverCell=end;
         Clear(_hover);
-        var center=WorldPosition(new Cell(0,0,start.Level))+new Vector3((start.X+end.X)*.5f,1.025f,(start.Z+end.Z)*.5f);
-        float w=Math.Abs(start.X-end.X)+1,d=Math.Abs(start.Z-end.Z)+1;
-        var mat=Mat("edc47b");
+        float w=Math.Abs(start.X-end.X)+1,d=Math.Abs(start.Z-end.Z)+1,h=Math.Abs(start.Level-end.Level)+(_tool=="digstairs"?3:1);
+        var center=WorldPosition(new Cell(0,0,Math.Min(start.Level,end.Level)))+new Vector3((start.X+end.X)*.5f,h/2,(start.Z+end.Z)*.5f);
+        bool oversized=_tool!="canceldig"&&(long)w*(long)d*(long)h>4096;
+        var mat=Mat(oversized?"ff6464":_tool=="canceldig"?"ff927b":"ffd36b");
+        mat.ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded;mat.NoDepthTest=true;
+        foreach(float a in new[]{-1f,1f}) foreach(float b in new[]{-1f,1f})
+        {
+            Box(_hover,center+new Vector3(a*w/2,b*h/2,0),new Vector3(.035f,.035f,d),mat);
+            Box(_hover,center+new Vector3(0,a*h/2,b*d/2),new Vector3(w,.035f,.035f),mat);
+            Box(_hover,center+new Vector3(a*w/2,0,b*d/2),new Vector3(.035f,h,.035f),mat);
+        }
+        // Layer rings make vertical extent readable without one mesh per selected voxel.
+        for(int y=1;y<h;y++)
         foreach(float sign in new[]{-1f,1f})
         {
-            Box(_hover,center+new Vector3(sign*w/2,0,0),new Vector3(.035f,.035f,d),mat);
-            Box(_hover,center+new Vector3(0,0,sign*d/2),new Vector3(w,.035f,.035f),mat);
+            Box(_hover,center+new Vector3(sign*w/2,y-h/2,0),new Vector3(.015f,.015f,d),mat);
+            Box(_hover,center+new Vector3(0,y-h/2,sign*d/2),new Vector3(w,.015f,.015f),mat);
         }
-        _hint.Text=$"选区 {(int)w} × {(int)d} · 高度 {start.Level} m · 松开左键确认 / 右键或 Esc 取消";
+        _hint.Text=$"{(_tool=="canceldig"?"取消挖掘（仅未完成任务）":"挖掘")} {(int)w} × {(int)d} × {(int)h} · {Math.Min(start.Level,end.Level)} 至 {Math.Max(start.Level,end.Level)} m · +/− 选层 · 再次左键确认 / 右键或 Esc 取消{(oversized?" · 超过 4096 格，请缩小范围":"")}";
     }
 }

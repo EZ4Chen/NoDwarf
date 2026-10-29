@@ -21,6 +21,7 @@ public sealed partial class DemoWorld
         if(Trees.ContainsKey(c))return QueueTree(c,true);
         if(!CanDig(c,stairs,height)) { if(announce)Log("此处不能挖掘：需要天然岩土，且不能覆盖建筑、其他挖掘任务或树根。");return false; }
         Jobs.Add(new DemoJob {Id=++_nextJob,Cell=c,Dig=true,DigHeight=stairs?3:height,Facing=facing});Revision++;
+        CheckDigWater(Jobs[^1]);RefreshLifeAlerts();
         if(announce)Log(stairs?"已规划楼梯坑：只挖出三米净空，完成后请另选材质安装楼梯。":"已规划挖掘一个方块（1 米），其他高度保持不变。");return true;
     }
     private static bool PlannedHazard(DemoJob j,Cell c) => j.Construction && (j.Dig
@@ -28,6 +29,7 @@ public sealed partial class DemoWorld
         : j.Cell==c);
     private bool DigSafe(DemoJob job, HashSet<Cell>? residentFeet = null)
     {
+        if(!CheckDigWater(job))return false;
         if(job.Demolish&&RemovalEndangersResident(job.Cell,residentFeet))return false;
         if(job.Demolish)return residentFeet is not null ? !residentFeet.Contains(job.Cell+new Cell(0,0,1)) : !Workers.Any(w=>w.Tile==job.Cell+new Cell(0,0,1)||(w.Path.TryPeek(out var next)&&next==job.Cell+new Cell(0,0,1)));
         // Protect residents; removing a building foundation now triggers gravity.

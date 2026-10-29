@@ -1,0 +1,53 @@
+{
+  "method": "built-in image_gen.imagegen",
+  "jobs": [
+    {
+      "name": "body-turns",
+      "prompt": "Extend this reference into SIDE and BACK sprites for the same simplified adult dwarf game pawn bodies. True alpha transparent atlas, 1024x1536, exactly TWO columns and FOUR equal rows, with generous clear gaps inside every cell. LEFT COLUMN strict side profile facing image RIGHT; RIGHT COLUMN directly BACK facing away. ROW1 standard torso; ROW2 broad square torso; ROW3 rounded stout torso; ROW4 separate cream undershirt garment ONLY viewed from side and back. Rows 1-3: neck nub, continuous smooth shoulder-to-body silhouette, opaque cream boxer shorts lower quarter, NO heads arms hands legs feet. Same gender-neutral silhouettes, no muscles, no chest anatomy, no body hair or navel, broad simple peach painted shading. All body tokens same height within cell. Side view must be narrow, belly protrudes to RIGHT; back view shows only smooth back and back of shorts, no front seams or front neckline. Row4 garment is plain high-coverage cream cropped undershirt with broad straps, no body inside. Match reference palette, bold dark outlines, simplification. No text, grid, floor or background.",
+      "refs": [
+        "shared-bodies-source.png"
+      ]
+    },
+    {
+      "name": "head-turns",
+      "prompt": "Make alternative views of these exact THREE mature adult dwarf bald unbearded heads, preserving distinctive broad noses, thick brows, warm skin, painted dark outlines. Transparent sprite atlas 1024x1536, TWO columns THREE rows, six isolated heads with generous transparent gutters. Rows correspond reference heads left to right: square stern face, round gentle face, lean long face. LEFT column strict RIGHT-facing side profile (nose points image RIGHT, only one eye visible). RIGHT column directly BACK of the corresponding bald head, ears visible, NO face visible. Equal crown and chin heights within each cell. Only heads, no neck/body/hair/beard/clothing/text.",
+      "refs": [
+        "heads-source.png"
+      ]
+    },
+    {
+      "name": "hair-turns",
+      "prompt": "Create modular hair overlays for the reference's THREE hairstyles on transparent background, 1024x1536 atlas, TWO columns THREE equal rows, one separated hair sprite per cell with 40px gutters. Row1 short swept hair, row2 shoulder-length waves, row3 twin braids. LEFT column strict side view for a head facing RIGHT, empty transparent face opening on RIGHT. RIGHT column straight back view, complete back of hair mass. No heads, faces, skin, necks or bodies; just freestanding hair overlays, matching brown-gray reference paint texture. Braids in side profile sit behind the ear toward image LEFT, not over the nose. Dark outlined game art, no labels/grid/background.",
+      "refs": [
+        "hair-source.png"
+      ]
+    },
+    {
+      "name": "outfit-turns",
+      "prompt": "Extend reference clothing into side and back views on true transparent background. Atlas 1024x1024, TWO columns TWO rows, four isolated garments with 50px empty gutters. LEFT COLUMN strict profile facing RIGHT; RIGHT COLUMN straight BACK. TOP ROW teal work tunic with brown waist belt. BOTTOM ROW cream work shirt plus brown leather apron; back view shows apron cross straps and waist ties over cream shirt. Compact broad adult dwarf pawn silhouette, collar to hip-length hem, same proportions as reference, gently sloped shoulders, no projecting arms or long sleeves. No heads, hands, legs, body inside, no text/grid. Same painted game art and dark outlines; no anatomical chest divisions.",
+      "refs": [
+        "art/dwarf/modular-dwarf/outfits-source.png"
+      ]
+    },
+    {
+      "name": "limb-turns",
+      "prompt": "Transparent 2D fantasy dwarf game modular limb sprite sheet. 1024x1536, TWO columns FOUR equal rows, each single sprite contained with 40px transparent gutters. LEFT column SIDE view facing RIGHT. RIGHT column BACK view facing away. Row1 small bare fist, fingers curled, peach skin, minimal creases. Row2 small bare foot, toes point RIGHT in side view, heel only in back view. Row3 brown leather mitten glove curled to grip a tool; side view and back of glove. Row4 brown leather ankle boot with buckle and thick sole, toe points RIGHT in side view, back heel in back view. Follow supporting references for exact warm skin and leather palette, simple drawn painted art, thick dark outlines. No forearms/legs/other body parts, no items, no floor shadow, no text or grid. Each sprite isolated, no pairs within a cell.",
+      "refs": [
+        "art/dwarf/modular-dwarf/limbs-v2-source.png",
+        "source/Assets/Characters/CompactPrototype/boot.png",
+        "source/Assets/Characters/CompactPrototype/hand.png"
+      ]
+    },
+    {
+      "name": "beard-turns",
+      "prompt": "Draw side-view counterparts of these three dwarf beard overlays. Transparent landscape 1536x512 atlas, THREE equal columns with large gutters, ONE beard per column. All strict SIDE profile for a head facing RIGHT, mustache under nose at upper RIGHT and beard volume sweeping down and slightly LEFT toward neck. First short gray mustache/beard, second full long gray mustache/beard, third braided gray mustache/beard. Match reference painted dark outline and gray-white hair. Only beard hair, no skin, faces, heads or clothing, no text/grid. Profile shape rather than frontal symmetric beard.",
+      "refs": [
+        "art/dwarf/modular-dwarf/beards-source.png"
+      ]
+    },
+    {
+      "name": "heel",
+      "prompt": "One isolated brown leather ankle boot seen strictly from behind, showing heel, rear vertical seam and dark sole; no toe box or rear buckle. Transparent hand-painted fantasy game art."
+    }
+  ]
+}

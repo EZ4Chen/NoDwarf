@@ -11,7 +11,7 @@ public readonly record struct WorldView(int? Level, bool RevealAll = false, IRea
     public bool Known(TerrainMap terrain, Cell c)
     {
         if(RevealAll) return true;
-        bool Open(Cell p) => DemoWorld.Inside(p) && !terrain.Solid(p) && !terrain.Ramp(p);
+        bool Open(Cell p) => DemoWorld.Inside(p) && !terrain.Solid(p) && !terrain.Ramp(p) && terrain.KnownAir(p);
         if(Open(c) || terrain.Ramp(c)) return true;
         foreach(var d in Neighbors) if(Open(c+d)) return true;
         return false;
@@ -24,7 +24,7 @@ public readonly record struct WorldView(int? Level, bool RevealAll = false, IRea
         foreach(var delta in Diagonals)
         {
             var p=c+delta;
-            if(DemoWorld.Inside(p)&&!terrain.Solid(p)&&!terrain.Ramp(p))return !Known(terrain,c);
+            if(DemoWorld.Inside(p)&&!terrain.Solid(p)&&!terrain.Ramp(p)&&terrain.KnownAir(p))return !Known(terrain,c);
         }
         return false;
     }

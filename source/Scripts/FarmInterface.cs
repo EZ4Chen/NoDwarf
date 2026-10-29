@@ -25,8 +25,9 @@ public partial class Main
         _growingSettings=new VBoxContainer();parent.AddChild(_growingSettings);
         _growingSettings.AddChild(new HSeparator());
         var row=new HBoxContainer();_growingSettings.AddChild(row);row.AddChild(Text("种植作物",14,Ink));
+        _growingSettings.AddChild(Text("修改即生效",12,Muted));
         _growingCrop=new OptionButton{CustomMinimumSize=new(210,32),SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};row.AddChild(_growingCrop);
-        UiAccess.Name(_growingCrop,"种植作物","整个种植区生效；现有作物收获后换种。");
+        UiAccess.Name(_growingCrop,"种植作物","选择即生效；现有作物收获后换种。");
         foreach(string crop in GrowingCrops)_growingCrop.AddItem(DemoWorld.CropName(crop));
         _growingCrop.ItemSelected+=index=>{if(SelectedGrowingZone is {} zone){_world.ConfigureGrowingZone(zone.Id,GrowingCrops[(int)index],zone.AllowSowing);SyncWorld();RefreshUi();}};
         _growingSowing=new CheckButton{Text="允许播种 / 补种",TooltipText="关闭后停止新播种，已种作物仍正常生长和收获。"};_growingSettings.AddChild(_growingSowing);

@@ -11,9 +11,12 @@ public sealed partial class DemoWorld
     public bool KitchenReady(Cell c)=>Buildings.TryGetValue(c,out var b)&&b.Kind==BuildKind.Stove&&FurnishedRoom(c);
     public string RoomDescription(Cell c)=>Buildings.TryGetValue(c,out var b)?b.Kind switch
     {
+        BuildKind.Table=>"餐桌 · 邻接木椅可提供用餐心情收益",
+        BuildKind.Chair=>"木椅 · 邻接餐桌用于就餐",
+        BuildKind.GameTable=>"棋桌 · 公共休闲目的地",
         BuildKind.Stove=>KitchenReady(c)?"厨房就绪":"厨房需要围墙、门及至少 4 格内部空间",
-        BuildKind.Bed=>RoomAt(c).Enclosed?"室内床 · 加快休息恢复":"露天床 · 仍可休息",
-        BuildKind.Campfire=>$"燃料剩余 {FireFuel.GetValueOrDefault(c):0} 秒 · 自动搬入木料",_=>""
+        BuildKind.Bed=>(IsMedicalBed(c)?"医疗床 · ":"")+(RoomAt(c).Enclosed?"室内床 · 加快休息恢复":"露天床 · 仍可休息")+" · "+(Workers.FirstOrDefault(w=>!w.Person.Dead&&w.Person.HomeBed==c)?.Name??"未认领"),
+        BuildKind.Campfire=>$"燃料剩余 {FireFuel.GetValueOrDefault(c):0} 秒 · 自动搬入木料 · 可供居民围坐休闲",_=>""
     }:"";
     private void ScheduleHomeJobs()
     {

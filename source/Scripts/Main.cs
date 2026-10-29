@@ -10,8 +10,8 @@ public partial class Main : Node3D
     private Camera3D _camera = null!;
     private Node3D _structures = null!, _ghosts = null!, _hover = null!;
     private readonly List<Node3D> _people = new();
-    private Label _room = null!, _residents = null!, _events = null!, _stats = null!, _hint = null!, _objective = null!;
-    private Button _pause = null!, _forge = null!;
+    private Label _events = null!, _stats = null!, _hint = null!;
+    private Button _pause = null!;
     private readonly Dictionary<string, Button> _toolButtons = new();
     private string _tool = "select";
     private int _facing;
@@ -34,7 +34,7 @@ public partial class Main : Node3D
     private int _placement; // 0: block at feet, -1: floor beneath feet, 1: ceiling
     private int ActiveLevel => (_foundation?.WorldLevel ?? _world.Camp.Level) + _layerOffset;
     private int BuildLevel => ActiveLevel + (_placement < 0 ? -1 : _placement > 0 ? (_foundation?.FloorHeight ?? 3)-1 : 0);
-    private WorldView CurrentView => new(_cutaway && (_foundation is not null || _heightSelected || _interiorView || _floorWalls) ? ((_interiorView || _floorWalls) ? ActiveLevel+(_foundation?.FloorHeight??3)-2 : Math.Max(ActiveLevel, BuildLevel)) : null, _developerMode && _revealUnknown,_wallCaps,_interiorView?_viewStamp:0);
+    private WorldView CurrentView => new(_cutaway && (_foundation is not null || _heightSelected || _interiorView || _floorWalls) ? ((_interiorView || _floorWalls) ? ActiveLevel+(_foundation?.FloorHeight??3)-2 : Math.Max(ActiveLevel, BuildLevel)) : null, _developerMode && _revealUnknown,_wallCaps,_viewStamp);
     private bool VisibleAt(Cell c) => CurrentView.Visible(_world,c);
     private int _terrainRevision=-1;
     private Label _layerStatus = null!;
@@ -93,6 +93,12 @@ public partial class Main : Node3D
         {_world.DeveloperResidents(true);_developerMode=false;_creative=false;_clock.Paused=true;CreatePeople();FocusCamp();RefreshUi();}
         if (OS.GetCmdlineUserArgs().Contains("--appearance-preview-test")) CaptureCharacterPreview();
         if (OS.GetCmdlineUserArgs().Contains("--startup-preview-test")) CheckStartupArrival();
+        if (OS.GetCmdlineUserArgs().Contains("--geography-preview-test")) CheckGeographyPreview();
+        if (OS.GetCmdlineUserArgs().Contains("--map-display-test")) CheckMapDisplay();
+        if (OS.GetCmdlineUserArgs().Contains("--water-safety-ui-test")) CheckWaterSafetyUi();
+        if (OS.GetCmdlineUserArgs().Contains("--mint-menu-test")) CheckMintMenus();
+        if (OS.GetCmdlineUserArgs().Contains("--ui-cleanup-test")) CheckUiCleanup();
+        if (OS.GetCmdlineUserArgs().Contains("--life-preview-test")) CaptureLifePreview();
         if (OS.GetCmdlineUserArgs().Contains("--resident-preview-test")) CaptureResidentPreview();
         if (OS.GetCmdlineUserArgs().Contains("--resident-test")) { try { ResidentChecks.Run(); GetTree().Quit(); } catch(Exception e) { GD.PushError(e.ToString());GetTree().Quit(1); } }
         if (OS.GetCmdlineUserArgs().Contains("--region-preview-test")) CaptureRegionPreview();
@@ -101,10 +107,16 @@ public partial class Main : Node3D
         if (OS.GetCmdlineUserArgs().Contains("--gravity-test")) ReviewGravity();
         if (OS.GetCmdlineUserArgs().Contains("--climbing-test")) ReviewClimbing();
         if (OS.GetCmdlineUserArgs().Contains("--equipment-test")) ReviewEquipment();
+        if (OS.GetCmdlineUserArgs().Contains("--dig-volume-test")) ReviewDigVolume();
+        if (OS.GetCmdlineUserArgs().Contains("--mining-cutaway-test")) ReviewMiningCutaway();
+        if (OS.GetCmdlineUserArgs().Contains("--designation-test")) ReviewDesignations();
+        if (OS.GetCmdlineUserArgs().Contains("--level-guide-test")) ReviewLevelGuide();
+        if (OS.GetCmdlineUserArgs().Contains("--object-commands-test")) ReviewObjectCommands();
         if (OS.GetCmdlineUserArgs().Contains("--tool-equipment-test")) ReviewToolEquipment();
         if (OS.GetCmdlineUserArgs().Contains("--equipment-dimensions-test")) ReviewEquipmentDimensions();
         if (OS.GetCmdlineUserArgs().Contains("--melee-test")) ReviewMelee();
         if (OS.GetCmdlineUserArgs().Contains("--actor-model-test")) ReviewActorModel();
+        if (OS.GetCmdlineUserArgs().Contains("--sprite-integration-test")) ReviewSpriteIntegration();
         if (OS.GetCmdlineUserArgs().Contains("--dwarf-integration-test")) ReviewDwarfIntegration();
         if (OS.GetCmdlineUserArgs().Contains("--complex-combat-test")) ReviewComplexCombat();
         if (OS.GetCmdlineUserArgs().Contains("--combat-test")) ReviewCombat();
@@ -160,6 +172,7 @@ public partial class Main : Node3D
             }
             if(_mapPanel.Visible||_diagnosticsPanel.Visible)throw new InvalidOperationException("Map and diagnostics should start collapsed");
             if(_resourceCounts.Count!=13||_toolButtons.Values.Any(b=>b.Icon is null))throw new InvalidOperationException("HUD resource or tool icons missing");
+            _architectAutoClose.ButtonPressed=false;
             var button = _toolButtons["Wall"];
             _worldMenu.Show(); _seed.GetLineEdit().GrabFocus();
             Click(_buildTab.GetGlobalRect().GetCenter());
@@ -177,10 +190,11 @@ public partial class Main : Node3D
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Click(_toolButtons[nameof(BuildKind.StoneBricks)].GetGlobalRect().GetCenter());
             if (_tool != nameof(BuildKind.StoneBricks)) throw new InvalidOperationException("Material block button not selectable");
-            if (button.GetGlobalRect().Intersects(_hint.GetGlobalRect())) throw new InvalidOperationException("Construction button overlaps hint bar");
+            if (_hint.IsVisibleInTree()&&button.GetGlobalRect().Intersects(_hint.GetGlobalRect())) throw new InvalidOperationException("Construction button overlaps hint bar");
             Click(button.GetGlobalRect().GetCenter());
             if (GetViewport().GuiGetFocusOwner() is LineEdit) throw new InvalidOperationException("Toolbar click must exit seed editing");
             if (_tool != "Wall") throw new InvalidOperationException("Toolbar mouse click did not select stone wall");
+            _buildMenu.Hide();
             var target = _world.Camp;
             var screen = _camera.UnprojectPosition(WorldPosition(target));
             var picked = Pick(screen);
@@ -214,11 +228,12 @@ public partial class Main : Node3D
             var secondCorner = _camera.UnprojectPosition(WorldPosition(_world.Camp + new Cell(4, 4)));
             Click(secondCorner);
             if (_foundation is null || _foundation.WorldLevel != _world.Camp.Level) throw new InvalidOperationException($"Foundation clicks must establish floor zero: tool={_tool}, start={_foundationStart}, events={string.Join(" | ", _world.Events)}");
-            ChangeFloor(1);
+            _UnhandledInput(new InputEventKey{Pressed=true,Keycode=Key.Plus,PhysicalKeycode=Key.Equal,MetaPressed=true});
             if (_foundation.WorldLevel != _world.Camp.Level + 3 || Math.Abs(_focus.Y - _foundation.WorldLevel) > .01) throw new InvalidOperationException("Floor + must jump camera by configured height");
             SelectTool("Wall"); Click(_camera.UnprojectPosition(WorldPosition(target)));
             if (_world.Jobs.Any(j => j.Cell == target)) throw new InvalidOperationException("Selected upper floor must not silently build on ground");
-            ChangeFloor(-1);
+            _UnhandledInput(new InputEventKey{Pressed=true,Keycode=Key.Minus,PhysicalKeycode=Key.Minus,CtrlPressed=true});
+            if (_foundation.WorldLevel != _world.Camp.Level) throw new InvalidOperationException("Control minus must return to floor zero");
             var beforeReset = _world;
             _clock.Paused = false; Reset();
             if (!_resetDialog.Visible || !_clock.Paused) throw new InvalidOperationException("Reset must display confirmation and pause");
@@ -295,7 +310,7 @@ public partial class Main : Node3D
             var rock=_world.Camp+new Cell(5,2,-3);
             SelectTool("dig");var diggingPoint=_camera.UnprojectPosition(WorldPosition(rock)+Vector3.Up);
             if(PickForTool(diggingPoint)!=rock)throw new InvalidOperationException("Mining plane wrong level");
-            _buildMenu.Hide();_inspector.Hide();Click(diggingPoint);
+            _buildMenu.Hide();_inspector.Hide();Click(diggingPoint);Click(diggingPoint);
             if(!_world.Jobs.Any(j=>j.Dig&&j.Cell==rock))throw new InvalidOperationException("Mining click did not queue excavation");
             _world.Erase(rock);SelectTool("select");_cutaway=false;SyncWorld();
             await ToSignal(GetTree(),SceneTree.SignalName.PhysicsFrame);
@@ -309,10 +324,10 @@ public partial class Main : Node3D
             await ToSignal(GetTree(),SceneTree.SignalName.PhysicsFrame);
             await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
             int beforeHeight=ActiveLevel;
-            _UnhandledInput(new InputEventKey{Pressed=true,Keycode=Key.Plus,PhysicalKeycode=Key.Equal,MetaPressed=true});
-            if(ActiveLevel!=beforeHeight+1)throw new InvalidOperationException("Command plus must adjust one metre without a foundation");
-            _UnhandledInput(new InputEventKey{Pressed=true,Keycode=Key.Minus,PhysicalKeycode=Key.Minus,CtrlPressed=true});
-            if(ActiveLevel!=beforeHeight)throw new InvalidOperationException("Control minus must adjust one metre");
+            _UnhandledInput(new InputEventKey{Pressed=true,Keycode=Key.Plus,PhysicalKeycode=Key.Equal});
+            if(ActiveLevel!=beforeHeight+1)throw new InvalidOperationException("Plus must adjust one metre without a foundation");
+            _UnhandledInput(new InputEventKey{Pressed=true,Keycode=Key.Minus,PhysicalKeycode=Key.Minus});
+            if(ActiveLevel!=beforeHeight)throw new InvalidOperationException("Minus must adjust one metre");
             _heightSelected=false;_layerOffset=0;SyncWorld();
             await ToSignal(GetTree(),SceneTree.SignalName.PhysicsFrame);
             await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
@@ -331,8 +346,10 @@ public partial class Main : Node3D
             GetViewport().PushInput(new InputEventMouseMotion{Position=a,GlobalPosition=a},true);
             Mouse(MouseButton.Left,true,a);
             GetViewport().PushInput(new InputEventMouseMotion{Position=b,GlobalPosition=b,ButtonMask=MouseButtonMask.Left},true);
-            if(_world.Jobs.Count!=0)throw new InvalidOperationException("Mining drag should commit only on release");
+            if(_world.Jobs.Count!=0)throw new InvalidOperationException("Mining selection must wait for second click");
             Mouse(MouseButton.Left,false,b);
+            if(_world.Jobs.Count!=0)throw new InvalidOperationException("Release must not commit mining");
+            Mouse(MouseButton.Left,true,b);Mouse(MouseButton.Left,false,b);
             if(_world.Jobs.Count!=6||_world.Jobs.Any(j=>j.DigHeight!=1||j.Cell.Level!=miningStart.Level))
                 throw new InvalidOperationException("Mining drag must mark six individual voxels at one height");
             foreach(var job in _world.Jobs.ToArray())_world.Erase(job.Cell);
@@ -393,6 +410,7 @@ public partial class Main : Node3D
 
     public override void _Process(double delta)
     {
+        RefreshActionFeedback();
         DiagnosticTrace.Frame((long)Engine.GetProcessFrames());
         using var frameTrace=DiagnosticTrace.Span("frame.main");
         long processStarted = _tpsReview is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
@@ -400,7 +418,7 @@ public partial class Main : Node3D
         var profileFrame = _world.Probe?.Measure("frame.main-callback") ?? default;
         PumpInteriorWork();
         int quadrant=Mathf.FloorToInt(Mathf.RadToDeg(Mathf.PosMod(_cameraYaw,Mathf.Tau))/5);
-        if(_interiorView&&quadrant!=_viewQuadrant){_viewQuadrant=quadrant;_revision=-1;}
+        if(LocalWallCutaway&&quadrant!=_viewQuadrant){_viewQuadrant=quadrant;_revision=-1;}
         if(!_depthReviewActive)MoveCamera(delta);
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
         int ticks = _clock.Advance(delta);
@@ -417,10 +435,12 @@ public partial class Main : Node3D
         long uiStarted = _tpsReview is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         AnimatePeople();
         AnimateBuildingFalls(delta);
+        HideInactiveDigHighlight();
         UpdateConstructionVisuals();
         RefreshWeatherVisuals(delta);RefreshFluidVisuals();
         if (++_uiCounter % 6 == 0) RefreshUi();
         UpdateHover();
+        UpdateLevelGuide();
         profileFrame.Dispose();
         long reviewStarted = _frameDiagnostic is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         if (_tpsReview is not null) FinishTpsFrame(syncMs,
@@ -496,7 +516,7 @@ public partial class Main : Node3D
             { _orbitHeld=true;_orbitMoved=false;_orbitOrigin=mouse.Position;_orbitLast=mouse.Position; }
             if (mouse.ButtonIndex == MouseButton.Left && mouse.Pressed)
             {
-                if(_tool is "dig" or "digstairs") { if(DigPick(mouse.Position) is Cell start) { _digStart=start;_digEnd=start;_hoverCell=null; } }
+                if(_tool is "dig" or "digstairs" or "canceldig") { if(PickForTool(mouse.Position) is Cell start) { _digStart=start;_digEnd=start;_hoverCell=null; } }
                 else if (_tool=="select"||AreaTool(_tool)) BeginLeftSelection(mouse.Position,mouse.ShiftPressed);
                 else if (PickForTool(mouse.Position) is Cell cell) Act(cell);
             }
@@ -523,8 +543,8 @@ public partial class Main : Node3D
             if (key.PhysicalKeycode == Key.C) OrbitCamera(45);
             if (key.PhysicalKeycode == Key.Q) StepLayer(-1);
             if (key.PhysicalKeycode == Key.E) StepLayer(1);
-            if (key.Keycode is Key.Plus or Key.KpAdd || key.PhysicalKeycode == Key.Equal) {if(key.MetaPressed||key.CtrlPressed)StepLayer(1);else ChangeFloor(1);}
-            if (key.Keycode is Key.Minus or Key.KpSubtract) {if(key.MetaPressed||key.CtrlPressed)StepLayer(-1);else ChangeFloor(-1);}
+            if (key.Keycode is Key.Plus or Key.KpAdd || key.PhysicalKeycode == Key.Equal) {if(key.MetaPressed||key.CtrlPressed)ChangeFloor(1);else StepLayer(1);}
+            if (key.Keycode is Key.Minus or Key.KpSubtract) {if(key.MetaPressed||key.CtrlPressed)ChangeFloor(-1);else StepLayer(-1);}
             if (key.PhysicalKeycode == Key.F || key.Keycode == Key.Home) FocusCamp();
             if (key.PhysicalKeycode == Key.B) TogglePanel(_buildMenu);
             string? tool = key.Keycode switch { Key.Key1 => "Wall", Key.Key2 => "Door", Key.Key3 => "Furnace", Key.Key4 => "Anvil", Key.Key5 => "erase", _ => null };
@@ -540,7 +560,7 @@ public partial class Main : Node3D
         var c=new Cell((int)Math.Floor(p.X+DemoWorld.Width/2f),(int)Math.Floor(p.Z+DemoWorld.Depth/2f),level);
         return DemoWorld.Inside(c)?c:null;
     }
-    private Cell? PickForTool(Vector2 screen) => _tool is "dig" or "digstairs" ? DigPick(screen) : (_foundation is not null || _heightSelected) && (_tool is "blueprint" || Enum.TryParse<BuildKind>(_tool,out _))
+    private Cell? PickForTool(Vector2 screen) => _tool=="canceldig" ? PlanePick(screen,ActiveLevel+1) is Cell cancelCell ? cancelCell with{Level=ActiveLevel} : null : _tool is "dig" or "digstairs" ? DigPick(screen) : _tool=="chop" ? ChopPick(screen) : (_foundation is not null || _heightSelected) && (_tool is "blueprint" || Enum.TryParse<BuildKind>(_tool,out _))
         ? BuildPlanePick(screen) : (_tool is "foundation" or "stockpile" or "unstockpile" or "growingzone" or "unfarm" ? Pick(screen,1) : Enum.TryParse<BuildKind>(_tool,out _) ? Pick(screen) : PickTarget(screen));
     private Cell? BuildPlanePick(Vector2 screen)
     { var c=PlanePick(screen,_placement<0?ActiveLevel:BuildLevel); return c is Cell p ? p with { Level=BuildLevel } : null; }
@@ -579,6 +599,8 @@ public partial class Main : Node3D
     }
     private Cell? PickTarget(Vector2 screen)
     {
+        if(_tool=="select"&&CurrentView.Level is not null&&PlanePick(screen,ActiveLevel+1) is Cell plane)
+        {var regionCell=plane with{Level=ActiveLevel};if(DigRegionAt(regionCell) is not null)return regionCell;}
         var hit = PickObject(screen, 11); // Terrain, completed objects and selectable construction plans.
         if (hit.Count == 0) return null;
         var collider = hit["collider"].AsGodotObject();
@@ -618,6 +640,7 @@ public partial class Main : Node3D
         _buildMenu.Hide(); _inspector.Hide(); _worldMenu.Hide(); _selectionPanel.Hide();
         if (open) panel.Show();
         if (panel != _buildMenu) SelectTool("select");
+        _storagePanel?.QueueFree();_storagePanel=null;
     }
     private Vector3 WorldPosition(Cell c) => TerrainView.Point(c.X, c.Level, c.Z);
 
@@ -752,6 +775,14 @@ public partial class Main : Node3D
         {
             BlockTextures.Box(parent,p+Vector3.Up*.5f,Vector3.One,BlockCatalog.Id(kind));
         }
+        else if(kind is BuildKind.Table or BuildKind.GameTable or BuildKind.Chair)
+        {
+            float h=kind==BuildKind.Chair?.45f:.75f;
+            BlockTextures.Box(parent,p+Vector3.Up*h,new Vector3(.8f,.12f,.8f),"nodwarf:planks");
+            foreach(float x in new[]{-.3f,.3f})foreach(float z in new[]{-.3f,.3f})BlockTextures.Box(parent,p+new Vector3(x,h/2,z),new Vector3(.1f,h,.1f),"nodwarf:log");
+            if(kind==BuildKind.Chair)BlockTextures.Box(parent,p+new Vector3(0,.8f,.35f),new Vector3(.8f,.65f,.1f),"nodwarf:planks");
+            if(kind==BuildKind.GameTable)for(int x=0;x<4;x++)for(int z=0;z<4;z++)Box(parent,p+new Vector3((x-1.5f)*.16f,h+.07f,(z-1.5f)*.16f),new Vector3(.16f,.02f,.16f),Mat((x+z)%2==0?"e2d6ad":"433c31"));
+        }
         else if(kind==BuildKind.Workbench)
         {
             foreach(float x in new[]{-.32f,.32f})foreach(float z in new[]{-.28f,.28f})BlockTextures.Box(parent,p+new Vector3(x,.3f,z),new Vector3(.13f,.6f,.13f),"nodwarf:workbench");
@@ -828,19 +859,22 @@ public partial class Main : Node3D
     }
     private void ChangeFloor(int direction)
     {
-        if (_foundation is null) { _world.Log("先在建筑菜单划定地基，再用 + / − 定位楼层。"); return; }
+        if (_foundation is null) { _world.Log("先在建筑菜单划定地基，再用 Command/Ctrl + 加减号定位楼层。"); return; }
+        int previousLevel=ActiveLevel;
         _foundation.Step(direction);
         if(_foundation.WorldLevel<=TerrainMap.MinLevel || _foundation.WorldLevel>TerrainMap.MaxLevel) { _foundation.Step(-direction);_world.Log("已到当前 Demo 的高度边界。");return; }
         _layerOffset=0; _placement=0; _focus.Y = _foundation.WorldLevel; _revision=-1;
+        if(_digEnd is Cell end)_digEnd=end with{Level=Math.Clamp(end.Level+ActiveLevel-previousLevel,TerrainMap.MinLevel+1,TerrainMap.MaxLevel)};
         PositionCamera(); DrawFoundation(); _hoverCell = null; Clear(_hover); RefreshUi();
     }
 
     private void StepLayer(int direction)
     {
         _heightSelected=true;int datum=_foundation?.WorldLevel??_world.Camp.Level;
-        _digStart=null;_digEnd=null;_interiorView=false;_cutaway=true;
+        int previousLevel=ActiveLevel;_interiorView=false;_cutaway=true;
         _layerOffset=Math.Clamp(_layerOffset+direction,TerrainMap.MinLevel+1-datum,TerrainMap.MaxLevel-datum);
-        _focus.Y=ActiveLevel; _revision=-1; PositionCamera(); DrawFoundation(); RefreshUi();
+        if(_digEnd is Cell end)_digEnd=end with{Level=Math.Clamp(end.Level+ActiveLevel-previousLevel,TerrainMap.MinLevel+1,TerrainMap.MaxLevel)};
+        _hoverCell=null;_focus.Y=ActiveLevel; _revision=-1; PositionCamera(); DrawFoundation(); RefreshUi();
     }
     private void SetPlacement(int mode)
     {
@@ -879,12 +913,18 @@ public partial class Main : Node3D
 
     private void DrawDig(Node parent,Cell cell,bool stairs,int facing)
     {
-        var color=Mat("f0b56b");var p=WorldPosition(cell)+Vector3.Up*1.02f;
+        var color=Mat("f0b56b");var p=WorldPosition(cell);p.Y=Math.Min(cell.Level+1,CurrentView.CellTop(cell))+.02f;
         foreach(float side in new[]{-.46f,.46f})
         {
             Box(parent,p+new Vector3(side,0,0),new Vector3(.035f,.035f,.94f),color);
             Box(parent,p+new Vector3(0,0,side),new Vector3(.94f,.035f,.035f),color);
         }
+        color.ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded;
+        color.NoDepthTest=CurrentView.Level is not null;
+        Box(parent,p+new Vector3(0,.035f,0),new Vector3(.055f,.035f,.55f),color);
+        ((Node3D)parent.GetChild(parent.GetChildCount()-1)).Rotation=new Vector3(0,.65f,0);
+        Box(parent,p+new Vector3(-.12f,.04f,-.16f),new Vector3(.42f,.045f,.07f),color);
+        ((Node3D)parent.GetChild(parent.GetChildCount()-1)).Rotation=new Vector3(0,.65f,0);
         if(stairs) {var d=DemoWorld.StairDirection(facing);Box(parent,p+new Vector3(d.X*.3f,.04f,d.Z*.3f),new Vector3(.16f,.08f,.16f),color);}
         var body=new StaticBody3D{Position=p,CollisionLayer=2,CollisionMask=0};body.SetMeta("cell",new Vector3I(cell.X,cell.Level,cell.Z));parent.AddChild(body);
         body.AddChild(new CollisionShape3D{Shape=new BoxShape3D{Size=new Vector3(.95f,.04f,.95f)}});
@@ -909,7 +949,7 @@ public partial class Main : Node3D
         _overview.Slice=CurrentView;
         if(_visualWorld!=_world||_terrainRevision!=_world.Terrain.Revision){_terrainRevision=_world.Terrain.Revision;_overview.RefreshMap();}
         SyncStructuresAndPlans();
-        DrawItems();DrawFarms();
+        DrawItems();DrawFarms();SyncDesignationMarkers();
         _revision = _world.Revision;
         _hoverCell = null;
     }
@@ -984,10 +1024,14 @@ public partial class Main : Node3D
         if (picked == _hoverCell) return;
         _hoverCell = picked; Clear(_hover);
         if (picked is not Cell cell || _tool == "select") return;
+        if(_tool=="canceldig")
+        {
+            _hoverCell=null;DrawDigDrag(cell,cell);return;
+        }
         if(_tool is "dig" or "digstairs")
         {
             bool valid=_world.CanDig(cell,_tool=="digstairs");
-            _hint.Text=$"{(_tool=="digstairs"?"楼梯坑 · 3 米":"挖掘 · 1 格")} · 目标 {cell.X}, {cell.Z} / {cell.Level} 至 {cell.Level+(_tool=="digstairs"?3:1)} m · 左键拖选，松开确认";
+            _hint.Text=$"{(_tool=="digstairs"?"楼梯坑 · 3 米":"挖掘 · 1 格")} · 目标 {cell.X}, {cell.Z} / {cell.Level} 至 {cell.Level+(_tool=="digstairs"?3:1)} m · 左键选起点，移动鼠标 / +− 选层，再次左键确认";
             var p=WorldPosition(cell)+Vector3.Up*1.02f;
             Box(_hover,p,new Vector3(.95f,.04f,.95f),PreviewMaterial(!valid));
             return;
@@ -1044,11 +1088,12 @@ public partial class Main : Node3D
     private void ShowBuildPage(string name)
     {
         _buildCategory=name;
-        if(_architectDescription is not null)_architectDescription.Text=ArchitectHelp(name);
-        if(_architectTools is not null)_architectTools.OffsetTop=name is "结构" or "规划"?-226:-184;
-        foreach(var (key,page) in _buildPages)page.Visible=key==name;
-        foreach(var (key,button) in _categoryButtons)button.AddThemeStyleboxOverride("normal",ButtonStyle(key==name?"566c7b":"303942"));
+        if(_architectSearch is not null)_architectSearch.Text="";
+        _architectDescription.Text=ArchitectHelp(name);_architectDetailTitle.Text=name;_architectDetailIcon.Texture=null;_architectDetailIcon.Hide();
+        FilterArchitect();
+        foreach(var (key,button) in _categoryButtons)button.AddThemeStyleboxOverride("normal",ButtonStyle(key==name?"66583d":"303942"));
     }
+
     private void BuildUi()
     {
         var layer=new CanvasLayer();AddChild(layer);
@@ -1091,71 +1136,62 @@ public partial class Main : Node3D
         HudTab(tabs,"视图",()=>{if(DossierOpen)CloseResidentPanel();_viewControls.Visible=!_viewControls.Visible;},"楼层、旋转、切墙与俯视");
 
         BuildArchitect(root);
-        _selectionPanel = Panel(root, Vector2.Zero, new Vector2(400, 170)); BottomLeft(_selectionPanel, 282, 400);
+        _selectionPanel = Panel(root, Vector2.Zero, new Vector2(400, 0)); BottomLeft(_selectionPanel, 282, 400);
         _selectionPanel.OffsetBottom=-76;
         var selectionColumn = new VBoxContainer(); selectionColumn.AddThemeConstantOverride("separation", 8); _selectionPanel.AddChild(selectionColumn);
         _selectionTabs=new HBoxContainer();_selectionTabs.AddThemeConstantOverride("separation",1);selectionColumn.AddChild(_selectionTabs);
         foreach(var (label,page) in new[]{("人物",0),("需求",1),("健康",2),("装备",3),("社交",4),("成长",5)})
-        {int target=page;var tab=Button(_selectionTabs,label,()=>OpenPersonPage(target));tab.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;tab.AddThemeStyleboxOverride("normal",RStyle("514630","817457",5,4));}
+        {int target=page;var tab=Button(_selectionTabs,label,()=>OpenPersonPage(target));tab.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;tab.AddThemeStyleboxOverride("normal",RStyle("514630","817457",5,4));if(page==0)_residentDetails=tab;}
+        _selectionTitle=Text("",22,Ink,true);selectionColumn.AddChild(_selectionTitle);_selectionTitle.Hide();
         _selection = Text("", 14, Ink, true); selectionColumn.AddChild(_selection);
         _constructionProgress=RMeter(selectionColumn,0,1,Accent,7);_constructionProgress.Hide();
         var actions = new HBoxContainer(); selectionColumn.AddChild(actions);
-        Button(actions, "定位", () => { if (_selectedWorker >= 0) _focus = _people[_selectedWorker].Position; else if (_selectedCell is Cell c) _focus = WorldPosition(c); PositionCamera(); });
-        _residentDetails = Button(actions, "详细资料", ()=>OpenPersonPage(0));
+        _locateSelectionAction=Button(actions, "定位", () => { if (_selectedWorker >= 0) _focus = _people[_selectedWorker].Position; else if (_selectedCell is Cell c) _focus = WorldPosition(c); PositionCamera(); });
         _editCharacter = Button(actions, "外观", OpenCharacterEditor);
-        _storageAction=Button(actions,"堆场设置",()=>{if(_selectedCell is Cell cell&&_world.EditableStorageAt(cell) is {} zone)ShowStorage(zone);else _world.Log("请选择已划定的堆场地格。");});
-        _demolishAction=Button(actions, "拆除工具", () => { _selectionPanel.Hide(); SelectTool("erase"); });
-        _cancelConstructionAction=Button(actions,"取消施工",CancelSelectedConstruction);
-        _gateAction=Button(actions,"打开闸门",ToggleSelectedGate);_gateAction.Hide();
+        _medicalBedAction=Button(actions,"设为医疗床",()=>{if(_selectedCell is Cell bed){var result=_world.SetMedicalBed(bed,!_world.IsMedicalBed(bed));ShowActionFeedback(result.Message,!result.Ok);RefreshUi();}});
+        _waterPointAction=Button(actions,"设为取水点",()=>{if(_selectedCell is Cell c){var result=_world.SetWaterPoint(c,!_world.WaterPoints.Contains(c));ShowActionFeedback(result.Message,!result.Ok);RefreshUi();}});
+        _waterPointAction.TooltipText="指定可饮用水源；需要水桶和安全岸边通路。取消后不会销毁已取出的水。";
+        _medicalBedAction.TooltipText="保留给伤员；改回普通床会释放预约并停止相关搬运。";
+        _storageAction=Button(actions,"堆场设置",()=>{if(_selectedCell is Cell cell&&_world.EditableStorageAt(cell) is {} zone)ShowStorage(zone);else ShowActionFeedback("请选择已划定的堆场地格。",true);});
+        BuildObjectCommands(root);
+        _gateAction=Button(_objectCommands,"打开闸门",ToggleSelectedGate);StyleObjectCommand(_gateAction,"floodgate");_gateAction.Hide();
         BuildGrowingZoneSettings(selectionColumn);
 
-        _inspector = Panel(root, Vector2.Zero, new Vector2(300, 0)); BottomLeft(_inspector,540,300);_inspector.OffsetLeft=112;_inspector.OffsetRight=412;
-        var orderScroll=new ScrollContainer{HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled};_inspector.AddChild(orderScroll);
-        var content = new VBoxContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill}; content.AddThemeConstantOverride("separation", 9); orderScroll.AddChild(content);
-        var inspectorHeading = new HBoxContainer(); content.AddChild(inspectorHeading); var title = Text("工坊与订单", 17, Ink); title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill; inspectorHeading.AddChild(title);
-        Button(inspectorHeading, "关闭", () => _inspector.Hide());
-        _objective = Text("", 13, Accent, true); content.AddChild(_objective);
-        content.AddChild(new HSeparator()); _room = Text("", 13, Ink, true); content.AddChild(_room);
-        _forge = Button(content, "下单：铁剑 · 2 铁 + 1 煤", () => { _world.QueueSword(); RefreshUi(); });
-        Button(content,"熔炼：2 粗铁 + 1 煤 → 2 铁锭",()=>{_world.QueueSmelt();RefreshUi();});
-        Button(content,"烹饪：2 食材 + 1 木料 → 2 口粮",()=>{_world.QueueCook();RefreshUi();});
-        BuildProductionTargets(content);
-        foreach(var recipe in ProcessingCatalog.All){string id=recipe.Id;Button(content,recipe.Name,()=>{_world.QueueProcessing(id);RefreshUi();});}
-        content.AddChild(Text("种植区选择作物；石磨磨粉、炊炉烹饪、织机加工棉布。",12,Muted,true));
-        _orderList=new VBoxContainer();content.AddChild(_orderList);
-        _residents = Text("", 13, Muted, true); content.AddChild(_residents);
+        BuildProductionBrowser(root);
         _worldMenu = Panel(root, Vector2.Zero, new Vector2(330, 170)); BottomLeft(_worldMenu, 430, 370);_worldMenu.OffsetLeft=112;_worldMenu.OffsetRight=482;
         var mapScroll=new ScrollContainer{HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled};_worldMenu.AddChild(mapScroll);
         var worldColumn = new VBoxContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill}; worldColumn.AddThemeConstantOverride("separation", 10); mapScroll.AddChild(worldColumn);
-        worldColumn.AddChild(Text($"区域地图 · {TerrainMap.Size}×{TerrainMap.Size} · 0.4.2", 17, Ink));
+        worldColumn.AddChild(Text($"区域地图 · {TerrainMap.Size}×{TerrainMap.Size}", 17, Ink));
         worldColumn.AddChild(Text("新地图种子", 13, Muted));
-        _seed = new SpinBox { MinValue = 0, MaxValue = 999999, Value = _world.Terrain.Seed, CustomMinimumSize = new Vector2(160, 30) }; worldColumn.AddChild(_seed);UiAccess.Name(_seed,"地图种子");
+        _seed = new SpinBox { MinValue = int.MinValue, MaxValue = int.MaxValue, Value = _world.Terrain.Seed, CustomMinimumSize = new Vector2(160, 30) }; worldColumn.AddChild(_seed);UiAccess.Name(_seed,"地图种子");
         Button(worldColumn, "生成新地图…", Reset);
+        worldColumn.AddChild(new HSeparator());worldColumn.AddChild(Text("存档",15,Accent));
         var saveRow=new HBoxContainer();worldColumn.AddChild(saveRow);
         IconButton(saveRow,"save","存档 [F5]",SaveSession);
         IconButton(saveRow,"map","读档 [F9]",RequestLoadSession);
         Button(worldColumn,"返回开始菜单",RequestTitleScreen);
-        Button(worldColumn,"划定堆场（两角）",()=>{SelectTool("stockpile");_worldMenu.Hide();});
-        Button(worldColumn,"取消堆场（两角）",()=>{SelectTool("unstockpile");_worldMenu.Hide();});
         _resetDialog = new ConfirmationDialog { Title = "重新生成地图", OkButtonText = "清空并生成", CancelButtonText = "保留当前营地" };
         AddChild(_resetDialog); _resetDialog.Confirmed += ConfirmReset; _resetDialog.Canceled += CancelReset;
 
         _viewControls=Panel(root,Vector2.Zero,new Vector2(288,154));
         _viewControls.AnchorLeft=_viewControls.AnchorRight=_viewControls.AnchorTop=_viewControls.AnchorBottom=1;
-        _viewControls.OffsetLeft=-300;_viewControls.OffsetRight=-12;_viewControls.OffsetTop=-350;_viewControls.OffsetBottom=-196;
+        _viewControls.OffsetLeft=-300;_viewControls.OffsetRight=-12;_viewControls.OffsetTop=-390;_viewControls.OffsetBottom=-196;
         var viewColumn=new VBoxContainer();_viewControls.AddChild(viewColumn);
         var viewHeading=new HBoxContainer();viewColumn.AddChild(viewHeading);
         var viewTitle=Text("视角与楼层",14,Accent);viewTitle.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;viewHeading.AddChild(viewTitle);
         UiAccess.Name(Button(viewHeading,"×",()=>_viewControls.Hide()),"关闭视图设置");
         var levelRow=new HBoxContainer();viewColumn.AddChild(levelRow);
-        IconButton(levelRow,"down","层",()=>ChangeFloor(-1)).TooltipText="下降一层 [-]";
-        IconButton(levelRow,"up","层",()=>ChangeFloor(1)).TooltipText="上升一层 [+]";
-        IconButton(levelRow,"down","1m",()=>StepLayer(-1)).TooltipText="下降 1 米 [Q]";
-        IconButton(levelRow,"up","1m",()=>StepLayer(1)).TooltipText="上升 1 米 [E]";
+        IconButton(levelRow,"down","层",()=>ChangeFloor(-1)).TooltipText="下降一层 [Command/Ctrl + -]";
+        IconButton(levelRow,"up","层",()=>ChangeFloor(1)).TooltipText="上升一层 [Command/Ctrl + +]";
+        IconButton(levelRow,"down","1m",()=>StepLayer(-1)).TooltipText="下降 1 米 [- / Q]";
+        IconButton(levelRow,"up","1m",()=>StepLayer(1)).TooltipText="上升 1 米 [+ / E]";
         var orbit=new HBoxContainer();viewColumn.AddChild(orbit);
         IconButton(orbit,"rotate","左转",()=>OrbitCamera(-45)).TooltipText="向左旋转 [Z]";
         IconButton(orbit,"rotate","右转",()=>OrbitCamera(45)).TooltipText="向右旋转 [C]";
         _angleButton=IconButton(orbit,"layers","俯视",ToggleTopDown);_angleButton.TooltipText="切换俯视 [V]";
+        var gridToggle=new CheckButton{Text="当前层网格",ButtonPressed=true};viewColumn.AddChild(gridToggle);
+        UiAccess.Name(gridToggle,"显示当前层网格");
+        gridToggle.Toggled+=enabled=>{_showLevelGuide=enabled;UpdateLevelGuide();};
         _viewControls.Hide();
         var controls=Panel(root,Vector2.Zero,new Vector2(292,132));
         controls.AddThemeStyleboxOverride("panel",HudStyle("151a20c9",8));
@@ -1184,13 +1220,15 @@ public partial class Main : Node3D
         notices.AddThemeStyleboxOverride("panel",HudStyle("151a20c9",8));
         notices.AnchorLeft=notices.AnchorRight=1;notices.OffsetLeft=-262;notices.OffsetRight=-12;notices.OffsetTop=18;
         var notes=new VBoxContainer();notices.AddChild(notes);notes.AddChild(Text("营地消息",12,Accent));
+        _lifeNotices=new VBoxContainer();notes.AddChild(_lifeNotices);
         _events=Text("",13,Ink,true);_events.CustomMinimumSize=new Vector2(226,0);notes.AddChild(_events);
         _diagnosticsPanel=Panel(root,new Vector2(120,92),new Vector2(430,24));
         _diagnosticsPanel.MouseFilter=Control.MouseFilterEnum.Ignore;
         _stats=Text("",11,Muted);_stats.MouseFilter=Control.MouseFilterEnum.Ignore;_diagnosticsPanel.AddChild(_stats);_diagnosticsPanel.Hide();
-        var hints=Panel(root,Vector2.Zero,new Vector2(810,24));
-        BottomLeft(hints,72,810);hints.OffsetBottom=-48;hints.MouseFilter=Control.MouseFilterEnum.Ignore;
-        _hint=Text("",12,Ink);_hint.TextOverrunBehavior=TextServer.OverrunBehavior.TrimEllipsis;_hint.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;_hint.MouseFilter=Control.MouseFilterEnum.Ignore;hints.AddChild(_hint);
+        // Keep tool/drag status for interaction bookkeeping, without a HUD hint bar.
+        _hint=Text("",12,Ink);_hint.MouseFilter=Control.MouseFilterEnum.Ignore;_hint.Hide();root.AddChild(_hint);
+        _hint.AnchorTop=_hint.AnchorBottom=1;_hint.OffsetLeft=12;_hint.OffsetRight=700;_hint.OffsetTop=-100;_hint.OffsetBottom=-42;_hint.AutowrapMode=TextServer.AutowrapMode.WordSmart;_hint.AddThemeStyleboxOverride("normal",RStyle("181e26","66727a",8,5));
+        BuildActionFeedback(root);
         _location=Text("",11,Muted);_location.HorizontalAlignment=HorizontalAlignment.Right;controlColumn.AddChild(_location);
         var credit=new LinkButton{Text="PureBDcraft 材质鸣谢",Uri="https://bdcraft.net",TooltipText="Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net"};
         UiAccess.Name(credit,"PureBDcraft 材质鸣谢","在浏览器中打开材质作者网站。");
@@ -1253,7 +1291,7 @@ public partial class Main : Node3D
     {
         CancelLeftSelection();
         _digStart=null;_digEnd=null;_stockpileStart=null;_farmStart=null;
-        if(tool is "dig" or "digstairs")
+        if(tool is "dig" or "digstairs" or "canceldig")
         {
 
             _placement=0;_cutaway=true;
@@ -1262,7 +1300,7 @@ public partial class Main : Node3D
         if (tool != "foundation") _foundationStart = null;
         if(tool is "select" or "rally" or "erase" or "foundation" || tool is "Floodgate" or "Door" or "Furnace" or "Anvil" or "Stove" or "Bed" or "Campfire" or "Mill" or "Loom" or "Workbench" or "chop" or "planttree" || (Enum.TryParse<BuildKind>(tool,out var chosen)&&BlockCatalog.IsStairs(chosen))) _placement=0;
         if(_foundation is not null && Enum.TryParse<BuildKind>(tool,out _)) _cutaway=true;
-        if(tool!="select"&&tool!="rally"){_interiorView=false;_floorWalls=false;_wallCaps=null;}
+        if(tool!="select"&&tool!="rally"){_interiorView=false;_floorWalls=false;}
         _revision=-1; _tool = tool; _hoverCell = null; Clear(_hover);
         foreach (var (id, button) in _toolButtons) button.AddThemeStyleboxOverride("normal", ButtonStyle(id == tool ? "566c7b" : "303942"));
         _hint.Text = Enum.TryParse<BuildKind>(tool, out var kind)
@@ -1270,9 +1308,11 @@ public partial class Main : Node3D
             : tool == "growingzone" ? "左键拖框或点击同高两角划种植区；完成后点击区域设置。右键取消。"
             : tool == "unfarm" ? "拖框或点击两角选择移除范围；确认后损失未收获作物。右键取消。"
             : tool is "stockpile" or "unstockpile" ? "左键拖框或点击同高两角设置储存范围；右键取消。"
-            : tool is "chop" or "planttree" ? "点击树根安排伐木，或点击露天土壤种树；消耗实体树苗，需要居民执行。"
+            : tool == "chop" ? "左键拖框批量标记伐木，也可点击单棵；松开确认，右键或 Esc 取消。"
+            : tool == "planttree" ? "点击露天土壤种树；消耗实体树苗，需要居民执行。"
+            : tool == "canceldig" ? "取消挖掘：左键选起点，移动鼠标 / +− 选层，再次左键确认；仅撤销未完成挖掘，不填回已挖方块。右键或 Esc 放弃框选。"
             : tool == "cancelplan" ? "点击地格取消尚未完成的任务，材料保留；不会拆除已有建筑。"
-            : tool == "dig" ? "点击可见岩土挖 1 格；按住左键拖选一行或矩形，松开下单。"
+            : tool == "dig" ? "左键选起点，移动鼠标并用 +/− 选层；再次左键确认长方体，右键或 Esc 取消。"
             : tool == "digstairs" ? $"挖楼梯坑 · 仅清空 3 米岩土，不生成楼梯 · 挖完后选择楼梯材质安装"
             : tool == "foundation" ? "左键拖框或点击地基两角；要求同高平地。顶面为第 0 层，右键取消。"
             : tool == "erase" ? "左键规划拆除 / 取消规划；居民按耐久拆除，完整退料。右键回到选择。"
@@ -1281,27 +1321,27 @@ public partial class Main : Node3D
     }
     private void RefreshUi()
     {
+        if (_selectedWorker >= _world.Workers.Count)_selectedWorker=-1;
         RefreshDeveloperUi();
         _hint.TooltipText=_hint.Text;
         foreach(var (mode,button) in _placementButtons) button.AddThemeStyleboxOverride("normal",ButtonStyle(mode==_placement?"566c7b":"303942"));
         _floorLabel.Text = _foundation is null ? "地基未设置 · 1 格 = 1 m" : $"第 {_foundation.Floor} 层 · 工作高度 {ActiveLevel} m · 落块 {BuildLevel} m · 层高 {_foundation.FloorHeight} m";
         _layerStatus.Text=_foundation is null?$"高度 {ActiveLevel} m · 未设地基":"F"+_foundation.Floor+$" · {ActiveLevel} m";
-        _cutButton.Text=!_cutaway?"全貌":_interiorView?"切墙":_floorWalls?"本层墙":"精确";
+        _cutButton.Text=!_cutaway?"全貌":_interiorView?"切墙":MiningCutaway?"开采切墙":_floorWalls?"本层墙":"精确";
         RefreshCombatUi();
         _editCharacter.Visible = _selectedWorker >= 0;
-        _residentDetails.Visible = _selectedWorker >= 0;
+        _residentDetails.Visible=_selectedWorker>=0;
         _selectionTabs.Visible=_selectedWorker>=0;
-        _storageAction.Visible=_selectedWorker<0&&_selectedCell is Cell storageCell&&_world.Stockpiles.Contains(storageCell);_demolishAction.Visible=_selectedWorker<0&&SelectedGrowingZone is null;
+        _storageAction.Visible=_selectedWorker<0&&_selectedCell is Cell storageCell&&_world.Stockpiles.Contains(storageCell);
+        _waterPointAction.Visible=_selectedWorker<0&&_selectedCell is Cell water&&(_world.Fluids.Amount(water)>=5||_world.WaterPoints.Contains(water));
+        _waterPointAction.Text=_selectedCell is Cell wp&&_world.WaterPoints.Contains(wp)?"取消取水点":"设为取水点";
+        _medicalBedAction.Visible=_selectedWorker<0&&_selectedCell is Cell bedCell&&_world.Buildings.TryGetValue(bedCell,out var selectedBed)&&selectedBed.Kind==BuildKind.Bed;
+        _medicalBedAction.Text=_selectedCell is Cell mb&&_world.IsMedicalBed(mb)?"改为普通床":"设为医疗床";
         RefreshHudTabs();
-        _room.Text = $"{(_world.HasRoom ? "✓" : "○")} 围合房间与门\n{(_world.HasFurnace ? "✓" : "○")} 熔炉    {(_world.HasAnvil ? "✓" : "○")} 铁砧\n\n{_world.WorkshopIssue}";
-        _objective.Text = _world.Swords > 0 ? "完成！第一把铁剑已制成。\n试试保存蓝图，或设计另一间工坊。"
-            : _world.WorkshopReady ? "02 / 工坊就绪\n下达订单，看居民打造第一把铁剑。"
-            : _world.Jobs.Any(j => j.Construction) ? "01 / 施工进行中\n浅色格为规划，居民正在分工建设。"
-            : "01 / 规划一间工坊\n划定地基，安排墙壁、门和生产设施。";
-        _forge.Disabled = !_world.WorkshopReady || _world.Iron < 2 || _world.Coal < 1 || _world.Jobs.Count(j => j.Forge) >= 3;
+        RefreshRecipeDetail();
         RefreshOrders();
-        _residents.Text = string.Join("\n", _world.Workers.Select(w => $"{w.Name}  ·  {w.Status}"));
-        _events.Text = string.Join("\n", _world.Events.Where(e=>!e.StartsWith("[开发]")&&!e.StartsWith("开发模式")).Take(2));
+        RefreshLifeNotices();
+        _events.Text = string.Join("\n", _world.Events.Where(e=>!e.StartsWith("[开发]")&&!e.StartsWith("开发模式")&&!_feedbackEvents.Contains(e)).Take(2));
         if (_selectedWorker >= _world.Workers.Count)_selectedWorker=-1;
         if (_selectedWorker >= 0)
         {
@@ -1316,9 +1356,8 @@ public partial class Main : Node3D
             var building = _world.Buildings.GetValueOrDefault(selected);
             var plan = _world.Jobs.FirstOrDefault(j => j.Construction && j.Cell == selected);
             string name = plan?.Build is BuildKind plannedKind ? DemoWorld.NameOf(plannedKind)+"（建设中）" : building is not null ? DemoWorld.NameOf(building.Kind) : _world.Fluids.Amount(selected)>0?"积水":plan is not null ? "挖掘规划" : _world.Items.Any(s=>s.Owner==""&&s.Cell==selected)?"物资堆":BlockCatalog.Get(_world.BlockAt(selected)).Name;
-            string id = building?.BlockId ?? (plan is not null ? (plan.Dig ? _world.BlockAt(selected) : BlockCatalog.Id(plan.Build!.Value)) : _world.BlockAt(selected));
-            _selection.Text = CurrentView.Known(_world,selected) ? $"{name}\n位置 {selected.X}, {selected.Z} · 第 {selected.Level} 层\n{id}" : $"未探索区域\n位置 {selected.X}, {selected.Z} · 第 {selected.Level} 层";
-            if(plan?.Build is not null)_selection.Text=$"{name}\n位置 {selected.X}, {selected.Z} · 第 {selected.Level} 层\n施工 {plan.BuildFraction:P0} · {ConstructionStatus(plan)}";
+            _selection.Text = CurrentView.Known(_world,selected) ? name : "未探索区域";
+            if(plan?.Build is not null)_selection.Text=$"{name}\n施工 {plan.BuildFraction:P0} · {ConstructionStatus(plan)}";
         }
         if(_selectedCell is Cell blockCell&&CurrentView.Known(_world,blockCell))
         {
@@ -1328,15 +1367,15 @@ public partial class Main : Node3D
         }
         if(_selectedCell is Cell itemCell)
         {
+            if(_world.WaterPoints.Contains(itemCell))_selection.Text+="\n饮用水源 · 需要空桶与安全岸边";
             var stacks=_world.Items.Where(s=>s.Owner==""&&(s.Cell==itemCell||s.Cell==itemCell+new Cell(0,0,1)));
-            string room=_world.RoomDescription(itemCell);if(room!="")_selection.Text+="\n"+room;
-            if(CurrentView.Known(_world,itemCell))_selection.Text+="\n"+_world.EnvironmentDescription(itemCell);
             if(_world.Trees.TryGetValue(itemCell,out var tree))_selection.Text+=$"\n树木 {tree.Height} m · 成长 {tree.Age/DemoWorld.GrowTime(tree.Species):P0}";
             if(_world.StorageAt(itemCell) is {} zone)_selection.Text+=$"\n堆场 #{zone.Id} · 优先级 {zone.Priority}/5";
-            foreach(var stack in stacks)_selection.Text+=$"\n{ItemCatalog.Get(stack.Item).Name} ×{stack.Count}";
+            foreach(var stack in stacks)_selection.Text+=$"\n{ItemCatalog.Get(stack.Item).Name} ×{stack.Count}"+(stack.Properties.ExpiresAt is double expiry?$" · {Math.Max(0,(expiry-_world.SimulationTime)/600):F1} 天后腐败":"");
         }
         RefreshFarms();
-        RefreshConstructionSelection();RefreshFluidSelection();RefreshGroupSelection();
+        RefreshConstructionSelection();RefreshFluidSelection();RefreshGroupSelection();RefreshDigRegionSelection();
+        RefreshObjectCommands();
         for (int i = 0; i < _residentButtons.Count; i++)
         {
             _residentButtons[i].Visible=i<_world.Workers.Count;

@@ -57,7 +57,7 @@ public partial class Main
                 UpdateConstructionVisuals();RefreshUi();await Snap($"construction-{progress*100:0}");
                 if(material.AlbedoColor.A<=alpha||_planVisuals[job.Id].Root.GetInstanceId()!=node)throw new InvalidOperationException("Progress must change existing material without rebuilding the plan");
                 if(Math.Abs(_constructionProgress.Value-progress)>.001||!_selection.Text.Contains("耐久"))throw new InvalidOperationException("Selection must show actual progress and durability");
-                if(!_selectionPanel.GetGlobalRect().Encloses(_cancelConstructionAction.GetGlobalRect()))throw new InvalidOperationException("Cancel action overflows selection panel");
+                if(!_objectCommands.GetGlobalRect().Encloses(_cancelConstructionAction.GetGlobalRect()))throw new InvalidOperationException("Cancel action overflows object command bar");
                 alpha=material.AlbedoColor.A;
             }
             int stock=_world.Total("cobblestone");

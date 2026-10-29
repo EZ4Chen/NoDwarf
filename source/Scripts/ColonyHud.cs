@@ -5,6 +5,7 @@ public partial class Main
 {
     private PanelContainer _viewControls=null!;
     private HBoxContainer _selectionTabs=null!;
+    private Button _medicalBedAction=null!;
     private Button _storageAction=null!,_demolishAction=null!;
     private readonly Dictionary<int,Button> _colonyTabs=new();
     private bool ColonyPage=>_dossierPage>=6;

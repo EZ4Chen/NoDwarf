@@ -9,7 +9,7 @@ public readonly record struct Ground(int Level, GroundKind Kind, int RampX = 0, 
 }
 
 // Generation is pure data. A surface lookup is an index, not the identity of a world cell.
-public sealed class TerrainMap
+public sealed partial class TerrainMap
 {
     public const int Size = 255, VerticalSize = 192, MinLevel = -64, MaxLevel = MinLevel + VerticalSize - 1;
     public const int DeepLayers = 64, NormalMinLevel = MinLevel + DeepLayers, SeaLevel = 64, MaxTerrainHeight = SeaLevel + 24;
@@ -23,7 +23,7 @@ public sealed class TerrainMap
     public int Revision { get; private set; }
     public event Action<Cell>? Changed;
     public IReadOnlyCollection<Cell> Excavated => _excavated;
-    public bool Solid(Cell c) => DemoWorld.Inside(c) && c.Level < this[c.X,c.Z].Level && !_excavated.Contains(c);
+    public bool Solid(Cell c) => DemoWorld.Inside(c) && c.Level < this[c.X,c.Z].Level && !_excavated.Contains(c) && !_caverns.Contains(c);
     public bool Ramp(Cell c) => Contains(c) && this[c.X,c.Z].Ramp && !_excavated.Contains(c);
     public string BlockAt(Cell c)
     {
@@ -34,6 +34,16 @@ public sealed class TerrainMap
         if(_ores.TryGetValue(c,out var ore))return OreId(c,ore);
         if(IsDeep(c))return "nodwarf:deepslate";
         var ground=this[c.X,c.Z];
+        if(Generation is {Revision:2} geology)
+        {
+            int below=ground.Level-c.Level;
+            if(below==1)return BlockCatalog.Id(ground.Kind);
+            if(below<=geology.SoilDepth)return ground.Kind==GroundKind.Sand?"nodwarf:sand":"nodwarf:soil";
+            double bed=24+Noise(c.X/65d+103,c.Z/65d+17)*8;
+            if(c.Level<bed)return "nodwarf:granite";
+            if(c.Level<bed+12)return "nodwarf:limestone";
+            return "nodwarf:"+(Region?.Rock??"sandstone");
+        }
         if(c.Level==ground.Level-1)return BlockCatalog.Id(ground.Kind);
         if(c.Level>=ground.Level-3 && ground.Kind is GroundKind.Grass or GroundKind.Soil or GroundKind.Sand)
             return ground.Kind==GroundKind.Sand ? "nodwarf:sand" : "nodwarf:soil";
@@ -49,7 +59,7 @@ public sealed class TerrainMap
     public static string OreId(Cell c,GroundKind ore) => IsDeep(c)
         ? (ore==GroundKind.Iron ? "nodwarf:deepslate_iron_ore" : "nodwarf:deepslate_coal_ore") : BlockCatalog.Id(ore);
     public bool Excavate(Cell c)
-    { if(c.Level<=MinLevel || (!Solid(c)&&!Ramp(c))) return false; _excavated.Add(c);_changes.Add(c);Revision++;Changed?.Invoke(c);return true; }
+    { if(c.Level<=MinLevel || (!Solid(c)&&!Ramp(c))) return false; _excavated.Add(c);_changes.Add(c);Revision++;DiscoverCaverns(c);Changed?.Invoke(c);return true; }
     public void SetTree(Cell c,bool exists)
     {
         if(!Contains(c))throw new ArgumentOutOfRangeException(nameof(c));
@@ -64,7 +74,7 @@ public sealed class TerrainMap
     public RegionProfile? Region {get;}
     public WorldGenerationSettings? Generation {get;}
     public int EcologyVersion {get;}
-    public int GeneratorVersion => Generation is not null?3:Region is null ? 1 : 2;
+    public int GeneratorVersion => Generation is not null?(Generation.Revision==2?4:3):Region is null ? 1 : 2;
     public Ground this[int x, int z] => _surface[x, z];
     public Cell At(int x, int z) => new(x, z, _surface[x, z].Level);
     // Captured by the simulation owner, then read only by mesh workers. Ore layout
@@ -75,8 +85,8 @@ public sealed class TerrainMap
         Seed=source.Seed;Flat=source.Flat;Region=source.Region;Generation=source.Generation;
         EcologyVersion=source.EcologyVersion;Revision=source.Revision;
         Array.Copy(source._surface,_surface,source._surface.Length);
-        _ores=source._ores;
-        _excavated.UnionWith(source._excavated);
+        _ores=source._ores;_caverns=source._caverns;_waterColumns=source._waterColumns;_riverBoundaries=source._riverBoundaries;
+        _excavated.UnionWith(source._excavated);_knownCaverns.UnionWith(source._knownCaverns);
     }
     public TerrainMap(int seed, bool flat = false, string? region = null,WorldGenerationSettings? generation=null,int ecologyVersion=2)
     {
@@ -92,6 +102,7 @@ public sealed class TerrainMap
             Region=generation.Profile();
         }
         if(flat&&Region is not null)throw new ArgumentException("平坦测试图不使用地区生成器。");
+        var site=Generation?.Site;
         for (int x = 0; x < Size; x++)
         for (int z = 0; z < Size; z++)
         {
@@ -114,6 +125,12 @@ public sealed class TerrainMap
                     "desert"=>65+(int)Math.Round(broad*10+Math.Pow(detail,2)*7),
                     _=>74+(int)Math.Round(Math.Pow(broad,.65)*43+detail*5)};
                 if(Generation is not null)level=Math.Clamp(level+Region.CampHeight-RegionProfile.Get(Region.Id,EcologyVersion).CampHeight,60,112);
+                if(Generation is {Revision:2} modern)
+                {
+                    double scale=Math.Pow(1.5,modern.FeatureScale);
+                    double relief=(Noise(x/(45*scale)+13,z/(45*scale)+29)-.5)*(10+modern.Ruggedness*3);
+                    level=Math.Clamp(Region.CampHeight+(int)Math.Round(relief/(1+modern.Erosion*.25)),60,112);
+                }
                 if(distance<48)level=(int)Math.Round(Region.CampHeight+(level-Region.CampHeight)*Math.Clamp((distance-16)/32,0,1));
                 double patch=Noise(x/13d+7,z/13d+91);
                 kind=Region.Id switch {
@@ -127,12 +144,13 @@ public sealed class TerrainMap
                     "tundra"=>patch>.58?GroundKind.Gravel:GroundKind.Grass,
                     _=>level>=104?GroundKind.Granite:patch>.48?GroundKind.Gravel:GroundKind.Grass};
                 if(Generation is not null&&kind is GroundKind.Grass or GroundKind.Humus)
-                    kind=Generation.Site.Wetness<.3?GroundKind.DryGrass:Generation.Site.Wetness>.7?GroundKind.Humus:kind;
+                    kind=site!.Value.Wetness<.3?GroundKind.DryGrass:site!.Value.Wetness>.7?GroundKind.Humus:kind;
                 tree=!clearing&&level<=112&&kind is (GroundKind.Grass or GroundKind.Humus or GroundKind.DryGrass)&&r>1-Region.TreeChance;
             }
             _surface[x, z] = new Ground(level, flat ? GroundKind.Grass : kind, Tree: tree);
         }
         if (flat) return;
+        if(Generation is {Revision:2})GenerateModernTerrain();
         GenerateVeins();
         // A subset of terrace edges become explicit ramps. Other edges remain cliffs.
         var landings = new HashSet<(int, int)>();
@@ -166,6 +184,7 @@ public sealed class TerrainMap
         var random = new Random(unchecked(Seed * 397 ^ 0x51a7));
         var directions = new[] { new Cell(1,0),new Cell(-1,0),new Cell(0,1),new Cell(0,-1),new Cell(0,0,1),new Cell(0,0,-1) };
         int count = Size * Size / 90;
+        if(Generation is {Revision:2} g)count=count*(g.Minerals==0?1:g.Minerals==1?3:6)/3;
         for(int vein=0;vein<count;vein++)
         {
             int x=random.Next(3,Size-3),z=random.Next(3,Size-3);

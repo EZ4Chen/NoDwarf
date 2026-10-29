@@ -1,0 +1,84 @@
+{
+  "status": "Front-view modular prototype; production sprite4 renderer unchanged",
+  "bodies": [
+    "standard",
+    "broad",
+    "round"
+  ],
+  "heads": [
+    "square",
+    "round",
+    "lean"
+  ],
+  "hair": [
+    "none",
+    "swept",
+    "waves",
+    "braids"
+  ],
+  "beards": [
+    "none",
+    "short",
+    "full",
+    "braids"
+  ],
+  "outfits": [
+    "none",
+    "work",
+    "apron"
+  ],
+  "hands": [
+    "bare",
+    "gloved"
+  ],
+  "feet": [
+    "bare",
+    "boots"
+  ],
+  "head_layer_scale": 0.74,
+  "body_frame": [
+    320,
+    300
+  ],
+  "head_frame": [
+    320,
+    400
+  ],
+  "assembly_frame": [
+    320,
+    500
+  ],
+  "head_attachment": "All head layers scale about shared chin attachment (0,36); position=(0,36-80*0.74). About 7 screen px lower for shoulder overlap.",
+  "launch": "bash source/tools/modular-demo.sh",
+  "save_file": "source/.local/modular-dwarf.json",
+  "verification": "480 frames, eight combinations, standing/walking/mining, fixed anatomical grips; shared standard shape demonstrated for both sexes.",
+  "generation": "Built-in image_gen.imagegen; see shared-body-generation.json. Three new shared bodies and separate undershirt; existing heads, hair, beards, hands, feet retained.",
+  "body_proportion_revision": {
+    "art": "shared-bodies-source.png; new simplified body artwork",
+    "display_height": 280,
+    "display_widths": {
+      "standard": 238,
+      "broad": 274,
+      "round": 286
+    },
+    "position": [
+      0,
+      140
+    ]
+  },
+  "bare_hand_height": 36,
+  "bare_foot_size": [
+    50,
+    50
+  ],
+  "equipment_hand_height": 54,
+  "equipment_foot_height": 76,
+  "stance": "Fixed 76px stance baseline for bare/equipped feet; bare feet scaled and shifted to preserve ground contact.",
+  "sex": [
+    "male",
+    "female"
+  ],
+  "underwear": "One shared undershirt overlay; shown for female base body only, hidden under outfits.",
+  "clothing": "Shared by body shape, independent of sex. Standard uses work/apron-male art; broad and round use work/apron-broad art. Garment hem matches shared body hem.",
+  "save_migration": "Legacy male/female body IDs become standard with corresponding sex; broad remains broad."
+}

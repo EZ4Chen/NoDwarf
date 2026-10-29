@@ -3,11 +3,13 @@ using NoDwarf.Simulation;
 using System.Text.Json;
 namespace NoDwarf;
 
-// Optional presentation only. Simulation positions, hit rules and selection bodies remain authoritative.
+// Presentation bridge. Normal gameplay uses sprite4; model3d is retained only
+// for explicit legacy asset/trajectory reviews. Node3D/Sprite3D place 2D art in the world.
 public partial class ActorModelView : Node3D
 {
     public sealed class Definition
     {
+        public string Renderer { get; set; } = "model3d";
         public string Scene { get; set; } = "";
         public float Scale { get; set; } = 1;
         public float YawDegrees { get; set; }
@@ -17,6 +19,9 @@ public partial class ActorModelView : Node3D
     private static Definition? _definition;
     public static Definition LoadDefinition() => _definition ??= JsonSerializer.Deserialize<Definition>(
         Godot.FileAccess.GetFileAsString("res://Assets/Characters/dwarf.json")) ?? new();
+    public static Definition LoadLegacyDefinition() => JsonSerializer.Deserialize<Definition>(
+        Godot.FileAccess.GetFileAsString("res://Assets/Characters/legacy-model3d.json"))
+        ?? throw new InvalidOperationException("Missing legacy 3D review configuration");
     private Node3D? _model;
     private AnimationPlayer? _player;
     private Definition _settings = new();
@@ -32,6 +37,8 @@ public partial class ActorModelView : Node3D
     public void Initialize(Definition? definition=null)
     {
         Name="ModelView"; _settings=definition??LoadDefinition();
+        if(_settings.Renderer=="sprite4")
+        {var sprite=new DirectionalDwarfView{Name="DwarfSprite"};_model=sprite;AddChild(sprite);sprite.Initialize();return;}
         if(string.IsNullOrWhiteSpace(_settings.Scene))return;
         if(!float.IsFinite(_settings.Scale)||_settings.Scale<=0||!float.IsFinite(_settings.YawDegrees))
         { GD.PushWarning("Invalid dwarf model scale/yaw; using sprite.");return; }
@@ -59,6 +66,7 @@ public partial class ActorModelView : Node3D
         if(!HasModel)return;
         var worn=inventory.Where(i=>i.Slot!="").OrderBy(i=>i.Slot).ToArray();
         string key=beard+"|"+string.Join(";",worn.Select(i=>i.Slot+":"+i.Item));if(key==_gear)return;_gear=key;
+        if(_model is DirectionalDwarfView sprite){sprite.SetEquipment(worn);return;}
         foreach(var held in _held){held.GetParent().RemoveChild(held);held.QueueFree();}_held.Clear();
         if(_model!.HasMethod("sync_colony_equipment"))
         {
@@ -88,15 +96,18 @@ public partial class ActorModelView : Node3D
         Position=Vector3.Down*spriteBob; // Model's feet stay grounded; sprite bob is legacy-only.
         if(facing is Vector3 direction && direction.LengthSquared()>.0001f)
             Rotation=new(0,Mathf.Atan2(-direction.X,-direction.Z),0);
-        string state=actor.Person.Incapacitated?"down":actor.Path.Count>0?(actor.Job?.Materials.Any(m=>m.Stage==1)==true?"carry":"walk"):actor.Combat.Drafted?"combat_idle":actor.Job is not null?"work":"idle";
+        bool resting=actor.Person.MedicalBed is not null||actor.Person.Activity?.Kind=="rest"&&actor.Path.Count==0;
+        string state=resting?"down":actor.Person.Activity?.Kind=="rescue_carry"?"carry":actor.Person.Incapacitated?"down":actor.Path.Count>0?(actor.Job?.Materials.Any(m=>m.Stage==1)==true?"carry":"walk"):actor.Combat.Drafted?"combat_idle":actor.Job is not null?"work":"idle";
         if(actor.Combat.AttackWeapon!="")state="attack";
         else if(actor.Combat.Defense!="")state=actor.Combat.Defense=="block"?"block_hold":"parry";
         if(actor.Combat.AttackWeapon==""&&actor.Combat.ReactionUntil>time&&actor.Combat.LastContact is "block" or "parry")
             state=actor.Combat.LastContact=="block"?"block_hold":"parry";
         if(actor.Person.Incapacitated)state="down";
         if(state!=_state){_state=state;_started=time;}
+        if(_model is DirectionalDwarfView sprite)
+        {Rotation=Vector3.Zero;sprite.SetAppearance(actor.Appearance);sprite.Sample(time,state,facing,actor.Combat.AttackTime);return;}
         // Until a down clip is supplied, lie the rig sideways instead of leaving a defeated actor standing.
-        _model!.Rotation=new Vector3(0,Mathf.DegToRad(_settings.YawDegrees),actor.Person.Incapacitated&&Clip("down") is null?Mathf.Pi/2:0);
+        _model!.Rotation=new Vector3(0,Mathf.DegToRad(_settings.YawDegrees),state=="down"&&Clip("down") is null?Mathf.Pi/2:0);
         if(_player is null||!IsVisibleInTree())return;
         string? clip=state=="attack"&&actor.Combat.AttackWeapon!=""&&_player.HasAnimation(MeleeProfiles.Weapon(actor.Combat.AttackWeapon).Animation)
             ?MeleeProfiles.Weapon(actor.Combat.AttackWeapon).Animation:Clip(state)??Clip("idle");if(clip is null)return;
@@ -126,6 +137,19 @@ public partial class Main
         else if(worker.Path.TryPeek(out var next))facing=new Vector3((float)(next.X-worker.X),0,(float)(next.Z-worker.Z));
         else if(worker.Combat.Target!=""&&_world.Actors.FirstOrDefault(a=>a.Id==worker.Combat.Target) is {} target)
             facing=new Vector3((float)(target.X-worker.X),0,(float)(target.Z-worker.Z));
+        view.Rotation=Vector3.Zero;
         view.Present(worker,_world.SimulationTime,facing,bob);
+        var carrier=_world.Workers.FirstOrDefault(w=>w.Person.Activity is {Kind:"rescue_carry"} a&&a.Target==worker.Id);
+        Cell? resting=worker.Person.MedicalBed??(worker.Person.Activity?.Kind=="rest"&&worker.Path.Count==0?worker.Person.HomeBed:null);
+        if(carrier is not null){view.Position+=Vector3.Up*.8f+_camera.GlobalBasis.X*.25f;}
+        else if(resting is Cell bed){view.Position+=WorldPosition(bed)-WorldPosition(worker.Tile)+Vector3.Up*.4f;}
+        if(view.GetNodeOrNull<DirectionalDwarfView>("DwarfSprite") is {} sprite)
+        {
+            sprite.Tint(node.GetChild<Sprite3D>(0).Modulate);
+            // Labels must follow the same camera-up plane as the paper character.
+            var up=_camera.GlobalBasis.Y;
+            node.GetChild<Label3D>(1).Position=up*(WorldScale.DwarfHeightMeters+.16f)-Vector3.Up*bob;
+            if(node.GetNodeOrNull<Label3D>("Cargo") is {} cargo) cargo.Position=up*(WorldScale.DwarfHeightMeters+.40f)-Vector3.Up*bob;
+        }
     }
 }

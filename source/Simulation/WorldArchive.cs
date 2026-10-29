@@ -11,11 +11,14 @@ public sealed class WorkerState
     public double X {get;set;} public double Z {get;set;} public int Level {get;set;}
     public double ClimbProgress {get;set;}
     public Cell? TravelFrom {get;set;} public Cell[] Path {get;set;}=Array.Empty<Cell>();
+    public bool WaterEvacuating {get;set;}
     public int? JobId {get;set;} public string Status {get;set;}="等待工作";
 }
 public sealed class WorldSnapshot
 {
-    public int Version {get;set;}=17;
+    public int Version {get;set;}=24;
+    public Cell[] WaterPoints {get;set;}=[];
+    public Cell[] MedicalBeds {get;set;}=[];
     public WorkerState[] Enemies {get;set;}=[];
     public Cell? RallyPoint {get;set;}
     public bool CivilianAlert {get;set;}
@@ -55,8 +58,9 @@ public sealed class WorldSnapshot
 public sealed partial class DemoWorld
 {
     public static readonly JsonSerializerOptions SaveOptions=new(){WriteIndented=true,Converters={new JsonStringEnumConverter()}};
-    private static WorkerState SaveWorker(DemoWorker w)=>new(){Combat=w.Combat,Id=w.Id,Name=w.Name,Appearance=w.Appearance,Person=w.Person,X=w.X,Z=w.Z,Level=w.Level,TravelFrom=w.TravelFrom,ClimbProgress=w.ClimbProgress,Path=w.Path.ToArray(),JobId=w.Job?.Id,Status=w.Status};
+    private static WorkerState SaveWorker(DemoWorker w)=>new(){WaterEvacuating=w.WaterEvacuating,Combat=w.Combat,Id=w.Id,Name=w.Name,Appearance=w.Appearance,Person=w.Person,X=w.X,Z=w.Z,Level=w.Level,TravelFrom=w.TravelFrom,ClimbProgress=w.ClimbProgress,Path=w.Path.ToArray(),JobId=w.Job?.Id,Status=w.Status};
     public string SaveJson()=>JsonSerializer.Serialize(new WorldSnapshot{
+        WaterPoints=WaterPoints.ToArray(),MedicalBeds=MedicalBeds.Where(IsMedicalBed).ToArray(),
         Enemies=Enemies.Select(SaveWorker).ToArray(),RallyPoint=RallyPoint,CivilianAlert=CivilianAlert,RaidSerial=_raidSerial,BattleOutcome=BattleOutcome,
         ProductionOrders=ProductionOrders.ToArray(),ProductionElapsed=_productionElapsed,RoomClimates=SaveRoomClimates(),RoomTemperatureUpdatedAt=_lastRoomTemperatureUpdate,
         Fluids=Fluids.Save(_openFloodgates),ClimateVersion=ClimateVersion,WeatherOverride=WeatherOverride,EcologyVersion=Terrain.EcologyVersion,Seed=Terrain.Seed,Flat=Terrain.Flat,Region=Terrain.Region?.Id,GeneratorVersion=Terrain.GeneratorVersion,Trees=Trees.Values.ToArray(),StorageZones=StorageZones.ToArray(),Fires=FireFuel.Where(f=>Buildings.TryGetValue(f.Key,out var b)&&b.Kind==BuildKind.Campfire).Select(f=>new FireState(f.Key,f.Value)).ToArray(),Farms=Farms.Values.ToArray(),FarmElapsed=_farmElapsed,Damage=_blockDamage.Values.Where(d=>d.Block==BlockAt(d.Cell)).ToArray(),Excavated=Terrain.Excavated.ToArray(),Buildings=Buildings.Values.ToArray(),Items=Items.ToArray(),Stockpiles=Stockpiles.ToArray(),Jobs=Jobs.ToArray(),
@@ -65,12 +69,15 @@ public sealed partial class DemoWorld
     {
         var s=JsonSerializer.Deserialize<WorldSnapshot>(json,SaveOptions)??throw new InvalidDataException("存档为空。");
         if(s.Version<10&&s.Generation is not null)s.Generation=s.Generation with {EcologyVersion=1};
+        s.Generation?.Validate(false);
         if(s.EcologyVersion is not (1 or 2)||(s.Version<10&&s.EcologyVersion!=1)||
            (s.Generation is not null&&s.Generation.EcologyVersion!=s.EcologyVersion)||
            (s.Region is not null&&!(s.EcologyVersion==1?RegionProfile.Legacy:RegionProfile.All).Any(p=>p.Id==s.Region))||
-           s.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17)||s.GeneratorVersion is not (1 or 2 or 3)||
-           (s.GeneratorVersion==3&&(s.Version<9||s.Generation is null||s.Flat||s.Region!=s.Generation.Site.Region||s.Seed!=s.Generation.LocalSeed))||
-           (s.GeneratorVersion!=3&&s.Generation is not null)||
+           s.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24)||s.GeneratorVersion is not (1 or 2 or 3 or 4)||
+           (s.GeneratorVersion is 3 or 4&&(s.Version<9||s.Generation is null||s.Flat||s.Region!=s.Generation.Site.Region||s.Seed!=s.Generation.LocalSeed))||
+           (s.GeneratorVersion is not (3 or 4)&&s.Generation is not null)||
+           (s.GeneratorVersion==4&&(s.Version<24||s.Generation?.Revision!=2))||
+           (s.GeneratorVersion==3&&s.Generation?.Revision!=1)||
            (s.GeneratorVersion==2&&(s.Version<8||s.Flat||!RegionProfile.All.Any(p=>p.Id==s.Region)))||
            (s.GeneratorVersion==1&&s.Region is not null))throw new InvalidDataException("不支持的存档或生成器版本。");
         if(s.Items is null||s.Jobs is null||s.Workers is null||s.Stockpiles is null||s.Excavated is null||s.Buildings is null||s.Blueprint is null||
@@ -137,8 +144,17 @@ public sealed partial class DemoWorld
                 if(zone.Id<=0||zone.Id==int.MaxValue||!CropCatalog.Valid(zone.Crop)||!w.Farms.Values.Any(p=>p.ZoneId==zone.Id)||!w.GrowingZones.TryAdd(zone.Id,zone))throw new InvalidDataException("种植区设置无效。");
             if(w.Farms.Values.Any(p=>!w.GrowingZones.ContainsKey(p.ZoneId)||!p.Planted&&p.Crop!=w.GrowingZones[p.ZoneId].Crop))throw new InvalidDataException("农田与种植区不一致。");
         }
+        foreach(var group in s.Jobs.Where(j=>!string.IsNullOrEmpty(j.DigRegion)).GroupBy(j=>j.DigRegion))
+            if(group.Any(j=>j.DigRegionMin!=group.First().DigRegionMin||j.DigRegionMax!=group.First().DigRegionMax))
+                throw new InvalidDataException("开采区域范围不一致。");
         foreach(var j in s.Jobs)
         {
+            if(j.DigRegion is null || (j.DigRegion=="" ? j.DigRegionMin is not null||j.DigRegionMax is not null :
+                !Guid.TryParseExact(j.DigRegion,"N",out _)||!j.Dig||j.Demolish||j.DigRegionMin is not Cell lo||j.DigRegionMax is not Cell hi||
+                !Inside(lo)||!Inside(hi)||lo.X>hi.X||lo.Z>hi.Z||lo.Level>hi.Level||
+                j.Cell.X<lo.X||j.Cell.X>hi.X||j.Cell.Z<lo.Z||j.Cell.Z>hi.Z||j.Cell.Level<lo.Level||j.Cell.Level+j.DigHeight-1>hi.Level))
+                throw new InvalidDataException("开采区域记录无效。");
+            if(j.WaterPaused&&(!j.Dig||j.Demolish))throw new InvalidDataException("水患暂停任务类型无效。");
             if(j.Id<=0||!Inside(j.Cell)||!double.IsFinite(j.Progress)||j.Progress<0||j.Materials is null||w.Jobs.Any(o=>o.Id==j.Id)||j.Worker< -1||j.Worker>=s.Workers.Length||j.DigHeight is <1 or >3)
                 throw new InvalidDataException("任务记录无效。");
             if((j.Build is not null?1:0)+(j.Dig?1:0)+(j.Haul?1:0)+(j.Smelt?1:0)+(j.Cook?1:0)+(j.Sow?1:0)+(j.Harvest?1:0)+(j.Refuel?1:0)+(j.Chop?1:0)+(j.PlantTree?1:0)+(j.Processing?1:0)>1||j.Demolish&&(!j.Dig||j.DigHeight!=1))throw new InvalidDataException("任务类型冲突。");
@@ -173,12 +189,13 @@ public sealed partial class DemoWorld
         {
             if(!double.IsFinite(a.X)||!double.IsFinite(a.Z)||a.Path is null||a.Appearance is null||
                 !double.IsFinite(a.ClimbProgress)||a.ClimbProgress<0||a.ClimbProgress>=1||!Inside(new Cell((int)Math.Round(a.X),(int)Math.Round(a.Z),a.Level))||a.Path.Any(c=>!Inside(c))||(a.TravelFrom is Cell t&&!Inside(t)))throw new InvalidDataException("居民位置无效。");
-            var person=a.Person??ResidentProfile.Create(index);if(s.Version<7)person.WorkPriorities?.TryAdd("crafting",3);person.Validate();
+            var person=a.Person??ResidentProfile.Create(index);if(s.Version<7)person.WorkPriorities?.TryAdd("crafting",3);if(s.Version<18)person.WorkPriorities?.TryAdd("care",2);if(s.Version<20)HealthCare.Migrate(person);person.Validate();
             if(string.IsNullOrWhiteSpace(a.Id)||a.Id.Length>100||string.IsNullOrWhiteSpace(a.Name)||a.Name.Length>100||
                 person.Activity is not null&&a.JobId is not null)throw new InvalidDataException("居民身份或活动冲突。");
             if(a.Combat is null||!double.IsFinite(a.Combat.Cooldown)||a.Combat.Cooldown<0||a.Combat.Cooldown>10||!double.IsFinite(a.Combat.RetryAt)||!double.IsFinite(a.Combat.FlashUntil)||a.Combat.Strikes<0||a.Combat.Target is null||a.Combat.Target.Length>100||a.Combat.Destination is Cell dest&&!Inside(dest)||a.Combat.Drafted&&(a.JobId is not null||person.Activity is not null))throw new InvalidDataException("战斗状态无效。");
             ValidateMeleeState(a.Combat);
-            var worker=new DemoWorker{Combat=a.Combat,Id=a.Id,Name=a.Name,Appearance=a.Appearance,Person=person,X=a.X,Z=a.Z,Level=a.Level,TravelFrom=a.TravelFrom,ClimbProgress=a.ClimbProgress,Status=a.Status};
+            if(a.WaterEvacuating&&(a.JobId is not null||person.Activity is not null&&person.Activity.Kind!="rescue_carry"))throw new InvalidDataException("撤离状态与普通任务冲突。");
+            var worker=new DemoWorker{WaterEvacuating=a.WaterEvacuating,Combat=a.Combat,Id=a.Id,Name=a.Name,Appearance=a.Appearance,Person=person,X=a.X,Z=a.Z,Level=a.Level,TravelFrom=a.TravelFrom,ClimbProgress=a.ClimbProgress,Status=a.Status};
             foreach(var c in a.Path)worker.Path.Enqueue(c);
             if(a.JobId is int id)
             {
@@ -208,15 +225,26 @@ public sealed partial class DemoWorld
             if(resident.Person.Talents.Any(t=>t.Value>=2&&!w.Research.Completed.Contains(ResidentCatalog.Talents.First(n=>n.Skill==t.Key&&n.Rank==t.Value).Research)))throw new InvalidDataException("技能缺少研究前置。");
             w.RefreshWeight(resident);
         }
+        if(s.MedicalBeds is null||s.MedicalBeds.Distinct().Count()!=s.MedicalBeds.Length||s.MedicalBeds.Any(c=>!w.Buildings.TryGetValue(c,out var b)||b.Kind!=BuildKind.Bed))throw new InvalidDataException("医疗床记录无效");
+        if(s.WaterPoints is null||s.WaterPoints.Length>256||s.WaterPoints.Any(c=>!TerrainMap.InBounds(c)))throw new InvalidDataException("取水点无效");w.WaterPoints.UnionWith(s.WaterPoints);
+        w.MedicalBeds.UnionWith(s.MedicalBeds);w.ValidateRescueArchive();
         foreach(var medic in w.Workers.Where(a=>a.Person.Activity?.Kind=="care_supply").ToArray())
             if(!w.Items.Any(i=>i.Id==medic.Person.Activity!.ItemId&&i.Item=="bandage"&&i.Owner=="")||!w.Workers.Any(a=>a.Id==medic.Person.Activity!.Target&&!a.Person.Dead))w.CancelResidentActivity(medic);
+        foreach(var resident in w.Workers)
+        {
+            w.ValidateHomeBed(resident);
+            if(resident.Person.Activity is {Kind:"food_supply" or "feed"} food&&!w.ValidFoodActivity(resident,food))w.CancelResidentActivity(resident);
+        }
+        if(w.Workers.Where(r=>r.Person.HomeBed is not null).GroupBy(r=>r.Person.HomeBed).Any(g=>g.Count()>1)||
+            w.Workers.Where(r=>r.Person.Activity is {Kind:"food_supply" or "feed"}).GroupBy(r=>r.Person.Activity!.Target).Any(g=>g.Count()>1))
+            throw new InvalidDataException("床位或送饭预约冲突。");
         if(w.Items.Any(i=>w.Reserved(i.Id)>i.Count)||w.Workers.Where(a=>a.Person.Activity is {Kind:"treat" or "care_supply"}).GroupBy(a=>a.Person.Activity!.Target).Any(g=>g.Count()>1))throw new InvalidDataException("护理预约冲突。");
         if(w.Jobs.Any(j=>j.Worker>=0&&w.Workers[j.Worker].Job!=j))throw new InvalidDataException("任务重复指派。");
         w.Blueprint=s.Blueprint.ToList();foreach(var p in w.Blueprint)BlockCatalog.Get(p.Kind);
         if(s.DemoStage is int ds){if(ds is <0 or >5)throw new InvalidDataException("示例阶段无效。");w.Demo=new TwoStoreyDemo(w.Camp);w.Demo.RestoreStage(ds);}
         if(s.UndergroundStage is int us){if(us is <0 or >8)throw new InvalidDataException("地下示例阶段无效。");w.Underground=new UndergroundDemo(w.Camp);w.Underground.RestoreStage(us);}
         w._nextItem=w.Items.Select(i=>i.Id).DefaultIfEmpty().Max();w._nextJob=w.Jobs.Select(j=>j.Id).DefaultIfEmpty().Max();
-        w._nextConstructionGroup=w.Jobs.Select(j=>j.ConstructionGroup).DefaultIfEmpty().Max();w._simulationTime=s.SimulationTime;
+        w._nextConstructionGroup=w.Jobs.Select(j=>j.ConstructionGroup).DefaultIfEmpty().Max();w._simulationTime=s.SimulationTime;w.MigrateLifeItems();
         w.RestoreRoomClimates(s.RoomClimates,s.RoomTemperatureUpdatedAt);
         if(s.Version<4)
             foreach(string seed in new[]{"grain_seed","mushroom_spawn"})
@@ -224,6 +252,6 @@ public sealed partial class DemoWorld
         if(s.Version<5&&w.Total("sapling")==0)w.SpawnItem("sapling",12,w.Camp+new Cell(5,8));
         if(s.Version<7)foreach(string seed in new[]{"potato_seed","cotton_seed","birch_sapling","pine_sapling"})if(w.Total(seed)==0)w.SpawnItem(seed,12,w.Camp+new Cell(5,8));
         w.RestoreProductionOrders(s.ProductionOrders,s.ProductionElapsed);
-        w.ValidateWorkshop();w.Revision++;w.Log("已读取营地，材料与在途任务已恢复。");return w;
+        w.RefreshWaterSafety();w.RefreshLifeAlerts();w.ValidateWorkshop();w.Revision++;w.Log("已读取营地，材料与在途任务已恢复。");return w;
     }
 }

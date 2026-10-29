@@ -26,6 +26,7 @@ public partial class Main
     private readonly Dictionary<int,(Node3D Root,Label3D Label,StaticBody3D Body,string Item)> _itemNodes=new();
     private readonly Dictionary<Cell,Node3D> _stockNodes=new();
     private VBoxContainer _orderList=null!;
+    private Label _emptyOrders=null!;
     private DemoWorld? _orderWorld;
     private readonly Dictionary<int,(Label Label,Control Row)> _orderRows=new();
     private void RefreshOrders()
@@ -34,6 +35,7 @@ public partial class Main
         RefreshProductionTargets();
         if(_orderWorld!=_world){Clear(_orderList);_orderRows.Clear();_orderWorld=_world;}
         var orders=_world.Jobs.Where(j=>j.Production).ToArray();
+        _emptyOrders.Visible=orders.Length==0;
         foreach(int id in _orderRows.Keys.Where(id=>!orders.Any(j=>j.Id==id)).ToArray())
         {var row=_orderRows[id].Row;_orderList.RemoveChild(row);row.QueueFree();_orderRows.Remove(id);}
         foreach(var job in orders)

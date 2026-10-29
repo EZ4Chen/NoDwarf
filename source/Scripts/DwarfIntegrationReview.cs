@@ -5,6 +5,7 @@ public partial class Main
 {
     private async void ReviewDwarfIntegration()
     {
+        if(ActorModelView.LoadDefinition().Renderer=="sprite4"){ReviewSpriteIntegration();return;}
         try
         {
             _world=CombatChecks.Fixture();_overview.World=_world;_clock.Paused=true;_creative=false;_foundation=null;_cutaway=false;_interiorView=false;

@@ -1,0 +1,15 @@
+{
+  "method": "built-in image_gen.imagegen",
+  "torso": {
+    "status": "blocked_by_image_tool_output_safety_filter",
+    "attempts": 3,
+    "last_prompt": "Edit this existing adult fantasy dwarf game sprite sheet. Keep the same five-part layout, warm colors and opaque cream underwear. Simplify its illustration style: remove body hair and muscle divisions, use smooth broad painted color areas. Flatten the protruding shoulder lobes into a smooth sloping silhouette. Make the three torsos slightly taller and narrower. On the female torso change the garment into a plain high-coverage cream sports bra with a straight high neckline. Simplify the fist and foot into rounded game icons, with only a few short crease marks and no detailed nails or knuckles. Preserve the male standard, male broad, female body variants. Keep all parts separate, same camera angle, no extra objects, no text. Transparent background.",
+    "source": "bodies-source.png",
+    "fallback": "Original torso sprite retained; renderer changes aspect ratio and placement only."
+  },
+  "limbs": {
+    "status": "generated, alpha-cropped, integrated and visually checked",
+    "prompt": "A transparent sprite sheet containing exactly two hand-painted 2D fantasy strategy game icons, side by side, generously separated. Left: one compact adult dwarf RIGHT hand as a relaxed closed fist, front view, thumb along the image RIGHT edge, rounded palm silhouette, only two short finger crease marks. Right: one compact adult dwarf RIGHT bare foot, front view, short ankle, rounded toes kept close together, big toe along the image RIGHT edge, only two short toe separator strokes. Warm ochre peach skin, clean dark brown outlines, broad flat painted shading, no nails, no veins, no realistic knuckle detail. Mature stocky fantasy worker style. No other body parts, no clothing or items, no text, no shadows outside the silhouettes. Actual transparent background.",
+    "source": "limbs-v2-source.png"
+  }
+}

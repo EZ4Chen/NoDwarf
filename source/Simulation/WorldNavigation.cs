@@ -66,6 +66,7 @@ public sealed class WorldNavigation
         _world = world;
         for (int x = 0; x < Columns; x++)
             for (int z = 0; z < Rows; z++) _chunks[x, z] = new Chunk();
+        foreach(var c in world.Terrain.CavernFloors)_chunks[c.X/ChunkSize,c.Z/ChunkSize].Candidates.Add(c);
     }
 
     public void Invalidate(Cell changed)

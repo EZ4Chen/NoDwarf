@@ -21,7 +21,13 @@ public partial class Startup
             {
                 await Frame();await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
                 var viewport=GetViewport().GetVisibleRect();
-                foreach(var button in _actions.Values)if(button.IsVisibleInTree()&&!viewport.Encloses(button.GetGlobalRect()))throw new InvalidOperationException("Startup button outside screen: "+button.Text);
+                foreach(var button in _actions.Values)
+                {
+                    Control bounds=button;
+                    for(Node? ancestor=button.GetParent();ancestor is not null;ancestor=ancestor.GetParent())
+                        if(ancestor is ScrollContainer scroll){bounds=scroll;break;}
+                    if(button.IsVisibleInTree()&&!viewport.Encloses(bounds.GetGlobalRect()))throw new InvalidOperationException("Startup button/container outside screen: "+button.Text);
+                }
                 GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath("res://.local/"+name+".png"));
             }
             async Task Click(string id)
@@ -35,21 +41,27 @@ public partial class Startup
             if(!_options.ContainsKey("moisture"))throw new InvalidOperationException("New game button must open world settings");
             _seedInput.Text="invalid";_seedInput.EmitSignal(LineEdit.SignalName.TextChanged,_seedInput.Text);if(!_next.Disabled)throw new InvalidOperationException("Invalid seed must block generation");
             _seedInput.Text="23519";_seedInput.EmitSignal(LineEdit.SignalName.TextChanged,_seedInput.Text);_options["moisture"].Select(3);_options["moisture"].EmitSignal(OptionButton.SignalName.ItemSelected,3L);
-            await Snap("startup-settings");await Click("next");
-            if(_settings.Seed!=23519||_settings.Moisture!=1||_enter.Disabled)throw new InvalidOperationException("Options were not applied to atlas");
+            await Snap("startup-settings");
+            _options["cavernSize"].GrabFocus();await Frame();await Snap("startup-settings-underground");
+            var formScroll=_options["cavernSize"].GetParent().GetParent().GetParent<ScrollContainer>();
+            if(!formScroll.GetGlobalRect().Encloses(_options["cavernSize"].GetGlobalRect()))throw new InvalidOperationException("Keyboard focus cannot reach underground parameters");
+            foreach(var setting in new[]{("minerals",2),("aquifers",2),("caverns",2),("soil",2)})
+            {_options[setting.Item1].Select(setting.Item2);_options[setting.Item1].EmitSignal(OptionButton.SignalName.ItemSelected,(long)setting.Item2);}
+            await Click("next");
+            if(_settings.Seed!=23519||_settings.Moisture!=1||_settings.Minerals!=2||_settings.Aquifers!=2||_settings.CavernLayers!=2||_settings.SoilDepth!=6||_enter.Disabled)throw new InvalidOperationException("Options were not applied to atlas");
             var keyboardStart=_settings;_atlas.GrabFocus();await Frame();
             foreach(bool down in new[]{true,false})GetViewport().PushInput(new InputEventKey{Keycode=Key.Right,PhysicalKeycode=Key.Right,Pressed=down},true);
             await Frame();
-            if(_settings.SiteX!=Math.Min(keyboardStart.SiteX+1,71)||_settings.SiteY!=keyboardStart.SiteY||string.IsNullOrEmpty(_atlas.AccessibilityDescription))
+            if(_settings.SiteX!=Math.Min(keyboardStart.SiteX+1,_settings.Width-1)||_settings.SiteY!=keyboardStart.SiteY||string.IsNullOrEmpty(_atlas.AccessibilityDescription))
                 throw new InvalidOperationException("Keyboard atlas selection or accessible description failed");
             foreach(bool down in new[]{true,false})GetViewport().PushInput(new InputEventKey{Keycode=Key.Tab,PhysicalKeycode=Key.Tab,Pressed=down},true);
             await Frame();if(_atlas.HasFocus())throw new InvalidOperationException("Tab cannot leave atlas");
             _settings=keyboardStart;UpdateSite();
             GD.Print("STARTUP_ACCESS_OK: keyboard map selection, Tab exit and selected-region description");
-            var water=(from x in Enumerable.Range(0,72) from y in Enumerable.Range(0,44) where !_settings.Tile(x,y).Land select (x,y)).First();
+            var water=(from x in Enumerable.Range(0,_settings.Width) from y in Enumerable.Range(0,_settings.Height) where !_settings.Tile(x,y).Land select (x,y)).First();
             _atlas.Selected!(water.x,water.y);if(!_enter.Disabled)throw new InvalidOperationException("Water must reject settlement");
             await Click("recommend");await Snap("startup-atlas");
-            var manual=(from x in Enumerable.Range(0,72) from y in Enumerable.Range(0,44) where _settings.Tile(x,y).Land&&(x!=_settings.SiteX||y!=_settings.SiteY) select (x,y)).First();
+            var manual=(from x in Enumerable.Range(0,_settings.Width) from y in Enumerable.Range(0,_settings.Height) where _settings.Tile(x,y).Land&&(x!=_settings.SiteX||y!=_settings.SiteY) select (x,y)).First();
             _atlas.Selected!(manual.x,manual.y);var chosen=_settings;
             await Click("back");await Click("next");
             if(_settings!=chosen)throw new InvalidOperationException("Returning through unchanged parameters lost manual site");

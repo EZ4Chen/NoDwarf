@@ -6,6 +6,7 @@ public sealed partial class DemoWorld
     {
         foreach(var worker in Actors)
         {
+            if(CarrierOf(worker) is not null)continue;
             var from=worker.Tile;
             if(!Inside(from)||LadderAt(from)||LadderAt(from+new Cell(0,0,-1))||Occupied(from)||Occupied(from+new Cell(0,0,-1)))continue;
             // A valid planned jump has an explicit landing and its own motion.

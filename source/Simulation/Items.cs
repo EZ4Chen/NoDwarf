@@ -4,6 +4,8 @@ public sealed record ItemDefinition(string Id,string Name,string Texture,string 
 public static class ItemCatalog
 {
     public static readonly ItemDefinition[] All={
+        new("splint","夹板","nodwarf:planks","b59b72"),new("prosthesis","木制义肢","nodwarf:log","ab8050"),
+        new("bucket","空水桶","nodwarf:log","b69b72"),new("water_bucket","饮用水桶","nodwarf:water","60a9c5"),new("rot","腐败物","nodwarf:soil","66634c"),
         new("cobblestone","圆石","nodwarf:cobblestone","879087"),
         new("deep_rubble","深板岩碎石","nodwarf:deepslate","515563"),
         new("soil","土壤","nodwarf:soil","927158"),new("sand","沙子","nodwarf:sand","d7c18a"),
@@ -62,7 +64,7 @@ public sealed partial class DemoWorld
     public int Total(string item)=>Items.Where(s=>s.Item==item).Sum(s=>s.Count)+Jobs.SelectMany(j=>j.Materials).Where(r=>r.Stage==1&&r.Item==item).Sum(r=>r.Count);
     private int Reserved(int stack)
     {
-        int total = Workers.Count(w=>w.Person.Activity is {Kind:"care_supply"} a&&a.ItemId==stack);
+        int total = Workers.Count(w=>w.Person.Activity is {Kind:"care_supply" or "food_supply" or "life_supply"} a&&a.ItemId==stack);
         foreach (var job in Jobs) foreach (var r in job.Materials)
             if (r.StackId == stack && r.Stage != 1) total += r.Count;
         return total;
@@ -70,7 +72,7 @@ public sealed partial class DemoWorld
     public ItemStack SpawnItem(string item,int count,Cell cell,ItemProperties? properties=null)
     {
         ItemCatalog.Get(item);
-        properties??=new();properties.Validate();
+        properties??=new();if(LifeHealth.Perishable(item)&&properties.ExpiresAt is null)properties=properties with {ExpiresAt=_simulationTime+LifeHealth.ShelfLife(item)};properties.Validate();
         if(count<=0||!Inside(cell))throw new ArgumentOutOfRangeException(nameof(count));
         var existing=Items.FirstOrDefault(s=>s.Item==item&&s.Cell==cell&&s.Owner==""&&Reserved(s.Id)==0&&s.Properties==properties);
         if(existing is not null){existing.Count+=count;Revision++;return existing;}
@@ -82,6 +84,7 @@ public sealed partial class DemoWorld
         int offset=0;
         foreach(var (id,n) in new[]{("cobblestone",600),("wood",400),("iron",12),("coal",8)})SpawnItem(id,n,c+new Cell(offset++,0));
         foreach(string seed in new[]{"potato_seed","cotton_seed","birch_sapling","pine_sapling"})SpawnItem(seed,12,c+new Cell(5,0));
+        SpawnItem("water_bucket",12,c+new Cell(5,0));
         SpawnItem("raw_food",30,c+new Cell(5,0));
         SpawnItem("grain_seed",12,c+new Cell(5,0));SpawnItem("mushroom_spawn",12,c+new Cell(5,0));
         for(int x=0;x<6;x++)Stockpiles.Add(c+new Cell(x,0));
@@ -159,6 +162,7 @@ public sealed partial class DemoWorld
     }
     public string OrderStatus(DemoJob job)
     {
+        if(job.WaterPaused)return "水患暂停 · 点击生活预警确认或取消";
         if(job.Worker>=0&&job.Worker<Workers.Count)
         {
             var next=job.Materials.FirstOrDefault(r=>r.Stage!=2);
@@ -245,8 +249,8 @@ public sealed partial class DemoWorld
         }
         job.Materials.Clear();Revision++;
     }
-    public void CancelJob(DemoJob job)
-    {Release(job);Jobs.Remove(job);Revision++;Log("任务取消，材料保留在实际位置。");}
+    public void CancelJob(DemoJob job,bool announce=true)
+    {Release(job);Jobs.Remove(job);Revision++;if(announce)Log("任务取消，材料保留在实际位置。");}
     private void ScheduleHauling()
     {
         using var timing = Probe?.Measure("hauling.schedule") ?? default;

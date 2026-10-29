@@ -31,15 +31,15 @@ public sealed partial class DemoWorld
         (!Farms.ContainsKey(c)||CropCatalog.IsTree(Farms[c].Crop)&&GrowingZoneAt(c)?.AllowSowing==true)&&!Stockpiles.Contains(c)&&BlockCatalog.IsSoil(BlockAt(c+new Cell(0,0,-1)))&&
         Enumerable.Range(0,14).All(y=>Inside(c+new Cell(0,0,y))&&!Occupied(c+new Cell(0,0,y)))&&
         !Jobs.Any(j=>j.Construction&&j.Cell.X==c.X&&j.Cell.Z==c.Z);
-    public bool QueueTree(Cell c,bool chop,string species="sapling")
+    public bool QueueTree(Cell c,bool chop,string species="sapling",bool announce=true)
     {
         if(!Inside(c)||!CropCatalog.IsTree(species))return false;
         if(chop)c=Surface(c.X,c.Z);
         if(Jobs.Any(j=>j.Forestry&&j.Cell==c)||!(chop?Trees.ContainsKey(c):Plantable(c)))
-        {Log(chop?"这里没有可砍伐的树。":"树苗需要露天土壤、上方空间且树干间距至少 4 米（含待种树苗）。");return false;}
+        {if(announce)Log(chop?"这里没有可砍伐的树。":"树苗需要露天土壤、上方空间且树干间距至少 4 米（含待种树苗）。");return false;}
         var job=new DemoJob{Id=++_nextJob,Cell=c,Chop=chop,PlantTree=!chop,TreeSpecies=species};
         if(!chop&&!Reserve(job,new(){{CropSeed(species),1}})){Log("缺少实体树苗。");return false;}
-        Jobs.Add(job);Revision++;Log(chop?"已安排伐木。":"已安排种植树苗，生长时间取决于树种。");return true;
+        Jobs.Add(job);Revision++;if(announce)Log(chop?"已安排伐木。":"已安排种植树苗，生长时间取决于树种。");return true;
     }
     private bool ForestryReady(DemoJob j)=>j.Chop?Trees.ContainsKey(j.Cell):Plantable(j.Cell);
     private void CompleteForestry(DemoJob j)

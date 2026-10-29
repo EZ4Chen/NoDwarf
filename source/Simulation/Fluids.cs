@@ -25,7 +25,7 @@ public sealed class Aquifer
 }
 public sealed class FluidArchive
 {
-    public int Version {get;set;}=1;
+    public int Version {get;set;}=2;
     public FluidCell[] Cells {get;set;}=Array.Empty<FluidCell>();
     public Aquifer[] Sources {get;set;}=Array.Empty<Aquifer>();
     public Cell[] OpenGates {get;set;}=Array.Empty<Cell>();
@@ -36,6 +36,8 @@ public sealed class FluidArchive
     public long Recharged {get;set;}
     public long Initial {get;set;}
     public long Step {get;set;}
+    public long RiverIn {get;set;}
+    public long RiverOut {get;set;}
 }
 
 // Integer finite-volume demo. No Godot dependency; transfer is serialized and conservative.
@@ -60,6 +62,24 @@ public sealed class FluidSimulation
     public long Recharged {get;private set;}
     public long Initial {get;private set;}
     public long Step {get;private set;}
+    public long RiverIn {get;private set;}
+    public long RiverOut {get;private set;}
+    private RiverBoundary[] _riverBoundaries=Array.Empty<RiverBoundary>();
+    private double _riverTemperature=15;
+    private HashSet<Cell> _riverInlets=new();
+    public void SetRiverBoundaries(IEnumerable<RiverBoundary> boundaries,double temperature)
+    {_riverBoundaries=boundaries.ToArray();_riverInlets=_riverBoundaries.Where(b=>b.Inlet).Select(b=>b.Cell).ToHashSet();_riverTemperature=temperature;}
+    private void ExchangeRiverWater()
+    {
+        // Fixed head at each inlet. A blocked or full cell accepts no extra water.
+        // Outflow is external removal, not an aquifer with infinite storage.
+        foreach(var b in _riverBoundaries)
+        {
+            if(!_passable(b.Cell))continue;
+            if(b.Inlet)RiverIn+=Add(b.Cell,50,_riverTemperature);
+            else RiverOut+=Withdraw(b.Cell,50);
+        }
+    }
     public double Elapsed {get;private set;}
     public int Pending=>_active.Count;
     public bool AtLimit=>_cells.Count>=MaxCells;
@@ -90,6 +110,8 @@ public sealed class FluidSimulation
         Set(c,Amount(c)+take,(_cells.GetValueOrDefault(c)?.Heat??0)+take*(temperature+273.15)*FluidMaterials.Water.SpecificHeat);
         if(external)Added+=take;return take;
     }
+    public int Withdraw(Cell c,int requested)
+    {if(requested<=0||!_cells.TryGetValue(c,out var f))return 0;int n=Math.Min(requested,f.Amount);Set(c,f.Amount-n,f.Heat*(f.Amount-n)/f.Amount);Removed+=n;return n;}
     public int Drain(Cell c)
     {int amount=Amount(c);if(amount>0){Set(c,0,0);Removed+=amount;}return amount;}
     private int Transfer(Cell from,Cell to,int desired)
@@ -153,7 +175,9 @@ public sealed class FluidSimulation
             if(targets.Length==0)continue;
             var target=targets[0];
             var donor=component.Concat(boundary.Where(n=>Amount(n)>0)).Where(n=>n!=target)
-                .OrderByDescending(SurfaceUnits).ThenBy(n=>n.X).ThenBy(n=>n.Z).ThenBy(n=>n.Level).FirstOrDefault();
+                // Prefer the connected inlet as donor: pressure transmits through a
+                // full channel without waiting for a vacancy to diffuse upstream.
+                .OrderByDescending(n=>_riverInlets.Contains(n)).ThenByDescending(SurfaceUnits).ThenBy(n=>n.X).ThenBy(n=>n.Z).ThenBy(n=>n.Level).FirstOrDefault();
             if(Amount(donor)==0)continue;
             // Limit to available head and to half the physical level difference when not externally pressurized.
             double natural=Surface(donor)-Surface(target);
@@ -171,7 +195,7 @@ public sealed class FluidSimulation
     }
     private void Tick()
     {
-        Step++;FeedSources();if(_active.Count==0)return;
+        Step++;ExchangeRiverWater();FeedSources();if(_active.Count==0)return;
         int count=Math.Min(WorkPerStep,_active.Count);
         for(int i=0;i<count;i++)
         {
@@ -188,10 +212,10 @@ public sealed class FluidSimulation
         }
         PressureFlow();
     }
-    public FluidArchive Save(IEnumerable<Cell> gates)=>new(){Cells=_cells.Values.ToArray(),Sources=Sources.ToArray(),OpenGates=gates.ToArray(),Active=_active.ToArray(),Elapsed=Elapsed,Added=Added,Removed=Removed,Initial=Initial,Recharged=Recharged,Step=Step};
+    public FluidArchive Save(IEnumerable<Cell> gates)=>new(){Cells=_cells.Values.ToArray(),Sources=Sources.ToArray(),OpenGates=gates.ToArray(),Active=_active.ToArray(),Elapsed=Elapsed,Added=Added,Removed=Removed,Initial=Initial,Recharged=Recharged,Step=Step,RiverIn=RiverIn,RiverOut=RiverOut};
     public void Restore(FluidArchive s)
     {
-        if(s.Version!=1||s.Cells is null||s.Sources is null||s.Active is null||s.Cells.Length>MaxCells||s.Sources.Length>128||s.Active.Length>MaxCells*7||!double.IsFinite(s.Elapsed)||s.Elapsed<0||s.Elapsed>86400||s.Added<0||s.Removed<0||s.Initial<0||s.Recharged<0||s.Step<0)throw new InvalidDataException("流体存档无效。");
+        if(s.Version is not (1 or 2)||s.RiverIn<0||s.RiverOut<0||s.RiverIn>s.Added||s.RiverOut>s.Removed||s.Cells is null||s.Sources is null||s.Active is null||s.Cells.Length>MaxCells||s.Sources.Length>128||s.Active.Length>MaxCells*7||!double.IsFinite(s.Elapsed)||s.Elapsed<0||s.Elapsed>86400||s.Added<0||s.Removed<0||s.Initial<0||s.Recharged<0||s.Step<0)throw new InvalidDataException("流体存档无效。");
         _cells.Clear();Sources.Clear();_active.Clear();_queued.Clear();
         foreach(var f in s.Cells)
         {
@@ -199,7 +223,7 @@ public sealed class FluidSimulation
         }
         try{foreach(var source in s.Sources)AddSource(source);}catch(ArgumentException e){throw new InvalidDataException("含水层存档无效。",e);}
         foreach(var c in s.Active){if(!TerrainMap.InBounds(c)||_queued.Contains(c))throw new InvalidDataException("流体队列无效。");Wake(c);}
-        Added=s.Added;Removed=s.Removed;Initial=s.Initial;Recharged=s.Recharged;Step=s.Step;Elapsed=s.Elapsed;
+        Added=s.Added;Removed=s.Removed;Initial=s.Initial;Recharged=s.Recharged;Step=s.Step;Elapsed=s.Elapsed;RiverIn=s.RiverIn;RiverOut=s.RiverOut;
         if(!Conserved)throw new InvalidDataException("流体质量账本不平衡。");Revision++;
     }
 }

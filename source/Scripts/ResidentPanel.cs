@@ -8,7 +8,7 @@ public partial class Main
     private PanelContainer _residentPanel=null!;
     private Control _residentBackdrop=null!;
     private VBoxContainer _residentBody=null!;
-    private Label _residentHeader=null!,_residentSubtitle=null!,_residentStatus=null!,_residentNotice=null!;
+    private Label _residentHeader=null!,_residentSubtitle=null!,_residentStatus=null!;
     private TextureRect _residentPortrait=null!;
     private Button _residentDetails=null!;
     private OptionButton _residentPicker=null!;
@@ -63,12 +63,6 @@ public partial class Main
         // Keep long/wrapped page contents from changing the size of the HUD itself.
         var bodyViewport=new Control{SizeFlagsVertical=Control.SizeFlags.ExpandFill,ClipContents=true};column.AddChild(bodyViewport);
         _residentBody=RV(bodyViewport,8);_residentBody.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        RRule(column);
-        var footer=RH(column,10);
-        _residentNotice=RT(footer,"",13,RMuted);_residentNotice.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;_residentNotice.TextOverrunBehavior=TextServer.OverrunBehavior.TrimEllipsis;
-        RB(footer,"保存",()=>{SaveSession();_residentNotice.Text="已执行保存，结果见营地通知。";},"保存整个营地，包括人物与研究进度");
-        RB(footer,"返回",CloseResidentPanel,"恢复查看前的暂停状态");
-        RB(footer,"继续模拟",()=>{CloseResidentPanel();_clock.Paused=false;RefreshUi();},"关闭面板并执行已安排的活动",100,true);
         root.Resized+=LayoutResidentPanel;
         LayoutResidentPanel();
     }
@@ -88,8 +82,8 @@ public partial class Main
         _dossierPaused=_clock.Paused;_clock.Paused=true;_dragging=false;_orbitHeld=false;
         _dossierId=_selectedWorker>=0&&_selectedWorker<_world.Workers.Count?_world.Workers[_selectedWorker].Id:"";
         _residentPicker.Clear();foreach(var w in _world.Workers)_residentPicker.AddItem(w.Name);if(_selectedWorker>=0)_residentPicker.Select(_selectedWorker);
-        _buildMenu.Hide();_inspector.Hide();_worldMenu.Hide();_selectionPanel.Hide();
-        _residentNotice.Text=ColonyPage?"修改立即生效；关闭后恢复模拟。":"选择技能查看专长；悬停可查看详情。";
+        _buildMenu.Hide();_inspector.Hide();_worldMenu.Hide();_combatPanel.Hide();_selectionPanel.Hide();
+        _storagePanel?.QueueFree();_storagePanel=null;
         RenderResidentPanel();LayoutResidentPanel();_residentBackdrop.Show();_residentPanel.Show();RefreshUi();
     }
     private void CloseResidentPanel()
@@ -103,19 +97,18 @@ public partial class Main
         if(index<0||index>=_world.Workers.Count)return;
         _selectedResidents.Clear();_residentSelectionWorld=_world;
         _selectedWorker=index;_dossierId=_world.Workers[index].Id;_residentPicker.Select(index);_residentRosterPage=index/RosterPageSize;
-        _residentNotice.Text="";RenderResidentPanel();RefreshUi();
+        RenderResidentPanel();RefreshUi();
     }
     private void CycleResident(int step)
     {if(_world.Workers.Count>0)SelectDossierResident((_selectedWorker+step+_world.Workers.Count)%_world.Workers.Count);}
     private void ShowResidentPage(int page)
     {
-        _dossierPage=page;_residentNotice.Text="";RenderResidentPanel();LayoutResidentPanel();RefreshUi();
+        _dossierPage=page;RenderResidentPanel();LayoutResidentPanel();RefreshUi();
     }
     private void ResidentDo(string action,string target="",int item=0,string? actor=null)
     {
         var result=_world.ActResident(new(actor??_dossierId,action,target,item));
-        _residentNotice.Text=result.Message+(result.Ok&&action is "rest" or "relax" or "research" or "pickup" or "eat" or "treat" or "social"?" · 继续模拟后执行":"");
-        _residentNotice.AddThemeColorOverride("font_color",result.Ok?RGreen:RRed);
+        ShowActionFeedback(result.Message,!result.Ok);
         RenderResidentPanel();RefreshUi();
     }
     private void RenderResidentPanel()
@@ -139,7 +132,7 @@ public partial class Main
             _residentTabs[i].AddThemeStyleboxOverride("normal",style);_residentTabs[i].AddThemeColorOverride("font_color",i==_dossierPage?RGold:RMuted);
         }
         if(worker is null)
-        {RT(_residentBody,"营地中还没有居民",18,RGold);RT(_residentBody,"可在生产界面启用居民，再安排工作、作息与研究。",14,RMuted);return;}
+        {RT(_residentBody,"营地中还没有居民",18,RGold);RT(_residentBody,_developerMode?"开发模式：按 ～ 打开控制台，输入 residents on 启用居民。":"居民到来后可安排工作、作息与研究。",14,RMuted);return;}
         switch(_dossierPage)
         {
             case 0:RenderResidentBio(worker);break;

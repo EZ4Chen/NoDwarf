@@ -23,6 +23,7 @@ public sealed partial class DemoWorld
         if(Trees.ContainsKey(c))return DamageBlock(c,double.MaxValue);
         if(!CanDig(c,stairs,height)) {Log("立即挖掘失败：没有可挖岩土或与现有物件重叠。");return false;}
         var job=new DemoJob{Cell=c,Dig=true,DigHeight=stairs?3:height,Facing=facing};
+        job.AcceptedWaterRisk=DigWaterRisk(job); // Explicit developer terrain editing bypasses gameplay confirmation.
         if(!DigSafe(job)){Log("立即挖掘失败：居民或建筑正在使用这处支撑。");return false;}
         for(int i=0;i<job.DigHeight;i++) MineWithDrop(c+new Cell(0,0,i));
         SettleItems();Revision++;ValidateWorkshop();Log($"[开发] 立即开凿 @ {c}，已生成对应掉落。");return true;

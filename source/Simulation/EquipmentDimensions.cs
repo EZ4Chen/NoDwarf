@@ -12,6 +12,7 @@ public sealed record EquipmentDimensions
     public float[] ContactStart {get;init;}=[];
     public float[] ContactEnd {get;init;}=[];
     public float ContactRadius {get;init;}
+    public double? ExpiresAt {get;init;}
     public string MaterialId {get;init;}="";
     public static Vector3 V(float[] v)=>new(v[0],v[1],v[2]);
     public Vector3 Scale=>V(Size)/(V(ReferenceMax)-V(ReferenceMin));
@@ -54,6 +55,7 @@ public static class EquipmentPhysicalCatalog
 // Immutable values can be carried through reservations/splits without sharing mutable state.
 public sealed record ItemProperties
 {
+    public double? ExpiresAt {get;init;}
     public string MaterialId {get;init;}="";
     public string QualityId {get;init;}="normal";
     public double? Durability {get;init;}
@@ -61,7 +63,7 @@ public sealed record ItemProperties
     public void Validate()
     {
         static bool Id(string? s)=>s is not null&&s.Length<=64&&s.All(c=>char.IsAsciiLetterOrDigit(c)||c is '_' or '-' or ':' or '.');
-        if(!Id(MaterialId)||!Id(QualityId)||QualityId.Length==0||Durability.HasValue!=MaxDurability.HasValue||
+        if(ExpiresAt is double expiry&&(!double.IsFinite(expiry)||expiry<0)||!Id(MaterialId)||!Id(QualityId)||QualityId.Length==0||Durability.HasValue!=MaxDurability.HasValue||
             Durability is double d&&(!double.IsFinite(d)||d<0)||MaxDurability is double m&&(!double.IsFinite(m)||m<=0||m>1e9)||Durability>MaxDurability)
             throw new InvalidDataException("物品材质、品质或耐久字段无效");
     }

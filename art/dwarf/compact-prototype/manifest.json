@@ -1,0 +1,28 @@
+{
+  "status": "front-view animation prototype; production sprite4 renderer unchanged",
+  "asset_root": "source/Assets/Characters/CompactPrototype",
+  "launch": "bash source/tools/compact-demo.sh",
+  "record": "bash source/tools/compact-demo.sh -- --record-compact",
+  "body_height": 220,
+  "hand_height": 54,
+  "boot_height": 76,
+  "previous_sizes": [
+    268,
+    39,
+    58
+  ],
+  "hand_convention": "Front view: anatomical right appears screen-left and is not mirrored; left appears screen-right and is mirrored. Mining: right hand nearer pick head, left hand nearer handle end.",
+  "mining_upper_grip": [
+    0,
+    -52
+  ],
+  "mining_lower_grip": [
+    0,
+    0
+  ],
+  "video_seconds": 8,
+  "frame_count": 192,
+  "fps": 24,
+  "source": "image_gen.imagegen; prompt.json; parts-source.png",
+  "packing": "pack.py only extracts generated alpha-connected parts and centers the handle; no painting"
+}

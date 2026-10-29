@@ -43,6 +43,12 @@ public sealed class ResidentInjury
     public string Part {get;set;}="left_hand";
     public string Kind {get;set;}="cut";
     public double Severity {get;set;}
+    public double PermanentSeverity {get;set;}
+    public double UntreatedSeconds {get;set;}
+    public bool InfectionSeeded {get;set;}
+    public HealthTreatment Treatment {get;set;}=new();
+    public bool Fixed {get;set;}
+    public bool FreshAmputation {get;set;}
     public bool Treated {get;set;}
 }
 public sealed record ResidentMemory(string Key,string Text,double Time);
@@ -60,6 +66,10 @@ public sealed class ResidentActivity
     public string Origin {get;set;}="manual";
     public string Target {get;set;}="";
     public int ItemId {get;set;}
+    public string BodyPart {get;set;}="";
+    public string Supply {get;set;}="";
+    public Cell? SourceCell {get;set;}
+    public Cell? RescueBed {get;set;}
     public Cell Destination {get;set;}
     public double Progress {get;set;}
 }
@@ -80,7 +90,21 @@ public sealed class ResidentProfile
     public long DecisionVersion {get;set;}
     public List<ResidentInjury> Injuries {get;set;}=new();
     public double Blood {get;set;}=100;
+    public List<ResidentDisease> Diseases {get;set;}=new();
+    public double Malnutrition {get;set;}
+    public double Thirst {get;set;}=100;
+    public double Dehydration {get;set;}
+    public double ColdExposure {get;set;}
+    public double HeatExposure {get;set;}
+    public double CriticalSeconds {get;set;}
+    public double InfectionExposure {get;set;}
+    public string DeathCause {get;set;}="";
+    public bool Isolated {get;set;}
+    public Dictionary<string,double> Prostheses {get;set;}=new();
     public double Hunger {get;set;}=90;
+    public Cell? HomeBed {get;set;}
+    public Cell? MedicalBed {get;set;}
+    public string FoodIssue {get;set;}="";
     public double Rest {get;set;}=90;
     public double Recreation {get;set;}=80;
     public List<MoodEffect> MoodEffects {get;set;}=new();
@@ -94,33 +118,33 @@ public sealed class ResidentProfile
     [JsonIgnore] public Dictionary<string,double> GearBonuses {get;}=new();
     [JsonIgnore] public double CarriedWeight {get;set;}
     [JsonIgnore] public double Capacity => 30;
-    [JsonIgnore] public double Manipulation => (Integrity("left_arm")*Integrity("left_hand") + Integrity("right_arm")*Integrity("right_hand"))/2;
-    [JsonIgnore] public double Mobility => (Integrity("left_leg")*Integrity("left_foot") + Integrity("right_leg")*Integrity("right_foot"))/2;
-    [JsonIgnore] public double Consciousness => Math.Min(Math.Min(Integrity("head"),Integrity("torso")),Blood/100);
-    [JsonIgnore] public bool Dead => Consciousness<=0;
-    [JsonIgnore] public bool Incapacitated => Consciousness<.2;
+    [JsonIgnore] public double Manipulation => (Integrity("left_arm")*Integrity("left_hand") + Integrity("right_arm")*Integrity("right_hand"))/2*Math.Clamp(1-HealthConditions.Effects(this).ManipulationLoss,0,1);
+    [JsonIgnore] public double Mobility => (Integrity("left_leg")*Integrity("left_foot") + Integrity("right_leg")*Integrity("right_foot"))/2*Math.Clamp(1-HealthConditions.Effects(this).MovingLoss,0,1);
+    [JsonIgnore] public double Consciousness => Math.Min(Math.Min(Integrity("head"),Integrity("torso")),Math.Min(Blood/100,ResidentHealth.ConditionCapacity(this)));
+    [JsonIgnore] public bool Dead => DeathCause!=""||Consciousness<=0;
+    [JsonIgnore] public bool Incapacitated => Consciousness<.2||Pain>=85;
     [JsonIgnore] public double Pain
     {
-        get { double sum=0; foreach(var injury in Injuries) if(injury.Kind!="missing") sum+=injury.Severity; return Math.Min(100,sum*.5); }
+        get { double sum=0; foreach(var injury in Injuries) if(injury.Kind!="missing") sum+=Math.Max(0,injury.Severity-injury.PermanentSeverity)*(injury.Fixed?.5:1); return Math.Min(100,sum*.5+HealthConditions.Effects(this).Pain); }
     }
     [JsonIgnore] public double Mood => Math.Clamp(70 + MoodEffects.Sum(e=>e.Amount) - Math.Max(0,40-Hunger)*.5 - Math.Max(0,40-Rest)*.5 - Math.Max(0,40-Recreation)*.4 - Pain*(Traits.Contains("calm")?.15:.3),0,100);
     [JsonIgnore] public double MoveRate
     {
-        get { double consciousness=Consciousness; return consciousness<.2 ? 0 : Math.Clamp(Mobility * consciousness * Math.Min(1,Capacity/Math.Max(1,CarriedWeight)),.08,1); }
+        get { double consciousness=Consciousness; return Incapacitated ? 0 : Math.Clamp(Mobility * consciousness * Math.Min(1,Capacity/Math.Max(1,CarriedWeight)),.08,1); }
     }
     // Injuries are mutable (including treatment and recovery); compute from live data
     // without allocating a capturing predicate/iterator for every limb on every tick.
     public double Integrity(string part)
     {
         double severity=0;
-        foreach(var injury in Injuries) if(injury.Part==part) severity+=injury.Severity;
-        return Math.Clamp(1-severity/100,0,1);
+        foreach(var injury in Injuries) if(injury.Part==part) severity+=injury.Kind=="fracture"&&injury.Fixed?(injury.Severity-injury.PermanentSeverity)*.85+injury.PermanentSeverity:injury.Severity;
+        return Math.Max(Prostheses.GetValueOrDefault(part),Math.Clamp(1-severity/100,0,1));
     }
     public int Level(string skill) => ResidentCatalog.Level(SkillXp.GetValueOrDefault(skill));
     public double WorkRate(string skill)
     {
         double consciousness=Consciousness;
-        if(consciousness<.2)return 0;
+        if(Incapacitated)return 0;
         double manipulation=skill=="social"?1:Manipulation;
         if(skill!="social"&&manipulation<.05)return 0;
         return (1 + Level(skill)*.02 + Talents.GetValueOrDefault(skill)*.15) * manipulation * consciousness *
@@ -159,9 +183,11 @@ public sealed class ResidentProfile
     public void Validate()
     {
         static bool Valid(double v,double max=100)=>double.IsFinite(v)&&v>=0&&v<=max;
-        static bool ValidOrigin(string origin)=>origin is "manual" or "need" or "schedule" or "work";
+        static bool ValidOrigin(string origin)=>origin is "manual" or "need" or "schedule" or "work" or "emergency";
         if(Age is <0 or >200 || Childhood is null || Adulthood is null || Childhood.Length>100 || Adulthood.Length>100 ||
             Schedule is null||Schedule.Length!=24||Schedule.Any(h=>!ResidentWork.Modes.Contains(h))||
+            MedicalBed is Cell medicalBed&&!TerrainMap.InBounds(medicalBed)||
+            FoodIssue is null||FoodIssue.Length>200||HomeBed is Cell bed&&!TerrainMap.InBounds(bed)||
             WorkPriorities is null||WorkPriorities.Count!=ResidentWork.Types.Length||ResidentWork.Types.Any(t=>!WorkPriorities.ContainsKey(t.Id))||
             WorkPriorities.Values.Any(v=>v is <0 or >4)||ResidentWork.Types.Any(t=>!t.Available&&WorkPriorities[t.Id]!=0)||
             SkillXp is null || SkillXp.Count!=ResidentCatalog.Skills.Length || ResidentCatalog.Skills.Any(s=>!SkillXp.ContainsKey(s.Id)) || SkillXp.Values.Any(v=>v<0||v>1000000000) ||
@@ -169,13 +195,13 @@ public sealed class ResidentProfile
             Talents.Any(t=>!SkillXp.ContainsKey(t.Key)||t.Value is <1 or >3||Level(t.Key)<(t.Value==1?3:t.Value==2?6:10)) ||
             SpentPoints!=Talents.Values.Sum(n=>n*(n+1)/2) || AutoSkill is null || AutoSkill!=""&&!SkillXp.ContainsKey(AutoSkill) ||
             Traits is null || Traits.Count>3 || Traits.Distinct().Count()!=Traits.Count || Traits.Any(t=>!ResidentCatalog.Traits.ContainsKey(t)) ||
-            !Valid(Blood)||!Valid(Hunger)||!Valid(Rest)||!Valid(Recreation)||ResearchWork<0 ||
+            !LifeHealth.Valid(this)||!ResidentHealth.Valid(this)||!Valid(Blood)||!Valid(Hunger)||!Valid(Rest)||!Valid(Recreation)||ResearchWork<0 ||
             Injuries is null||Injuries.Count>40||Injuries.Any(i=>i is null||!ResidentCatalog.Parts.Any(p=>p.Id==i.Part)||i.Kind is not ("cut" or "burn" or "fracture" or "missing")||!Valid(i.Severity)) ||
             Memories is null||Memories.Count>24||Memories.Any(m=>m is null||m.Key is null||m.Text is null||m.Key.Length>100||m.Text.Length>400||!Valid(m.Time,double.MaxValue)) ||
             Relations is null||Relations.Count>32||Relations.Any(r=>r is null||string.IsNullOrWhiteSpace(r.Target)||r.Kind is null||r.Kind.Length>30||r.Opinion is <-100 or >100||!double.IsFinite(r.LastSocial))||Relations.Select(r=>r.Target).Distinct().Count()!=Relations.Count||
             MoodEffects is null||MoodEffects.Count>8||MoodEffects.Any(m=>m is null||m.Key is null||m.Text is null||m.Key.Length>100||m.Text.Length>200||m.Amount is <-100 or >100||!Valid(m.Until,double.MaxValue)) ||
             PausedResearch is not null && (PausedResearch.Kind!="research"||!ValidOrigin(PausedResearch.Origin)||PausedResearch.Target!=""||PausedResearch.ItemId!=0||!Valid(PausedResearch.Progress,1)||PausedResearch.Progress>=1||!TerrainMap.InBounds(PausedResearch.Destination)) ||
-            Activity is not null && (Activity.Kind is not ("rest" or "relax" or "research" or "pickup" or "eat" or "treat" or "care_supply" or "social")||!ValidOrigin(Activity.Origin)||Activity.Target is null||Activity.Target.Length>100||!Valid(Activity.Progress,100000)||!TerrainMap.InBounds(Activity.Destination)))
+            Activity is not null && (Activity.Kind is not ("rest" or "relax" or "research" or "pickup" or "eat" or "treat" or "care_supply" or "food_supply" or "feed" or "social" or "rescue_pickup" or "rescue_carry" or "life_supply" or "life_use" or "water_fill")||!ValidOrigin(Activity.Origin)||Activity.Target is null||Activity.Target.Length>100||Activity.RescueBed is Cell rescueBed&&!TerrainMap.InBounds(rescueBed)||!Valid(Activity.Progress,100000)||!TerrainMap.InBounds(Activity.Destination)))
             throw new InvalidDataException("人物资料无效。");
     }
 }

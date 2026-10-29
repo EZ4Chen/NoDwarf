@@ -17,8 +17,19 @@ public partial class Main
             if(!_world.BeginMelee(a,b))throw new Exception("Start visual strike");
             for(int i=0;i<16;i++)_world.AdvanceMelee(1d/30);
             AnimatePeople();
-            var player=ActorModelView.Descendants(_people[0].GetNode<ActorModelView>("ModelView")).OfType<AnimationPlayer>().Single();
-            if(Math.Abs(player.CurrentAnimationPosition-a.Combat.AttackTime)>.001)throw new Exception("Attack animation diverged from simulation");
+            var view=_people[0].GetNode<ActorModelView>("ModelView");
+            if(view.GetNodeOrNull<DirectionalDwarfView>("DwarfSprite") is {} sprite)
+            {
+                if(view.CurrentState!="attack"||!sprite.Wears("sword"))throw new Exception("Sprite attack state/equipment diverged from simulation");
+                var hand=sprite.GetNode<Node3D>("Paper/main");var pose=hand.Transform;
+                view.Present(a,_world.SimulationTime,null,0);
+                if(hand.Transform!=pose)throw new Exception("Paused sprite attack changed pose");
+            }
+            else
+            {
+                var player=ActorModelView.Descendants(view).OfType<AnimationPlayer>().Single();
+                if(Math.Abs(player.CurrentAnimationPosition-a.Combat.AttackTime)>.001)throw new Exception("Attack animation diverged from simulation");
+            }
             for(int i=0;i<4;i++)await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
             GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath("res://.local/melee-windup.png"));
@@ -28,7 +39,7 @@ public partial class Main
             for(int i=0;i<3;i++)await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
             GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath("res://.local/melee-shield.png"));
-            GD.Print("MELEE_UI_OK: real sword clip follows simulation time; shield contact and defense controls");GetTree().Quit();
+            GD.Print("MELEE_UI_OK: active character renderer follows simulation state and pause; shield contact and defense controls");GetTree().Quit();
         }
         catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}
     }

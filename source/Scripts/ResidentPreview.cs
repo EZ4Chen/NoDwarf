@@ -35,7 +35,7 @@ public partial class Main
                 foreach(var scroll in _residentScrolls)
                     if(scroll.GetChild<Control>(0).Size.X>scroll.Size.X+1)throw new InvalidOperationException("Horizontal page overflow: "+_dossierPage);
                 if(_dossierPage is 7 or 8 && _world.Workers.Count<=3 && _residentScrolls.Any(scroll=>scroll.GetVScrollBar().MaxValue>scroll.GetVScrollBar().Page+1))
-                    throw new InvalidOperationException("Three resident planning rows must fit without scrolling");
+                    throw new InvalidOperationException("Three resident planning rows must fit without scrolling: page="+_dossierPage+" sizes="+string.Join(",",_residentScrolls.Select(s=>$"{s.Size}/{s.GetVScrollBar().MaxValue}/{s.GetVScrollBar().Page}")));
                 if(GetViewport().GetTexture().GetImage().SavePng($"res://.local/{file}.png")!=Error.Ok)throw new IOException("Dossier screenshot failed");
             }
             await Frame();
@@ -62,9 +62,34 @@ public partial class Main
                             throw new InvalidOperationException("Bio content is clipped: "+control.Name+" "+control.GetGlobalRect());
                 }
                 await Capture("resident-"+i);
-                if(i==2&&_residentScrolls[0].GetVScrollBar().MaxValue>_residentScrolls[0].GetVScrollBar().Page+1)
+                if(i==2&&resident.Person.Injuries.Count==0&&_residentScrolls[0].GetVScrollBar().MaxValue>_residentScrolls[0].GetVScrollBar().Page+1)
                     throw new InvalidOperationException("All ten body parts should fit without scrolling");
             }
+            await Page(2);
+            _world.InfectResident(resident.Id,"fever");resident.Person.Diseases[0].Progress=145;resident.Person.Diseases[0].Immunity=72;
+            resident.Person.Diseases[0].Treatment=new(){Quality=.8,Remaining=400};
+            resident.Person.Malnutrition=120;resident.Person.Blood=65;
+            _world.InjureResident(resident.Id,"left_leg","fracture",85);
+            RenderResidentPanel();await Frame();
+            if(_healthExpandedKey!=""||_healthAllParts||_healthShownParts!=0||_residentBody.FindChildren("*","ProgressBar",true,false).Count!=0)
+                throw new InvalidOperationException("Health starts collapsed without progress bars or healthy body rows");
+            if(_healthRows.Count!=HealthConditions.States(resident.Person).Count()||_healthRows.Values.Any(b=>string.IsNullOrEmpty(b.AccessibilityName)))
+                throw new InvalidOperationException("Health abnormal rows must all have accessible names");
+            await Capture("resident-health-compact");
+            Click(_healthRows[":fever"]);await Frame();
+            if(_healthExpandedKey!=":fever"||_residentBody.FindChildren("*","ProgressBar",true,false).Count!=2)
+                throw new InvalidOperationException("Disease expands both progress and immunity");
+            await Capture("resident-health-progress");
+            Click(_healthRows[":fever"]);await Frame();
+            if(_healthExpandedKey!=""||_residentBody.FindChildren("*","ProgressBar",true,false).Count!=0)throw new InvalidOperationException("Disease folds again");
+            Click(_healthPartsToggle);await Frame();
+            if(!_healthAllParts||_healthShownParts!=10||_residentScrolls.Last().ScrollVertical==0)throw new InvalidOperationException("All ten body parts expand");
+            await Capture("resident-health-body-parts");
+            Click(_healthPartsToggle);await Frame();if(_healthShownParts!=0)throw new InvalidOperationException("Body list folds again");
+            Click(_residentNext);await Frame();
+            if(_healthExpandedKey!=""||_healthAllParts||_healthRows.Count!=0)throw new InvalidOperationException("Healthy next resident has fresh collapsed state");
+            SelectDossierResident(0);await Frame();
+            resident.Person.Diseases.Clear();resident.Person.Malnutrition=0;resident.Person.Blood=100;
             await Page(7);
             Click(_scheduleBrushes["sleep"]);await Frame();
             Click(_scheduleCells[(resident.Id,22)]);await Frame();
@@ -96,7 +121,7 @@ public partial class Main
             _clock.Paused=true;OpenResidentPanel();await Frame();
             GetViewport().PushInput(new InputEventKey{Keycode=Key.Escape,Pressed=true},true);await Frame();
             if(DossierOpen||!_clock.Paused)throw new InvalidOperationException("Escape must preserve prior pause");
-            _world.DeveloperResidents(false);CreatePeople();_selectedWorker=-1;RefreshUi();
+            _world.DeveloperResidents(false);CreatePeople();_selectedWorker=-1;RefreshUi();await Frame();
             Click(_colonyTabs[8]);await Frame();
             if(!DossierOpen||_dossierPage!=8)throw new InvalidOperationException("Empty colony work panel must open");
             Click(_residentNext);await Frame();
@@ -104,6 +129,11 @@ public partial class Main
             if(!DossierOpen||_dossierPage!=7)throw new InvalidOperationException("Bottom navigation must remain reachable");
             Click(_colonyTabs[7]);await Frame();
             if(DossierOpen||!_clock.Paused)throw new InvalidOperationException("Active colony tab must close without unpausing");
+            var medicalCell=new Cell(60,60,0);_world.Buildings[medicalCell]=new(medicalCell,BuildKind.Bed);
+            _selectedCell=medicalCell;_selectionPanel.Show();RefreshUi();await Frame();
+            if(!_medicalBedAction.IsVisibleInTree())throw new InvalidOperationException("Medical bed action must be visible for a built bed");
+            Click(_medicalBedAction);await Frame();if(!_world.IsMedicalBed(medicalCell))throw new InvalidOperationException("Medical bed designation button");
+            Click(_medicalBedAction);await Frame();if(_world.IsMedicalBed(medicalCell))throw new InvalidOperationException("Medical bed designation released");
             GD.Print("RESIDENT_UI_OK: six person tabs + three colony tabs, skill purchase, schedule click/drag, work priority left/right clicks, resident switching, bounds and pause");GetTree().Quit();
         }
         catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}

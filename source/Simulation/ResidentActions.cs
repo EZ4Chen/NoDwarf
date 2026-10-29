@@ -128,6 +128,11 @@ public sealed partial class DemoWorld
                 var topic=ResidentCatalog.Research.FirstOrDefault(r=>r.Id==c.Target);
                 if(topic is null||Research.Completed.Contains(topic.Id)||topic.Prerequisites.Any(r=>!Research.Completed.Contains(r)))return new(false,"研究已完成或前置未满足");
                 Research.Active=topic.Id;Research.Version++;result=new(true,"当前研究："+topic.Name);break;
+            case "drink":return SupplyCare(w.Id,c.Target==""?w.Id:c.Target,"water_bucket");
+            case "splint":return SupplyCare(w.Id,c.Target,"splint");
+            case "prosthesis":return SupplyCare(w.Id,c.Target,"prosthesis",Workers.FirstOrDefault(p=>p.Id==c.Target)?.Person.Injuries.FirstOrDefault(i=>i.Kind=="missing"&&i.Treated&&i.Part is not ("head" or "torso")&&!Workers.First(p=>p.Id==c.Target).Person.Prostheses.ContainsKey(i.Part))?.Part??"");
+            case "isolate":w.Person.Isolated=!w.Person.Isolated;return new(true,w.Person.Isolated?"隔离中：暂停社交与公共娱乐，仍可工作和就医":"解除隔离");
+            case "rescue":return RescueResident(w.Id,c.Target);
             case "rest":case "relax":case "research":case "pickup":case "eat":case "treat":case "social":
                 return BeginResidentActivity(w,c.Action,c.Target,c.ItemId);
             default:return new(false,"不支持的人物操作");
@@ -146,19 +151,31 @@ public sealed partial class DemoWorld
     }
     private ResidentResult BeginResidentActivity(DemoWorker w,string kind,string target="",int itemId=0,string origin="manual")
     {
+        if(w.WaterEvacuating||FloodThreat(w))return new(false,"正在处理水患，先撤离或排水");
         var p=w.Person;if(MilitaryControlled(w))return new(false,"请先解除征召或集合警报");if(p.Incapacitated)return new(false,"居民失去行动能力");
         if(kind is "research" or "treat"&&p.Manipulation<.05)return new(false,"双手无法操作，不能进行这项工作");
         Cell destination=w.Tile;Queue<Cell>? path=new();
         if(kind=="rest"&&!p.Incapacitated)
         {
-            var beds=Buildings.Values.Where(b=>b.Kind==BuildKind.Bed&&!Workers.Any(o=>o!=w&&o.Person.Activity?.Target==BedKey(b.Cell))).ToArray();
+            ValidateHomeBed(w);
+            var beds=Buildings.Values.Where(b=>b.Kind==BuildKind.Bed&&!IsMedicalBed(b.Cell)&&(p.HomeBed is null||p.HomeBed==b.Cell)&&!Workers.Any(o=>o!=w&&!o.Person.Dead&&(o.Person.HomeBed==b.Cell||o.Person.Activity?.Target==BedKey(b.Cell)))).ToArray();
             var candidates=beds.SelectMany(b=>Directions.Select(d=>b.Cell+d)).Where(Walkable);
             var route=Navigation.FindNearest(w.Tile,candidates.Where(c=>origin=="manual"||Navigation.CanReach(c,w.Tile)),out var bedside);
-            if(route is not null){path=route;destination=bedside;target=BedKey(beds.First(b=>Directions.Any(d=>b.Cell+d==bedside)).Cell);}
+            if(route is not null){path=route;destination=bedside;p.HomeBed=beds.First(b=>Directions.Any(d=>b.Cell+d==bedside)).Cell;target=BedKey(p.HomeBed.Value);}
+        }
+        if(kind=="relax")
+        {
+            var fires=Buildings.Values.Where(b=>!p.Isolated&&b.Kind is BuildKind.Campfire or BuildKind.GameTable).ToArray();
+            var destinations=fires.SelectMany(b=>Directions.Select(d=>b.Cell+d)).Where(c=>Walkable(c)&&Navigation.CanReach(c,w.Tile)&&
+                !Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"relax"} activity&&activity.Destination==c));
+            var route=Navigation.FindNearest(w.Tile,destinations,out var seat);
+            if(route is not null){path=route;destination=seat;target=BedKey(fires.First(b=>Directions.Any(d=>b.Cell+d==seat)).Cell);}
         }
         if(kind=="research"&&Research.Active=="")return new(false,"先选择一个研究项目");
-        if(kind=="eat"&&!Inventory(w).Any(s=>s.Item=="meal"))return new(false,"物品栏没有口粮，请先拾取");
+        if(kind=="eat"&&Inventory(w).Any(s=>s.Item=="meal"))
+        {var dining=DiningSeats(w).ToArray();var route=Navigation.FindNearest(w.Tile,dining,out var seat);if(route is not null){path=route;destination=seat;}}
         if(kind=="eat"&&p.Hunger>=95)return new(false,"现在不饿");
+        if(kind=="eat"&&!Inventory(w).Any(s=>s.Item=="meal"))return BeginFoodSupply(w,w)?new(true,"正在取用一份口粮"):new(false,p.FoodIssue);
         if(kind=="pickup")
         {
             var item=Items.FirstOrDefault(s=>s.Id==itemId&&s.Owner==""&&s.Count>Reserved(s.Id));
@@ -169,9 +186,11 @@ public sealed partial class DemoWorld
         if(kind is "treat" or "social")
         {
             var other=Workers.FirstOrDefault(o=>o.Id==target);if(other is null||other.Person.Dead)return new(false,"目标居民不存在或已死亡");
+            if(kind=="treat"&&(RescueReserved(target)||LifeReserved(target)))return new(false,"伤员正在搬运，抵达后再护理");
             if(kind=="treat"&&Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"treat" or "care_supply"} care&&care.Target==target))return new(false,"已有护理者负责这名伤员");
             if(kind=="treat"&&!Inventory(w).Any(i=>i.Item=="bandage"))return BeginMedicalSupply(w,target,origin);
-            if(kind=="treat"&&(!other.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")||!Inventory(w).Any(i=>i.Item=="bandage")))return new(false,"需要未处理的伤口和随身绷带");
+            if(kind=="treat"&&(!HealthCare.Needed(other.Person)||!Inventory(w).Any(i=>i.Item=="bandage")))return new(false,"需要待护理的伤病和随身护理用品");
+            if(kind=="social"&&(p.Isolated||other.Person.Isolated))return new(false,"隔离期间暂停社交");
             if(kind=="social"&&(other==w||other.Person.Incapacitated||other.Job is not null||other.Path.Count>0||other.Person.Activity is not null))return new(false,"请选择空闲且清醒的另一位居民");
             if(kind=="social"&&p.Relations.Count>=32&&!p.Relations.Any(r=>r.Target==target))return new(false,"关系记录已满");
             if(kind=="social"&&p.Relations.Any(r=>r.Target==target&&_simulationTime-r.LastSocial<120))return new(false,"刚交流过，稍后再聊");
@@ -179,15 +198,15 @@ public sealed partial class DemoWorld
         }
         if(path is null)return new(false,"没有可达路线");
         if(path.Count>0&&p.Mobility<.05)return new(false,"居民无法移动到目标位置");
-        if(w.Job is not null)Release(w.Job);else StopMovement(w);
+        DropRescue(w);if(w.Job is not null)Release(w.Job);else StopMovement(w);
         foreach(var c in path)w.Path.Enqueue(c);w.CheckedNavigationVersion=Navigation.Version;
         p.PausedResearch=null;p.Activity=new(){Kind=kind,Origin=origin,Target=target,ItemId=itemId,Destination=destination};p.DecisionVersion++;
         w.Status=ActivityName(kind);return new(true,w.Status);
     }
     public static string ActivityName(string kind)=>kind switch
-    {"rest"=>"休息","relax"=>"放松","research"=>"研究","pickup"=>"拾取物品","eat"=>"进食","treat"=>"包扎护理","care_supply"=>"取用公共绷带","social"=>"交流",_=>"等待"};
+    {"rescue_pickup"=>"前往救援","rescue_carry"=>"搬运伤员","rest"=>"休息","relax"=>"放松","research"=>"研究","pickup"=>"拾取物品","eat"=>"进食","treat"=>"包扎护理","care_supply"=>"取用公共绷带","food_supply"=>"取用一份口粮","feed"=>"喂饭照料","social"=>"交流",_=>"等待"};
     private void CancelResidentActivity(DemoWorker worker)
-    {worker.Person.Activity=null;StopMovement(worker);worker.Status="等待工作";worker.Person.DecisionVersion++;}
+    {DropRescue(worker);worker.Person.Activity=null;StopMovement(worker);worker.Status="等待工作";worker.Person.DecisionVersion++;}
     private bool ConsumePersonal(DemoWorker worker,string item)
     {
         var s=Inventory(worker).FirstOrDefault(s=>s.Item==item);if(s is null)return false;
@@ -212,12 +231,16 @@ public sealed partial class DemoWorld
             StopMovement(w);w.Status="无法工作 · 需要照料";return true;
         }
         if(a is null)return false;
+        if(a.Kind is "life_supply" or "life_use" or "water_fill")return UpdateLifeCare(w,dt,ref budget);
+        if(a.Kind is "rescue_pickup" or "rescue_carry")return UpdateRescue(w,dt,ref budget);
         if(a.Kind is "research" or "treat"&&p.Manipulation<.05||w.Path.Count>0&&p.Mobility<.05)
         {CancelResidentActivity(w);w.Status="活动能力不足";return true;}
         if(a.Kind=="care_supply"&&!Items.Any(s=>s.Id==a.ItemId&&s.Item=="bandage"&&s.Owner==""&&s.Count>0&&ItemPositions(s.Cell).Contains(a.Destination)))
         {CancelResidentActivity(w);w.Status="护理用品已移动或不可达";return true;}
-        if(a.Kind=="care_supply"&&!Workers.Any(o=>o.Id==a.Target&&!o.Person.Dead&&o.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")))
+        if(a.Kind=="care_supply"&&!Workers.Any(o=>o.Id==a.Target&&!o.Person.Dead&&HealthCare.Needed(o.Person)))
         {CancelResidentActivity(w);w.Status="护理对象已不需要治疗";return true;}
+        if(a.Kind is "food_supply" or "feed"&&!ValidFoodActivity(w,a))
+        {CancelResidentActivity(w);p.FoodIssue="送饭对象或口粮已变化，等待重新安排";return true;}
         if(w.Path.Count>0)
         {
             if(!EnsureWorkerRoute(w,ref budget))
@@ -229,8 +252,8 @@ public sealed partial class DemoWorld
         if(a.Kind is "treat" or "social"&&(target is null||target.Person.Dead||!Near(target.Tile)))
         {CancelResidentActivity(w);w.Status="对象已离开，请重新安排";return true;}
         w.Status=ActivityName(a.Kind);
-        if(a.Kind=="rest") {p.Rest=Math.Min(100,p.Rest+dt*RestRate(w));if(p.Rest>=99)CancelResidentActivity(w);return true;}
-        if(a.Kind=="relax") {p.Recreation=Math.Min(100,p.Recreation+dt);if(p.Recreation>=99)CancelResidentActivity(w);return true;}
+        if(a.Kind=="rest") {ValidateHomeBed(w);RestComfort(w);p.Rest=Math.Min(100,p.Rest+dt*RestRate(w));if(p.Rest>=99)CancelResidentActivity(w);return true;}
+        if(a.Kind=="relax") {p.Recreation=Math.Min(100,p.Recreation+dt*RelaxRate(w));if(p.Recreation>=99)CancelResidentActivity(w);return true;}
         if(a.Kind=="research")
         {
             if(Research.Active==""){CancelResidentActivity(w);return true;}
@@ -252,6 +275,8 @@ public sealed partial class DemoWorld
         a.Progress+=dt*(a.Kind=="treat"?p.WorkRate("medicine"):a.Kind=="social"?p.WorkRate("social"):1);
         if(a.Progress<(a.Kind is "treat" or "social"?8:1))return true;
         if(a.Kind=="care_supply")return CompleteMedicalSupply(w,a);
+        if(a.Kind=="food_supply")return CompleteFoodSupply(w,a);
+        if(a.Kind=="feed")return CompleteFeeding(w,a);
         switch(a.Kind)
         {
             case "pickup":
@@ -267,12 +292,13 @@ public sealed partial class DemoWorld
                 }
                 break;
             case "eat":
-                if(p.Hunger<95&&ConsumePersonal(w,"meal")){p.Hunger=Math.Min(100,p.Hunger+45);p.Feeling("meal","吃了口粮",4,_simulationTime+180);}break;
+                if(p.Hunger<95&&ConsumePersonal(w,"meal")){p.Hunger=Math.Min(100,p.Hunger+45);p.FoodIssue="";p.Feeling("meal",DiningSeats(w).Contains(w.Tile)?"坐在餐桌旁用餐":"吃了口粮",DiningSeats(w).Contains(w.Tile)?6:4,_simulationTime+180);}break;
             case "treat":
-                if(target is not null&&target.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")&&ConsumePersonal(w,"bandage"))
+                if(target is not null&&HealthCare.Needed(target.Person)&&ConsumePersonal(w,"bandage"))
                 {
-                    var injury=target.Person.Injuries.First(i=>!i.Treated&&i.Kind!="missing");injury.Treated=true;AwardWork(w,"medicine",40);
-                    target.Person.Remember("care:"+w.Id,$"{w.Name}处理了{ResidentCatalog.PartName(injury.Part)}的伤势。",_simulationTime);
+                    double quality=HealthCare.Quality(w.Person);
+                    string condition=HealthCare.Treat(target.Person,quality);AwardWork(w,"medicine",40);
+                    target.Person.Remember("care:"+w.Id,$"{w.Name}护理了{condition}，治疗质量 {quality:P0}。",_simulationTime);
                     if(target!=w)ChangeOpinion(target,w,8,"照料");target.Person.DecisionVersion++;
                 }break;
             case "social":
@@ -303,21 +329,23 @@ public sealed partial class DemoWorld
         for(int offset=0;offset<Workers.Count;offset++)
         {
             var w=Workers[(first+offset)%Workers.Count];
-            var p=w.Person;if(p.Dead)
+            var p=w.Person;ValidateHomeBed(w);if(p.Dead)
             {
                 if(!p.Memories.Any(m=>m.Key=="death")){p.Remember("death","因严重伤势死亡。",_simulationTime);Log(w.Name+"因严重伤势死亡。");}
                 continue;
             }
             p.Hunger=Math.Max(0,p.Hunger-elapsed*.035);p.Rest=Math.Max(0,p.Rest-elapsed*.025);p.Recreation=Math.Max(0,p.Recreation-elapsed*.02);
             p.MoodEffects.RemoveAll(e=>e.Until<=_simulationTime);
-            double bleeding=p.Injuries.Where(i=>i.Kind=="cut"&&!i.Treated).Sum(i=>i.Severity)*.001;
-            p.Blood=Math.Clamp(p.Blood+(bleeding>0?-bleeding:.015)*elapsed,0,100);
-            foreach(var i in p.Injuries.Where(i=>i.Kind!="missing"))
-                i.Severity=Math.Max(0,i.Severity-elapsed*(i.Treated?.035:i.Kind=="fracture"?0:.002)*(p.Traits.Contains("resilient")?1.2:1));
-            p.Injuries.RemoveAll(i=>i.Severity<=0);RefreshWeight(w,ownedItems[w.Id]);
+            int diseaseCount=p.Diseases.Count;int nutritionStage=(int)(p.Malnutrition/100);
+            ResidentHealth.Step(p,elapsed);RefreshWeight(w,ownedItems[w.Id]);
+            if(p.Diseases.Count>diseaseCount)Log(w.Name+"出现伤口感染，请查看健康页。");
+            if((int)(p.Malnutrition/100)>nutritionStage)Log(w.Name+"营养不良加重，需要持续口粮供应。");
             if(p.Dead){p.Remember("death","因严重伤势死亡。",_simulationTime);Log(w.Name+"因严重伤势死亡。");}
+            if(p.Hunger>=40)p.FoodIssue="";
+            else if(NeedsFeeding(w))p.FoodIssue=FoodCareBusy(w.Id,w)?"同伴正在送饭":Available("meal")==0?"需要喂饭，但没有可用公共口粮":"无法自行取食，等待启用照料的同伴";
+            if(w.WaterEvacuating||FloodThreat(w)||CarrierOf(w) is not null||p.MedicalBed is not null||p.Activity?.Kind is "life_supply" or "life_use" or "water_fill")continue;
             // Self-care is deterministic and cheap. No API requests, no full-history scans.
-            if(!MilitaryControlled(w)&&(p.Activity is null||p.Activity.Kind is "research" or "rest" or "relax")&&!p.Incapacitated)
+            if(!MilitaryControlled(w)&&(p.Activity is null||p.Activity.Kind is "research" or "rest" or "relax"||p.Hunger<10&&p.Activity.Kind is not ("eat" or "food_supply")||p.Hunger<10&&p.Activity.Kind=="food_supply"&&p.Activity.Target!=w.Id||p.Rest<5&&p.Hunger>=25&&p.Activity.Kind is not ("eat" or "food_supply" or "rest"))&&!p.Incapacitated)
             {
                 var research=p.Activity?.Kind=="research"?p.Activity:p.PausedResearch;
                 bool BeginNeed(string kind)
@@ -351,14 +379,9 @@ public sealed partial class DemoWorld
     private bool TryFindFood(DemoWorker w)
     {
         if(Inventory(w).Any(s=>s.Item=="meal"))return BeginResidentActivity(w,"eat",origin:"need").Ok;
-        var available=Items.Where(s=>s.Item=="meal"&&s.Owner==""&&s.Count>Reserved(s.Id)).ToArray();
-        if(available.Length==0)return false;
-        var targets=available.SelectMany(s=>ItemPositions(s.Cell)).Where(c=>Walkable(c)&&Navigation.CanReach(c,w.Tile));
-        var route=Navigation.FindNearest(w.Tile,targets,out var endpoint);
-        if(route is null)return false;
-        var meal=available.First(s=>ItemPositions(s.Cell).Contains(endpoint));
-        return BeginResidentActivity(w,"pickup",itemId:meal.Id,origin:"need").Ok;
+        return BeginFoodSupply(w,w);
     }
+
     public ResidentResult InjureResident(string id,string part,string kind,double severity)
     {
         var w=Workers.FirstOrDefault(w=>w.Id==id);
@@ -368,6 +391,7 @@ public sealed partial class DemoWorld
     {
         if(!ResidentCatalog.Parts.Any(p=>p.Id==part)||kind is not ("cut" or "burn" or "fracture" or "missing")||!double.IsFinite(severity)||severity<=0||severity>100)return new(false,"伤势参数无效");
         if(w.Person.Dead)return new(false,"无法增加伤势");
+        if(kind=="missing"&&w.Person.Injuries.Any(i=>i.Part==part&&i.Kind=="missing"))return new(false,"该部位已经缺失");
         double armor=Inventory(w).Where(s=>s.Slot==ResidentGear.SlotForPart(part)).Sum(s=>ResidentGear.Get(s.Item)?.Protection??0);
         double damage=kind=="missing"?100:severity*(1-Math.Min(.8,armor/100));
         // At most one accumulated injury per body part and kind (10 * 4 = 40).
@@ -375,12 +399,16 @@ public sealed partial class DemoWorld
         var injuries=w.Person.Injuries;
         if(injuries.Count>=40)
         {
-            var combined=injuries.GroupBy(i=>(i.Part,i.Kind)).Select(g=>new ResidentInjury{Part=g.Key.Part,Kind=g.Key.Kind,Severity=Math.Min(100,g.Sum(i=>i.Severity)),Treated=g.All(i=>i.Treated)}).ToArray();
+            var combined=injuries.GroupBy(i=>(i.Part,i.Kind)).Select(g=>new ResidentInjury{Part=g.Key.Part,Kind=g.Key.Kind,Severity=Math.Min(100,g.Sum(i=>i.Severity)),Treated=g.All(i=>i.Treated),PermanentSeverity=g.Max(i=>i.PermanentSeverity),UntreatedSeconds=g.Max(i=>i.UntreatedSeconds),InfectionSeeded=g.Any(i=>i.InfectionSeeded),FreshAmputation=g.Any(i=>i.FreshAmputation),Fixed=g.All(i=>i.Fixed),Treatment=g.OrderByDescending(i=>i.Treatment.Remaining).First().Treatment}).ToArray();
             injuries.Clear();injuries.AddRange(combined);
         }
         var existing=injuries.FirstOrDefault(i=>i.Part==part&&i.Kind==kind);
-        if(existing is not null){existing.Severity=Math.Min(100,existing.Severity+damage);existing.Treated=false;}
-        else injuries.Add(new(){Part=part,Kind=kind,Severity=damage});
+        if(existing is not null){existing.Severity=Math.Min(100,existing.Severity+damage);if(existing.Treated){existing.UntreatedSeconds=0;existing.InfectionSeeded=false;}existing.Treated=false;existing.Fixed=false;existing.Treatment=new();}
+        else injuries.Add(new(){Part=part,Kind=kind,Severity=damage,FreshAmputation=kind=="missing"});
+        var wound=injuries.First(i=>i.Part==part&&i.Kind==kind);
+        // Severe burns/fractures retain a bounded, deterministic impairment. Old injuries are not rerolled on load.
+        if(kind is "burn" or "fracture"&&wound.Severity>=80)
+            wound.PermanentSeverity=Math.Max(wound.PermanentSeverity,Math.Min(15,(wound.Severity-70)*.5));
         w.Person.DecisionVersion++;RefreshWeight(w);
         w.Person.Remember("injury:"+part,$"{ResidentCatalog.PartName(part)}受到{ResidentCatalog.InjuryName(kind)}。",_simulationTime);
         return new(true,"伤势已记录");

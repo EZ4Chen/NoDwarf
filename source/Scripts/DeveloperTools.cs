@@ -113,7 +113,7 @@ public partial class Main
         switch(a[0].ToLowerInvariant())
         {
             case "help":
-                Count(1);RecordWorldEvent("～ 开关控制台；↑↓ 历史；Esc 关闭\n新增：lua help | stats | stats on/off | filter all/info/warn/error | selected | demo single/two/underground | play | speed 1/3 | water selected [升] | drain selected | logs open\n人物调试（开发模式）：personxp 居民ID 技能ID 经验 | injure 居民ID 部位ID cut/fracture/burn/missing 严重度 | give 物品ID 数量\n" + "region [类型] [种子]（region 查看全部类型） | weather [auto/clear/cloudy/rain/fog] | water X Z Y 升 | drain X Z Y | aquifer X Z Y 储量 水头 流量 补给 温度 | gate X Z Y | fluidstats | help | status | navstats | navmode exact/hierarchy | dev on/off | creative on/off | fog on/off\npause | resume | step [1..300] | level 高度 | residents on/off | finish\nplace 方块ID X Z 高度 [朝向0..3] | dig X Z 高度 [stairs 朝向0..3]\nerase X Z 高度 | clear | logs\n直接放置不耗料；直接挖掘天然方块会掉落物品；finish 完成已有规划，沿用其材料结算。");break;
+                Count(1);RecordWorldEvent("～ 开关控制台；↑↓ 历史；Esc 关闭\n新增：lua help | stats | stats on/off | filter all/info/warn/error | selected | demo single/two/underground | play | speed 1/3 | water selected [升] | drain selected | logs open\n人物调试（开发模式）：disease 居民ID fever/wound_infection | personxp 居民ID 技能ID 经验 | injure 居民ID 部位ID cut/fracture/burn/missing 严重度 | give 物品ID 数量\n" + "region [类型] [种子]（region 查看全部类型） | weather [auto/clear/cloudy/rain/fog] | water X Z Y 升 | drain X Z Y | aquifer X Z Y 储量 水头 流量 补给 温度 | gate X Z Y | fluidstats | help | status | navstats | navmode exact/hierarchy | dev on/off | creative on/off | fog on/off\npause | resume | step [1..300] | level 高度 | residents on/off | finish\nplace 方块ID X Z 高度 [朝向0..3] | dig X Z 高度 [stairs 朝向0..3]\nerase X Z 高度 | clear | logs\n直接放置不耗料；直接挖掘天然方块会掉落物品；finish 完成已有规划，沿用其材料结算。");break;
             case "selected":
                 Count(1);RecordWorldEvent(_selectedCell is Cell selected?$"选中格 X={selected.X} Z={selected.Z} Y={selected.Level}":"未选中地格。");break;
             case "filter":
@@ -133,6 +133,9 @@ public partial class Main
                 var learner=_world.Workers.FirstOrDefault(w=>w.Id==a[1])??throw new ArgumentException("未知居民 ID");
                 if(!ResidentCatalog.Skills.Any(s=>s.Id==a[2]))throw new ArgumentException("未知技能 ID");
                 learner.Person.Earn(a[2],Number(3,1,100000));RecordWorldEvent("[开发] 已增加工作经验；技能点按累计经验结算。");break;
+            case "disease":
+                Dev();Count(3);var disease=_world.InfectResident(a[1],a[2]);
+                if(!disease.Ok)throw new ArgumentException(disease.Message);RecordWorldEvent("[开发] "+disease.Message);break;
             case "injure":
                 Dev();Count(5);var injury=_world.InjureResident(a[1],a[2],a[3],Number(4,1,100));
                 if(!injury.Ok)throw new ArgumentException(injury.Message);RecordWorldEvent("[开发] "+injury.Message);break;

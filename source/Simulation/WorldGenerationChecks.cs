@@ -22,6 +22,22 @@ public static class WorldGenerationChecks
         bool rejected=false;try{DemoWorld.LoadJson(invalid.ToJsonString());}catch(InvalidDataException){rejected=true;}Check(rejected,"Invalid generation options rejected");
         var legacy=new DemoWorld(region:"temperate",ecologyVersion:1);var old=System.Text.Json.Nodes.JsonNode.Parse(legacy.SaveJson())!;old["Version"]=8;old.AsObject().Remove("Generation");old.AsObject().Remove("EcologyVersion");old.AsObject().Remove("EcologyVersion");
         var restored=DemoWorld.LoadJson(old.ToJsonString());Check(restored.Terrain.GeneratorVersion==2&&restored.Terrain[27,56]==legacy.Terrain[27,56],"Version 8 region saves retain exact terrain");
+        int scenarios=0;
+        foreach(int seed in new[]{0,-23519,int.MaxValue})
+        foreach(int extreme in new[]{-2,0,2})
+        {
+            var setting=new WorldGenerationSettings{Seed=seed,Temperature=extreme,Moisture=-extreme,Elevation=extreme}.WithRecommendedSite();
+            var generated=new DemoWorld(setting.LocalSeed,region:setting.Site.Region,generation:setting);
+            Check(generated.Workers.All(p=>generated.Walkable(p.Tile)),"Extreme settings produce supported resident spawns");
+            Check(generated.Terrain.Generation==setting&&generated.Terrain.Region!.Id==setting.Site.Region,"Atlas/local region agreement");
+            Check(generated.Fluids.Sources.All(a=>TerrainMap.InBounds(a.Cell)&&a.Stored<=a.Capacity&&a.CurrentHead<=TerrainMap.MaxLevel),"Generated aquifers bounded");
+            var save=DemoWorld.LoadJson(generated.SaveJson());
+            foreach(var at in new[]{new Cell(0,0),new Cell(254,254),new Cell(127,127)})
+                Check(generated.Terrain[at.X,at.Z]==save.Terrain[at.X,at.Z],"Extreme settings and corners survive save");
+            scenarios++;
+        }
+        Console.WriteLine($"WORLD_GENERATION_EXTREMES_OK: {scenarios} seeds/climate/moisture/elevation scenarios, spawn support, atlas/local agreement, aquifers and save corners");
+        GeographyChecks.Run();
         Console.WriteLine("WORLD_GENERATION_OK: deterministic atlas, climate/moisture/elevation effects, safe camp, save validation and legacy terrain");
     }
 }

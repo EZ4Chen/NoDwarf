@@ -11,8 +11,8 @@ public partial class Main
     private string _leftTool="",_leftHint="";
     private bool _leftMoved,_leftAdditive;
     private Panel? _marquee;
-    private static bool AreaTool(string tool)=>tool is "growingzone" or "unfarm" or "stockpile" or "unstockpile" or "foundation";
-    private bool GestureTest=>OS.GetCmdlineUserArgs().Any(a=>a is "--interaction-test" or "--box-selection-test" or "--construction-preview-test");
+    private static bool AreaTool(string tool)=>tool is "growingzone" or "unfarm" or "stockpile" or "unstockpile" or "foundation" or "chop";
+    private bool GestureTest=>OS.GetCmdlineUserArgs().Any(a=>a is "--object-commands-test" or "--dig-volume-test" or "--interaction-test" or "--box-selection-test" or "--construction-preview-test" or "--designation-test");
     private bool IsResidentSelected(int i)=>_selectedWorker>=0&&_selectedWorker<_world.Workers.Count&&
         (i==_selectedWorker||_residentSelectionWorld==_world&&_selectedResidents.Contains(_world.Workers[_selectedWorker].Id)&&_selectedResidents.Contains(_world.Workers[i].Id));
     private int[] SelectedResidents()=>Enumerable.Range(0,_world.Workers.Count).Where(IsResidentSelected).ToArray();
@@ -98,8 +98,12 @@ public partial class Main
                 }
                 else if(moved&&a is Cell from&&b is Cell to)
                 {
-                    _farmStart=null;_stockpileStart=null;_foundationStart=null;
-                    Act(from);Act(to);if(_tool==tool)_hint.Text=hint;
+                    if(tool=="chop")CommitChopArea(from,to);
+                    else
+                    {
+                        _farmStart=null;_stockpileStart=null;_foundationStart=null;
+                        Act(from);Act(to);if(_tool==tool)_hint.Text=hint;
+                    }
                 }
                 else if(!moved&&PickForTool(release.Position) is Cell cell)Act(cell);
             }
@@ -122,10 +126,10 @@ public partial class Main
             float width=Math.Abs(a.X-b.X)+1,depth=Math.Abs(a.Z-b.Z)+1;
             var center=WorldPosition(a)+new Vector3((b.X-a.X)*.5f,.045f,(b.Z-a.Z)*.5f);
             int limit=_leftTool is "stockpile" or "unstockpile"?31:16;
-            var material=PreviewMaterial(a.Level!=b.Level||(_leftTool!="foundation"&&(width>limit||depth>limit)));
+            var material=PreviewMaterial(_leftTool!="chop"&&(a.Level!=b.Level||(_leftTool!="foundation"&&(width>limit||depth>limit))));
             foreach(float side in new[]{-1f,1f})
             {Box(_hover,center+new Vector3(side*width/2,0,0),new Vector3(.04f,.04f,depth),material);Box(_hover,center+new Vector3(0,0,side*depth/2),new Vector3(width,.04f,.04f),material);}
-            _hint.Text=$"范围 {width} × {depth} · 松开左键确认 · 右键或 Esc 取消";
+            _hint.Text=_leftTool=="chop"?$"伐木范围 {width} × {depth} · {ChopAreaTrees(a,b).Count()} 棵树 · 松开确认，右键或 Esc 取消":$"范围 {width} × {depth} · 松开左键确认 · 右键或 Esc 取消";
         }
         return true;
     }

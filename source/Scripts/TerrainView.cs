@@ -87,12 +87,40 @@ public partial class WorldOverview : Control
     public Action<Vector2>? Navigate;
     private TerrainMap? _mapTerrain;
     private int _mapRevision = -1;
+    private long _mapFluidRevision=-1;
+    private HashSet<(int X,int Z)> _mapWater=new();
     private Image? _mapImage;
+    public const double RefreshIntervalSeconds = 5;
+    private double _mapRefreshElapsed;
+    internal int MapRefreshCount {get;private set;}
+    internal Color MapPixel(int x,int z) => _mapImage!.GetPixel(x,z);
+    public override void _Process(double delta) => AdvanceMapRefresh(delta,IsVisibleInTree());
+    internal void AdvanceMapRefresh(double delta,bool visible=true)
+    {
+        _mapRefreshElapsed=Math.Min(RefreshIntervalSeconds,_mapRefreshElapsed+Math.Max(0,delta));
+        if(World is null||!visible)return;
+        if(_mapTerrain!=World.Terrain||_mapImage is null) {RenderMap();return;}
+        if(_mapRefreshElapsed<RefreshIntervalSeconds)return;
+        _mapRefreshElapsed=0;
+        if(_mapRevision!=World.Terrain.Revision||_mapFluidRevision!=World.Fluids.Revision)RenderMap();
+    }
+    // Calls from edits only request refresh. A new world is drawn immediately;
+    // later edits are coalesced on a wall-clock cadence, including while paused.
     public void RefreshMap()
+    {
+        if(_mapTerrain!=World.Terrain||_mapImage is null)RenderMap();
+    }
+    private void RenderMap()
     {
         bool full = _mapTerrain != World.Terrain || _mapImage is null;
         var changed = full ? null : World.Terrain.ChangesSince(_mapRevision)
-            .Where(c => c.Level == World.Terrain[c.X,c.Z].Level - 1).Select(c => (c.X,c.Z)).ToHashSet();
+            .Where(c => c.Level >= World.Terrain[c.X,c.Z].Level - 1).Select(c => (c.X,c.Z)).ToHashSet();
+        if(full||_mapFluidRevision!=World.Fluids.Revision)
+        {
+            var water=World.Fluids.Cells.Values.Where(f=>f.Amount>=100&&f.Cell.Level>=World.Terrain[f.Cell.X,f.Cell.Z].Level).Select(f=>(f.Cell.X,f.Cell.Z)).ToHashSet();
+            if(!full){var difference=new HashSet<(int X,int Z)>(_mapWater);difference.SymmetricExceptWith(water);changed!.UnionWith(difference);}
+            _mapWater=water;_mapFluidRevision=World.Fluids.Revision;
+        }
         _mapTerrain = World.Terrain; _mapRevision = World.Terrain.Revision;
         if (!full && changed!.Count == 0) { QueueRedraw(); return; }
         using var timing = World.Probe?.Measure(full ? "view.overview-full-refresh" : "view.overview-patch") ?? default;
@@ -103,6 +131,7 @@ public partial class WorldOverview : Control
             var c = TerrainView.ColorOf(g) * Math.Clamp(.72f + (g.Level-TerrainMap.SeaLevel)*.025f,.5f,1.15f);
             if (g.Tree) c = new Color("35472f");
             if (World.Terrain.Excavated.Contains(new Cell(x,z,g.Level-1))) c = new Color("514d46");
+            if(_mapWater.Contains((x,z)))c=new Color("428fba");
             c.A = 1; _mapImage!.SetPixel(x,z,c);
         }
         if (full)
@@ -115,6 +144,7 @@ public partial class WorldOverview : Control
             foreach (var (x,z) in changed!) Pixel(x,z);
             _texture.Update(_mapImage!);
         }
+        _mapRefreshElapsed=0;MapRefreshCount++;
         QueueRedraw();
     }
     public override void _Draw()

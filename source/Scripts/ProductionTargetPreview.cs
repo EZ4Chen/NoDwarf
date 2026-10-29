@@ -12,6 +12,7 @@ public partial class Main
             _world.SetProductionTarget("cloth",12);_world.SetProductionTarget("shirt",3);_world.SetProductionTarget("shield",2);
             _foundation=null;_heightSelected=false;_layerOffset=0;_focus=WorldPosition(origin+new Cell(2,1));_camera.Size=14;CreatePeople();PositionCamera();SetViewMode(0);
             _buildMenu.Hide();_selectionPanel.Hide();_worldMenu.Hide();_inspector.Show();RefreshUi();SyncWorld();
+            _productionTabs.CurrentTab=2;
             int shirt=Array.FindIndex(ProductionCatalog.All,r=>r.Id=="shirt");_targetRecipe.Select(shirt);_targetCount.Value=5;_applyProductionTarget.EmitSignal(Godot.Button.SignalName.Pressed);
             if(_world.ProductionOrders.Single(o=>o.Recipe=="shirt").Target!=5)throw new InvalidOperationException("Target UI did not apply");
             _productionTargetRows["shirt"].Pause.EmitSignal(Godot.Button.SignalName.Pressed);if(_world.ProductionOrders.Single(o=>o.Recipe=="shirt").Enabled)throw new InvalidOperationException("Pause target UI failed");
@@ -31,7 +32,7 @@ public partial class Main
                 if(timer.Elapsed.TotalSeconds>60)throw new TimeoutException("Production preview terrain did not finish loading");
                 await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
             }
-            var scroll=_targetRows.GetParent().GetParent<ScrollContainer>();scroll.ScrollVertical=(int)_targetRecipe.Position.Y-70;
+            var scroll=_productionTabs.GetChild<ScrollContainer>(2);scroll.ScrollVertical=0;
             await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
             if(!_inspector.GetGlobalRect().Encloses(_targetRecipe.GetGlobalRect()))throw new InvalidOperationException("Production target selector overflow");
             if(GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath("res://.local/production-targets.png"))!=Error.Ok)throw new IOException("Target screenshot failed");

@@ -73,15 +73,16 @@ public partial class Main
         using (var timing = _world.Probe?.Measure("view.sync-plans") ?? default)
         {
             var plans = _world.Jobs.Where(j => j.Construction).ToDictionary(j => j.Id);
+            bool PlanVisible(DemoJob job)=>job.Dig&&CurrentView.Level is not null ? job.Cell.Level==ActiveLevel : VisibleAt(job.Cell);
             foreach (int id in _planVisuals.Keys.ToArray())
-                if (!plans.TryGetValue(id, out var job) || !VisibleAt(job.Cell))
+                if (!plans.TryGetValue(id, out var job) || !PlanVisible(job))
                 { RemoveVisual(_planVisuals[id].Root); _planVisuals.Remove(id); RemoveConstructionVisual(id); }
             foreach (var job in plans.Values)
             {
-                if (!VisibleAt(job.Cell)) continue;
+                if (!PlanVisible(job)) continue;
                 if (_planVisuals.TryGetValue(job.Id, out var old))
                 {
-                    if (old.Cell == job.Cell && old.Build == job.Build && old.Dig == job.Dig && old.Height == job.DigHeight && old.Facing == job.Facing) continue;
+                    if (old.Cell == job.Cell && old.Build == job.Build && old.Dig == job.Dig && old.Height == job.DigHeight && old.Facing == job.Facing&&(!job.Dig||_visualView.CellTop(job.Cell)==view.CellTop(job.Cell))) continue;
                     RemoveVisual(old.Root);
                     RemoveConstructionVisual(job.Id);
                 }

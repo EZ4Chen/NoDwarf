@@ -27,7 +27,7 @@ public static class DemoChecks
         FarmingChecks.Run();
         CalendarChecks.Run();
         WeatherChecks.Run();
-        FluidChecks.Run();
+        FluidChecks.Run();WaterSafetyChecks.Run();
         CropClimateChecks.Run();
         DeveloperChecks();
         CharacterChecks();
@@ -150,7 +150,7 @@ public static class DemoChecks
         Check(appearances.Distinct().Count()>90, "Random appearance diversity");
         Check(appearances.All(a=>a==a.Normalize()), "Random IDs valid");
         var original = world.Workers[0].Appearance;
-        world.Workers[0].Appearance = original with { Body="broad", Hair="braid", Skin="deep", Beard="full" };
+        world.Workers[0].Appearance = original with { Body="hulk", Hair="braid", Skin="deep", Beard="full" };
         string path = Path.Combine(Path.GetTempPath(), "nodwarf-characters-"+Guid.NewGuid()+".json");
         try
         {

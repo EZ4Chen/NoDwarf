@@ -7,7 +7,7 @@ namespace NoDwarf.Simulation;
 public sealed partial class DemoWorld
 {
     public static readonly string[] ResidentActions =
-        ["talent","route","equip","unequip","drop","cancel","research_topic","research","rest","relax","pickup","eat","treat","social","schedule","work_priority"];
+        ["talent","route","equip","unequip","drop","cancel","research_topic","research","rest","relax","pickup","eat","treat","rescue","drink","splint","prosthesis","isolate","social","schedule","work_priority"];
     private static readonly JsonSerializerOptions ResidentObservationJsonOptions=new()
     {Encoder=JavaScriptEncoder.Create(UnicodeRanges.All)};
     private static readonly JsonSerializerOptions ResidentCommandJsonOptions=new()
@@ -31,12 +31,13 @@ public sealed partial class DemoWorld
         {
             ok=true,contractVersion=1,resident=w.Id,name=w.Name,expectedVersion=p.DecisionVersion,expectedResearch=Research.Version,
             actions=ResidentActions,status=w.Status,activity=p.Activity?.Kind,resumeResearch=p.PausedResearch is not null,
-            schedule=p.Schedule,currentHour=Calendar.Hour,currentSchedule=ScheduledMode(w),workPriorities=p.WorkPriorities,
+            homeBed=p.HomeBed,foodIssue=p.FoodIssue,schedule=p.Schedule,currentHour=Calendar.Hour,currentSchedule=ScheduledMode(w),workPriorities=p.WorkPriorities,
             workTypes=ResidentWork.Types.Select(t=>new{id=t.Id,name=t.Name,available=t.Available}),
-            needs=new{food=(int)p.Hunger,rest=(int)p.Rest,recreation=(int)p.Recreation,mood=(int)p.Mood},
+            needs=new{thirst=(int)p.Thirst,food=(int)p.Hunger,rest=(int)p.Rest,recreation=(int)p.Recreation,mood=(int)p.Mood},
             environment=new{indoors=room.Enclosed,temperature=Math.Round(room.Temperature,1),quality=room.Enclosed?(int?)room.Quality:null},
-            health=new{dead=p.Dead,incapacitated=p.Incapacitated,mobility=Math.Round(p.Mobility,2),manipulation=Math.Round(p.Manipulation,2),
-                untreated=p.Injuries.Count(i=>!i.Treated&&i.Kind!="missing")},
+            health=new{deathCause=p.DeathCause,isolated=p.Isolated,prostheses=p.Prostheses,dead=p.Dead,incapacitated=p.Incapacitated,mobility=Math.Round(p.Mobility,2),manipulation=Math.Round(p.Manipulation,2),
+                blood=p.Blood,malnutrition=p.Malnutrition,conditions=HealthConditions.States(p).Select(c=>new{id=c.Definition.Id,part=c.Part,severity=c.Severity,stage=c.Stage.Name,immunity=c.Immunity,treatment=c.Treatment,effects=c.Stage.Effects}),
+                needsCare=HealthCare.Needed(p),untreated=p.Injuries.Count(HealthCare.WoundNeedsCare)},
             points=p.Points,route=p.AutoSkill,traits=p.Traits,
             skills=ResidentCatalog.Skills.Select(s=>new{id=s.Id,level=p.Level(s.Id),rank=p.Talents.GetValueOrDefault(s.Id),active=s.HasWork}),
             talents=ResidentCatalog.Talents.Where(n=>TalentIssue(w,n)=="").Select(n=>new{id=n.Id,cost=n.Cost,effect=n.Effect}),

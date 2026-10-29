@@ -6,11 +6,11 @@ public static class ResidentWork
     public static readonly string[] Modes=["anything","sleep","work","recreation"];
     // This order is also the deterministic tie breaker shown in the work table.
     public static readonly ResidentWorkType[] Types=[
-        new("doctor","医疗","medicine"),new("construction","建造","construction"),new("mining","采矿","mining"),
+        new("doctor","医疗","medicine"),new("care","照料",""),new("construction","建造","construction"),new("mining","采矿","mining"),
         new("growing","种植","growing"),new("forestry","伐木","woodwork"),new("cooking","烹饪","cooking"),
         new("crafting","加工","woodwork"),new("smelting","冶炼","smelting"),new("smithing","锻造","smithing"),new("hauling","搬运",""),
         new("research","研究","research"),new("butchery","屠宰","cooking",false)];
-    public static Dictionary<string,int> DefaultPriorities()=>Types.ToDictionary(t=>t.Id,t=>t.Id is "doctor" or "research" or "butchery"?0:t.Id=="hauling"?4:3);
+    public static Dictionary<string,int> DefaultPriorities()=>Types.ToDictionary(t=>t.Id,t=>t.Id is "doctor" or "research" or "butchery"?0:t.Id=="care"?2:t.Id=="hauling"?4:3);
     public static string[] FreeDay()=>Enumerable.Repeat("anything",24).ToArray();
     public static string[] DayShift()=>Enumerable.Range(0,24).Select(h=>h<6||h>=22?"sleep":h>=8&&h<18?"work":h>=18&&h<20?"recreation":"anything").ToArray();
     public static string ModeName(string mode)=>mode switch{"sleep"=>"休息","work"=>"工作","recreation"=>"娱乐",_=>"无固定"};
@@ -58,8 +58,9 @@ public sealed partial class DemoWorld
     {
         var p=w.Person;if(p.Dead||p.Incapacitated)return false;
         string mode=ScheduledMode(w);var a=p.Activity;
+        if(a?.Origin=="emergency")return false;
         if(w.Job is {} job&&ResidentWork.Rank(p,ResidentWork.JobType(job))==int.MaxValue)Release(job);
-        if(a?.Origin=="work"&&ResidentWork.Rank(p,a.Kind=="research"?"research":"doctor")==int.MaxValue)
+        if(a?.Origin=="work"&&ResidentWork.Rank(p,a.Kind=="research"?"research":a.Supply is "splint" or "prosthesis"?"doctor":a.Kind is "life_supply" or "life_use" or "water_fill" or "food_supply" or "feed" or "rescue_pickup" or "rescue_carry"?"care":"doctor")==int.MaxValue)
         {CancelResidentActivity(w);p.PausedResearch=null;a=null;}
         if(p.PausedResearch?.Origin=="work"&&p.WorkPriorities["research"]==0)p.PausedResearch=null;
         if(a?.Origin=="schedule"&&a.Kind!=(mode=="sleep"?"rest":mode=="recreation"?"relax":""))
@@ -89,18 +90,19 @@ public sealed partial class DemoWorld
     }
     private DemoWorker? AutomaticPatient(DemoWorker medic)
     {
-        return Workers.Where(o=>!o.Person.Dead&&o.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")&&
+        return Workers.Where(o=>!o.Person.Dead&&!RescueReserved(o.Id)&&!LifeReserved(o.Id)&&HealthCare.Needed(o.Person)&&
             (o==medic||o.Job is null&&o.Path.Count==0)&&
             !Workers.Any(other=>other!=medic&&other.Person.Activity is {Kind:"treat" or "care_supply"} care&&care.Target==o.Id)&&
             CanReachAny(medic.Tile,ItemPositions(o.Tile).Where(Walkable).ToArray()))
-            .OrderBy(o=>Math.Abs(o.Tile.X-medic.Tile.X)+Math.Abs(o.Tile.Z-medic.Tile.Z)).FirstOrDefault();
+            .OrderBy(o=>HealthCare.Urgency(o.Person)).ThenBy(o=>HealthCare.TimeToBleedOut(o.Person)).ThenBy(o=>Math.Abs(o.Tile.X-medic.Tile.X)+Math.Abs(o.Tile.Z-medic.Tile.Z)).FirstOrDefault();
     }
     private bool AssignPersonalWork(DemoWorker w,int ordinaryRank)
     {
         int doctorRank=ResidentWork.Rank(w.Person,"doctor"),researchRank=ResidentWork.Rank(w.Person,"research");
-        if(doctorRank==int.MaxValue||!Workers.Any(o=>!o.Person.Dead&&o.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")))w.MedicalIssue="";
+        if(doctorRank==int.MaxValue||!Workers.Any(o=>!o.Person.Dead&&HealthCare.Needed(o.Person)))w.MedicalIssue="";
         DemoWorker? patient=doctorRank<ordinaryRank&&_simulationTime>=w.NextMedicalCheck?AutomaticPatient(w):null;
         bool research=Research.Active!=""&&researchRank<ordinaryRank;
+        if(TryAssignFeeding(w,Math.Min(ordinaryRank,Math.Min(patient is null?int.MaxValue:doctorRank,research?researchRank:int.MaxValue))))return true;
         if(patient is not null&&(!research||doctorRank<researchRank))
         {
             var result=BeginResidentActivity(w,"treat",patient.Id,origin:"work");
@@ -108,6 +110,8 @@ public sealed partial class DemoWorld
             w.MedicalIssue=result.Message;w.Status=result.Message;w.NextMedicalCheck=_simulationTime+3;
             // A failed care attempt must not monopolize the worker (including bandage production).
         }
+        if(TryAssignFeeding(w,Math.Min(ordinaryRank,research?researchRank:int.MaxValue)))return true;
+        if(TryAssignRescue(w,Math.Min(ordinaryRank,research?researchRank:int.MaxValue)))return true;
         if(!research)return false;
         if(w.Person.Activity is {Kind:"research",Origin:"work"})return true;
         var paused=w.Person.PausedResearch;

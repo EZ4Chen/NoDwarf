@@ -4,7 +4,7 @@ public sealed partial class DemoWorld
     private ResidentResult BeginMedicalSupply(DemoWorker medic,string patientId,string origin)
     {
         var patient=Workers.FirstOrDefault(w=>w.Id==patientId);
-        if(patient is null||patient.Person.Dead||!patient.Person.Injuries.Any(i=>!i.Treated&&i.Kind!="missing"))return new(false,"伤员已不需要护理");
+        if(patient is null||patient.Person.Dead||!HealthCare.Needed(patient.Person))return new(false,"伤员已不需要护理");
         if(Workers.Any(w=>w!=medic&&w.Person.Activity is {Kind:"treat" or "care_supply"} a&&a.Target==patientId))return new(false,"已有护理者负责这名伤员");
         RefreshWeight(medic);
         if(medic.Person.CarriedWeight+.25>medic.Person.Capacity)return new(false,"护理负重不足，请先放下物资");
@@ -29,7 +29,7 @@ public sealed partial class DemoWorld
         RefreshWeight(medic);
         if(medic.Person.CarriedWeight+.25>medic.Person.Capacity){CancelResidentActivity(medic);medic.Status="护理负重不足";return true;}
         stack.Count--;if(stack.Count==0)Items.Remove(stack);
-        Items.Add(new(){Id=++_nextItem,Item="bandage",Count=1,Owner=medic.Id,Cell=medic.Tile});
+        Items.Add(new(){Id=++_nextItem,Item="bandage",Count=1,Owner=medic.Id,Cell=medic.Tile,Properties=stack.Properties});
         CancelResidentActivity(medic);RefreshWeight(medic);Revision++;
         var result=BeginResidentActivity(medic,"treat",activity.Target,origin:activity.Origin);
         if(!result.Ok)medic.Status=result.Message;

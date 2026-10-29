@@ -35,7 +35,8 @@ public partial class Main
     {
         var job=SelectedConstruction;
         _cancelConstructionAction.Visible=job is not null;
-        _cancelConstructionAction.Text=job?.Build is not null?"取消施工":"取消规划";
+        _cancelConstructionAction.Text=job?.Build is not null?"取消施工":job?.Demolish==true?"取消拆除":"取消开采";
+        UiAccess.Name(_cancelConstructionAction,_cancelConstructionAction.Text,_cancelConstructionAction.TooltipText);
         if(job is not null)_demolishAction.Hide();
         _constructionProgress.Visible=job?.Build is not null;
         if(job?.Build is not null)_constructionProgress.Value=job.BuildFraction;

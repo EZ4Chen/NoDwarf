@@ -53,20 +53,33 @@ public partial class Main
             line.AddChild(choice);UiAccess.Name(choice,label); _appearanceOptions.Add((choice, ids, get));
             choice.ItemSelected += index => { if (!_updatingOptions) { _draft = set(_draft, ids[(int)index]); UpdateCharacterPreview(); } };
         }
+        Add("基础形象", ["male","female"], ["男矮人","女矮人"], a=>a.BodySex, (a,v)=>a with {BodySex=v});
+        if(ActorModelView.LoadDefinition().Renderer!="sprite4")
+        {
         Add("肤色", CharacterAppearance.Skins, ["瓷白", "暖肤", "小麦", "棕色", "深棕"], a=>a.Skin, (a,v)=>a with {Skin=v});
         Add("发型", CharacterAppearance.Hairs, ["短发", "侧分", "齐颈发", "辫子", "光头"], a=>a.Hair, (a,v)=>a with {Hair=v});
         Add("发色", CharacterAppearance.HairColors, ["栗棕", "墨黑", "麦金", "赤褐", "银灰", "霜白"], a=>a.HairColor, (a,v)=>a with {HairColor=v});
         Add("脸型", CharacterAppearance.Faces, ["圆脸", "长脸", "方脸"], a=>a.Face, (a,v)=>a with {Face=v});
         Add("服装", CharacterAppearance.Outfits, ["工匠围裙", "束腰衫", "马甲", "长外套"], a=>a.Outfit, (a,v)=>a with {Outfit=v});
         Add("衣色", CharacterAppearance.Cloths, ["鼠尾草", "赭黄", "雾蓝", "灰紫", "铁锈", "米白"], a=>a.Cloth, (a,v)=>a with {Cloth=v});
-        Add("体型", CharacterAppearance.Bodies, ["纤细", "匀称", "宽壮"], a=>a.Body, (a,v)=>a with {Body=v});
+        Add("体型", CharacterAppearance.Bodies, ["男体", "女体", "瘦型", "壮型", "胖型"], a=>a.Body, (a,v)=>a with {Body=v});
         Add("胡须", CharacterAppearance.Beards, ["无", "短须", "长须"], a=>a.Beard, (a,v)=>a with {Beard=v});
+        }
+        else
+        {
+            Add("体型", CharacterAppearance.Bodies, ["男体", "女体", "瘦型", "壮型", "胖型"], a=>a.Body, (a,v)=>a with {Body=v});
+            Add("脸型", CharacterAppearance.Faces, ["圆脸", "长脸", "方脸"], a=>a.Face, (a,v)=>a with {Face=v});
+            Add("发型", ["sweep","bob","braid","bald"], ["侧分短发","蓬松卷发","双辫","光头"], a=>a.Hair=="crop"?"sweep":a.Hair, (a,v)=>a with {Hair=v});
+            Add("胡须", CharacterAppearance.Beards, ["无胡须","短胡须","长胡须"], a=>a.Beard, (a,v)=>a with {Beard=v});
+            Add("布衣款式", ["tunic","apron"], ["工作衫","工匠围裙"], a=>a.Outfit=="apron"?"apron":"tunic", (a,v)=>a with {Outfit=v});
+            options.AddChild(Text("衣服与武器在装备栏穿脱", 14, Muted, true));
+        }
         _characterMessage = Text("", 13, Muted, true); _characterMessage.CustomMinimumSize = new Vector2(0, 56); column.AddChild(_characterMessage);
         var actions = new HBoxContainer(); column.AddChild(actions);
         Button(actions, "随机外观", () => { _draft = CharacterAppearance.Randomize(Random.Shared); UpdateCharacterPreview(); });
         Button(actions, "还原", () => { _draft = _world.Workers[_editingWorker].Appearance; UpdateCharacterPreview(); });
         Button(actions, "取消", CloseCharacterEditor);
-        Button(actions, "应用并保存", ApplyCharacterAppearance);
+        UiAccess.Name(Button(actions, "保存外观", ApplyCharacterAppearance),"保存并应用此外观","只保存人物外观，不保存游戏进度；取消会放弃当前外观修改。");
     }
 
     private void OpenCharacterEditor()
@@ -84,7 +97,7 @@ public partial class Main
         _updatingOptions = true;
         foreach (var option in _appearanceOptions) option.Button.Select(Array.IndexOf(option.Ids, option.Get(_draft)));
         _updatingOptions = false;
-        _characterPreview.Texture = CharacterArt.Texture(_draft);
+        _characterPreview.Texture = EquipmentArt.Texture(_draft, _editingWorker >= 0 ? _world.Inventory(_world.Workers[_editingWorker]) : Array.Empty<ItemStack>());
     }
     private void ApplyCharacterAppearance()
     {
@@ -112,17 +125,16 @@ public partial class Main
         var worker = _world.Workers[0]; var before = worker.Appearance;
         SelectResident(0); bool paused = _clock.Paused; OpenCharacterEditor();
         if (!_clock.Paused || _characterPreview.Texture is null) throw new InvalidOperationException("Character preview/pause");
-        _appearanceOptions[1].Button.EmitSignal(OptionButton.SignalName.ItemSelected, 3L);
-        if (_draft.Hair != "braid") throw new InvalidOperationException("Hair selector must update draft");
+        _appearanceOptions[0].Button.EmitSignal(OptionButton.SignalName.ItemSelected, 1L);
+        if (_draft.BodySex != "female") throw new InvalidOperationException("Body selector must update draft");
         _draft = _draft with { Cloth = "plum", Body = "broad" }; UpdateCharacterPreview(); CloseCharacterEditor();
         if (worker.Appearance != before || _clock.Paused != paused) throw new InvalidOperationException("Cancel must preserve appearance and pause state");
-        OpenCharacterEditor(); _draft = before with { Hair = "bob", Outfit = "coat" }; ApplyCharacterAppearance();
-        if (worker.Appearance.Hair != "bob" || _residentButtons[0].Icon != _people[0].GetChild<Sprite3D>(0).Texture) throw new InvalidOperationException("Applied portrait and world sprite must match");
+        OpenCharacterEditor(); _draft = before with { BodySex = "female" }; ApplyCharacterAppearance();
+        if (worker.Appearance.BodySex != "female" || _residentButtons[0].Icon != _people[0].GetChild<Sprite3D>(0).Texture) throw new InvalidOperationException("Applied portrait and world sprite must match");
         worker.Appearance = before; UpdateCharacterVisual(0);
-        foreach (var hair in CharacterAppearance.Hairs)
-        foreach (var outfit in CharacterAppearance.Outfits)
-            _ = CharacterArt.Texture(before with { Hair = hair, Outfit = outfit });
-        GD.Print("CHARACTER_UI_OK: preview, cancel, apply, synchronized portraits, SVG variants");
+        foreach (var sex in new[]{"male","female"})
+            _ = EquipmentArt.Texture(before with { BodySex = sex }, _world.Inventory(worker));
+        GD.Print("CHARACTER_UI_OK: preview, cancel, apply, synchronized portraits, male/female variants");
     }
     private async void CaptureCharacterPreview()
     {

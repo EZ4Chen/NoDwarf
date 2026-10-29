@@ -35,7 +35,7 @@ public sealed partial class DemoWorld
 {
     public int ClimateVersion {get;private set;}
     public string? WeatherOverride {get;private set;}
-    public double Latitude=>Terrain.Generation is {} g?(1-2*(g.SiteY+.5)/WorldGenerationSettings.AtlasHeight)*75:
+    public double Latitude=>Terrain.Generation is {} g?(1-2*(g.SiteY+.5)/g.Height)*75:
         Terrain.Region?.Id switch {"rainforest"=>5,"savanna"=>15,"desert"=>25,"arid"=>30,"boreal"=>58,"tundra"=>70,"alpine"=>60,_=>42};
     public SolarPosition Sun=>SolarRules.At(Calendar,Latitude);
     private long _weatherMinute=-1;

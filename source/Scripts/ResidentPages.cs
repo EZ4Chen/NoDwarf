@@ -49,15 +49,18 @@ public partial class Main
             RStat(area,name,$"{value:F0}%",value<25?RRed:color);RMeter(area,value,100,value<25?RRed:color,14);
             var gap=new Control{CustomMinimumSize=new(0,8)};area.AddChild(gap);
         }
-        Need("饱食",p.Hunger,"随身口粮不足时会寻找可达的地面口粮。饱食低于 20 会影响效率。",RGreen);
+        Need("饮水",p.Thirst,"水桶和指定水源可供饮水；失能居民由照料者送水。",RGreen);
+        Need("饱食",p.Hunger,"每次取一份口粮；满载会卸下未装备物资。失能居民由启用照料的同伴送饭。",RGreen);
         Need("休息",p.Rest,"休息低于 15 时会主动休息。",RBlue);
-        Need("娱乐",p.Recreation,"放松或与同伴交流可恢复娱乐。",RGold);
+        Need("娱乐",p.Recreation,"优先前往篝火旁休闲，与同伴围坐效果更好；没有设施可低效原地放松。",RGold);
         Need("心情",p.Mood,"由当前需求、疼痛和短期感受共同决定。",RGreen);
         var commands=RH(left,6);RB(commands,"吃口粮",()=>ResidentDo("eat"));RB(commands,"休息",()=>ResidentDo("rest"));RB(commands,"放松",()=>ResidentDo("relax"));
-        RB(left,"恢复普通工作",()=>ResidentDo("cancel"),"取消个人活动，回到聚落工作");
+        RB(left,"取消个人活动",()=>ResidentDo("cancel"),"取消个人活动，回到聚落工作");
         RSection(right,"当前感受",p.Mood>=60?"心情平稳":p.Mood>=30?"有些低落":"情绪低落");
         var thoughts=RScroll(right);
         if(p.Pain>0)RStat(thoughts,"伤口疼痛",$"{p.Pain:F0} / 100",RRed);
+        if(p.FoodIssue!="")RStat(thoughts,"取食",p.FoodIssue,RRed);
+        RStat(thoughts,"床位",p.HomeBed is Cell bed?$"{bed.X}, {bed.Z} / {bed.Level}m":"尚未认领；休息时自动寻找可达空床",RBlue);
         if(p.Hunger<20)RStat(thoughts,"饥饿","需要食物",RRed);
         if(p.Rest<20)RStat(thoughts,"疲惫","需要休息",RRed);
         foreach(var e in p.MoodEffects)
@@ -70,7 +73,7 @@ public partial class Main
     }
     private void RenderResidentHealth(DemoWorker w)
     {
-        var p=w.Person;var(left,right)=RColumns(240);RSection(left,"身体能力",p.Dead?"已死亡":"");
+        var p=w.Person;var(left,right)=RColumns(184);RSection(left,"身体能力",p.Dead?"已死亡":"");
         RStat(left,"意识",$"{p.Consciousness:P0}",p.Consciousness<1?RRed:RGreen);
         RStat(left,"移动",$"{p.Mobility:P0}",p.Mobility<1?RRed:RGreen);
         RStat(left,"操作",$"{p.Manipulation:P0}",p.Manipulation<1?RRed:RGreen);
@@ -82,30 +85,19 @@ public partial class Main
         foreach(var m in medics)medicChoice.AddItem(m==w?"自己护理":$"{m.Name} · 医疗 {m.Person.Level("medicine")} 级");
         var eligible=medics.Where(m=>!m.Person.Incapacitated&&!_world.MilitaryControlled(m)&&m.Person.Manipulation>=.05).OrderByDescending(m=>m.Person.Level("medicine")).FirstOrDefault();
         if(eligible is not null)medicChoice.Select(Array.IndexOf(medics,eligible));
-        var care=RB(left,"安排护理",()=>{if(medicChoice.Selected>=0&&medicChoice.Selected<medics.Length)ResidentDo("treat",w.Id,actor:medics[medicChoice.Selected].Id);},"每处伤口消耗 1 份绷带；没有随身绷带时会先去公共库存取用。",0,true);
+        var care=RB(left,"安排护理",()=>{if(medicChoice.Selected>=0&&medicChoice.Selected<medics.Length)ResidentDo("treat",w.Id,actor:medics[medicChoice.Selected].Id);},"每次护理一项伤病，消耗 1 份护理用品（暂用绷带）；可从公共库存领取。质量取决于医疗技能和操作、意识能力。",0,true);
         void UpdateCare()
         {
             var medic=medicChoice.Selected>=0&&medicChoice.Selected<medics.Length?medics[medicChoice.Selected]:null;
-            care.Disabled=p.Dead||!p.Injuries.Any(i=>!i.Treated&&i.Kind!="missing")||medic is null||medic.Person.Incapacitated||medic.Person.Manipulation<.05;
+            care.Disabled=p.Dead||!HealthCare.Needed(p)||medic is null||medic.Person.Incapacitated||medic.Person.Manipulation<.05;
         }
         medicChoice.ItemSelected+=_=>UpdateCare();UpdateCare();
+        var rescue=RB(left,"送往医疗床",()=>{if(medicChoice.Selected>=0&&medicChoice.Selected<medics.Length)ResidentDo("rescue",w.Id,actor:medics[medicChoice.Selected].Id);},"先止血；由选定同伴搬运至空闲医疗床。可在地图选中普通床设为医疗床。");rescue.Disabled=!_world.NeedsRescue(w);
+        LifeCareMenu(left,w,()=>medicChoice.Selected>=0&&medicChoice.Selected<medics.Length?medics[medicChoice.Selected].Id:w.Id);
         RT(left,$"公共可用绷带：{_world.Available("bandage")} 份",13,RMuted,true);
-        RT(left,"护理割伤可止血。骨折需护理后恢复；缺失部位无法恢复。",13,RMuted,true);
-        RSection(right,"部位与伤势",$"{p.Injuries.Count} 处伤势");
-        var list=RScroll(right);
-        list.AddThemeConstantOverride("separation",2);
-        foreach(var part in ResidentCatalog.Parts)
-        {
-            var injuries=p.Injuries.Where(i=>i.Part==part.Id).ToArray();
-            var row=RH(list,12);row.CustomMinimumSize=new(0,24);
-            var label=RT(row,part.Name,14,injuries.Length>0?RInk:RMuted);label.CustomMinimumSize=new(44,0);
-            var condition=RT(row,injuries.Length==0?"健康":string.Join("、",injuries.Select(i=>ResidentCatalog.InjuryName(i.Kind))),14,injuries.Length>0?RRed:RMuted);condition.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
-            RT(row,$"{p.Integrity(part.Id):P0}",14,injuries.Length>0?RRed:RMuted).CustomMinimumSize=new(44,0);
-            var status=RT(row,injuries.Length==0?"—":injuries.All(i=>i.Treated)?"已护理":"待处理",13,injuries.Length==0?RMuted:injuries.All(i=>i.Treated)?RGreen:RRed);status.CustomMinimumSize=new(48,0);
-            row.TooltipText=injuries.Length==0?"部位完好":string.Join("\n",injuries.Select(i=>$"{ResidentCatalog.InjuryName(i.Kind)} · 严重度 {i.Severity:F0} · {(i.Treated?"已护理":"未处理")}"));
-            RRule(list);
-        }
+        RenderHealthList(right,w);
     }
+
     private void RenderResidentGear(DemoWorker w)
     {
         var p=w.Person;var(left,right)=RColumns(302);
@@ -133,7 +125,7 @@ public partial class Main
         foreach(var item in items)
         {
             var row=RH(bag,8);row.CustomMinimumSize=new(0,36);ResidentItemIcon(row,item.Item);
-            var name=RT(row,$"{ItemCatalog.Get(item.Item).Name} ×{item.Count}",14);name.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
+            var name=RT(row,$"{ItemCatalog.Get(item.Item).Name} ×{item.Count}"+(item.Properties.ExpiresAt is double expiry?$" · {Math.Max(0,(expiry-_world.SimulationTime)/600):F1} 天":""),14);name.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
             row.TooltipText=GearDescription(item.Item)+(_dossierNearby?$"\n位置 {item.Cell.X}, {item.Cell.Z}, {item.Cell.Level}":"");
             RT(row,$"{item.Count*ResidentGear.Weight(item.Item):F1} kg",12,RMuted);
             if(_dossierNearby)RB(row,"拾取",()=>ResidentDo("pickup",item:item.Id));
@@ -231,6 +223,6 @@ public partial class Main
         RStat(right,"研究员",w.Name+" · 研究 "+w.Person.Level("research")+" 级");
         var choose=RB(right,_world.Research.Active==selected.Id?"当前研究项目":"设为当前研究",()=>ResidentDo("research_topic",selected.Id),"切换聚落的当前研究项目",0,true);choose.Disabled=complete||unavailable||_world.Research.Active==selected.Id;
         var start=RB(right,"安排此人研究",()=>ResidentDo("research"),"研究员推进当前项目，并获得研究经验。",0,true);start.Disabled=complete||unavailable||_world.Research.Active!=selected.Id||w.Person.Incapacitated;
-        RT(right,"安排后点击「继续模拟」开始工作。",12,RMuted);
+        RT(right,"模拟暂停时，按空格继续。",12,RMuted);
     }
 }

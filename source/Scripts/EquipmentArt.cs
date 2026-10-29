@@ -39,6 +39,8 @@ public static class EquipmentArt
     {
         var worn=items.Where(i=>i.Slot!="").OrderBy(i=>Array.IndexOf(new[]{"legs","body","feet","hands","head","main","off"},i.Slot)).ToArray();string key=Key(appearance,worn);
         if(Portraits.TryGetValue(key,out var cached))return cached;
+        if(ActorModelView.LoadDefinition().Renderer=="sprite4")
+        {var portrait=DirectionalDwarfView.Portrait(appearance,worn);if(Portraits.Count>=256)Portraits.Clear();Portraits[key]=portrait;return portrait;}
         string clothing="",head="";
         foreach(var item in worn)if(Definitions.TryGetValue(item.Item,out var art)){clothing+=art.Clothing;head+=art.Head;}
         var body=new Image();if(body.LoadSvgFromString(CharacterArt.Svg(appearance,clothing,head),3)!=Error.Ok)throw new InvalidOperationException("Equipment SVG");

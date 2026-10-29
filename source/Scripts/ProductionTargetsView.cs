@@ -9,9 +9,13 @@ public partial class Main
     private VBoxContainer _targetRows=null!;
     private readonly Dictionary<string,(Label Text,Button Pause,Control Row)> _productionTargetRows=new();
     private DemoWorld? _targetWorld;
-    private void BuildProductionTargets(VBoxContainer parent)
+    private void BuildProductionTargets(VBoxContainer page)
     {
-        parent.AddChild(new HSeparator());parent.AddChild(Text("自动补产 · 按库存目标",15,Accent));
+        var columns=new HBoxContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};columns.AddThemeConstantOverride("separation",20);page.AddChild(columns);
+        var parent=new VBoxContainer{CustomMinimumSize=new(280,0)};parent.AddThemeConstantOverride("separation",8);columns.AddChild(parent);
+        var orders=new VBoxContainer{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};orders.AddThemeConstantOverride("separation",8);columns.AddChild(orders);
+        orders.AddChild(Text("补产清单",15,Accent));
+        parent.AddChild(Text("按库存目标补产",15,Accent));
         parent.AddChild(Text("生产物品",13,Ink));
         _targetRecipe=new OptionButton{SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};parent.AddChild(_targetRecipe);UiAccess.Name(_targetRecipe,"生产物品");
         foreach(var r in ProductionCatalog.All)_targetRecipe.AddItem(r.Name.Split('：')[0]);
@@ -23,7 +27,7 @@ public partial class Main
         _applyProductionTarget=Button(settings,"应用库存目标",()=>{_world.SetProductionTarget(ProductionCatalog.All[_targetRecipe.Selected].Id,(int)_targetCount.Value);RefreshUi();});
         _targetRecipe.ItemSelected+=i=>{var r=ProductionCatalog.All[(int)i];_targetCount.Value=_world.ProductionOrders.FirstOrDefault(o=>o.Recipe==r.Id)?.Target??20;_targetRecipe.TooltipText=r.Name;};
         parent.AddChild(Text("暂停或移除目标后，已下单批次仍会继续。",12,Ink,true));
-        _targetRows=new VBoxContainer();parent.AddChild(_targetRows);parent.AddChild(new HSeparator());parent.AddChild(Text("手动加工 · 每次一批",15,Accent));
+        _targetRows=new VBoxContainer();orders.AddChild(_targetRows);
     }
     private void RefreshProductionTargets()
     {

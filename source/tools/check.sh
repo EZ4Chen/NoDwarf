@@ -19,10 +19,24 @@ fi
 # Mouse-driven resident groups and area designation, including UI isolation.
 "$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --box-selection-test > "$PROJECT_DIR/.local/box-selection.log" 2>&1
 grep 'BOX_SELECTION_OK:' "$PROJECT_DIR/.local/box-selection.log"
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --designation-test > "$PROJECT_DIR/.local/designation.log" 2>&1
+grep 'DESIGNATION_OK:' "$PROJECT_DIR/.local/designation.log"
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --level-guide-test > "$PROJECT_DIR/.local/level-guide.log" 2>&1
+grep 'LEVEL_GUIDE_OK:' "$PROJECT_DIR/.local/level-guide.log"
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --object-commands-test > "$PROJECT_DIR/.local/object-commands.log" 2>&1
+grep 'OBJECT_COMMANDS_OK:' "$PROJECT_DIR/.local/object-commands.log"
 
-# New tool recipes, scoped work bonuses and both rigs' weapon attachments/sweeps.
-"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --tool-equipment-test > "$PROJECT_DIR/.local/tool-equipment.log" 2>&1
-grep 'TOOL_MODELS_OK:' "$PROJECT_DIR/.local/tool-equipment.log"
+# Open trenches use local foreground cuts while mining; visual cuts must not alter dig cells.
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --mining-cutaway-test > "$PROJECT_DIR/.local/mining-cutaway.log" 2>&1
+grep 'MINING_CUTAWAY_OK:' "$PROJECT_DIR/.local/mining-cutaway.log"
+
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --dig-volume-test > "$PROJECT_DIR/.local/dig-volume.log" 2>&1
+grep 'DIG_VOLUME_OK:' "$PROJECT_DIR/.local/dig-volume.log"
+
+# Current 2D residents: tool rules, equipment art, directions, pause and movement.
+# The old rig/mesh checks remain explicit authoring reviews, outside this default suite.
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --sprite-integration-test > "$PROJECT_DIR/.local/sprite-integration.log" 2>&1
+grep 'SPRITE_INTEGRATION_OK:' "$PROJECT_DIR/.local/sprite-integration.log"
 
 # This suite deliberately emits CONSOLE_EXPECTED_ errors to exercise log capture.
 # Its own assertions and process exit code distinguish those from test failures.
@@ -36,3 +50,15 @@ grep 'INTERIOR_OPTIMIZATION_OK:' "$PROJECT_DIR/.local/interior-check.log"
 # Normal gameplay uses asynchronous occlusion; exercise publication/cancellation too.
 "$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --interior-thread-test --thread-label=regression --thread-checks > "$PROJECT_DIR/.local/interior-thread-check.log" 2>&1
 grep 'INTERIOR_ASYNC_CHECKS_OK:' "$PROJECT_DIR/.local/interior-thread-check.log"
+
+# Water warnings: actual notice/dialog actions, underground focus and readback.
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --water-safety-ui-test > "$PROJECT_DIR/.local/water-safety-ui.log" 2>&1
+grep 'WATER_SAFETY_UI_OK:' "$PROJECT_DIR/.local/water-safety-ui.log"
+
+# Map texture cadence and atlas layer/selection regression.
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --map-display-test > "$PROJECT_DIR/.local/map-display.log" 2>&1
+grep 'MAP_DISPLAY_OK:' "$PROJECT_DIR/.local/map-display.log"
+
+# Generated river/lake geometry, water minimap and natural cavern visibility.
+"$GODOT_BIN" --headless --path "$PROJECT_DIR" -- --geography-preview-test > "$PROJECT_DIR/.local/geography-render.log" 2>&1
+grep 'GEOGRAPHY_UI_OK:' "$PROJECT_DIR/.local/geography-render.log"

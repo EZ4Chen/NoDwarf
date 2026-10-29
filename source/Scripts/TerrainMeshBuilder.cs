@@ -15,7 +15,7 @@ internal sealed class TerrainMeshSnapshot
     public TerrainMeshSnapshot(TerrainMap terrain,WorldView view,HashSet<Cell> walls)
     {
         Terrain=terrain;View=view;Walls=walls;
-        foreach(var c in terrain.Excavated.Concat(view.WallCaps?.Keys??Enumerable.Empty<Cell>()))
+        foreach(var c in terrain.Excavated.Concat(terrain.Caverns.Where(c=>view.RevealAll||terrain.KnownAir(c))).Concat(view.WallCaps?.Keys??Enumerable.Empty<Cell>()))
             foreach(var d in Offsets)
             {
                 var p=c+d;if(!DemoWorld.Inside(p))continue;

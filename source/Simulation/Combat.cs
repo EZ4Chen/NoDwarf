@@ -120,7 +120,7 @@ public sealed partial class DemoWorld
         if(!enemy&&!MilitaryControlled(w))return false;
         if(enemy&&!w.Person.Dead)
         {
-            double bleeding=w.Person.Injuries.Where(i=>i.Kind=="cut"&&!i.Treated).Sum(i=>i.Severity)*.001;
+            double bleeding=ResidentHealth.Bleeding(w.Person);
             w.Person.Blood=Math.Clamp(w.Person.Blood+(bleeding>0?-bleeding:.015)*dt,0,100);
         }
         var state=w.Combat;

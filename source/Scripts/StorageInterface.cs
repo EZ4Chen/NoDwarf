@@ -11,6 +11,7 @@ public partial class Main
         var panel=Panel((Control)_selectionPanel.GetParent(),new Vector2(120,100),new Vector2(360,460));_storagePanel=panel;
         var column=new VBoxContainer();panel.AddChild(column);
         column.AddChild(Text($"堆场 #{zone.Id} · {zone.Cells.Count} 格",18,Accent));
+        column.AddChild(Text("修改后点击应用设置",12,Muted));
         column.AddChild(Text("搬运优先级",13,Ink));
         var priority=new OptionButton();foreach(string name in new[]{"1 · 低","2 · 较低","3 · 普通","4 · 较高","5 · 最高"})priority.AddItem(name);
         priority.Selected=zone.Priority-1;column.AddChild(priority);UiAccess.Name(priority,"搬运优先级","优先搬入数值更高的储存区。");
@@ -24,7 +25,7 @@ public partial class Main
         Button(presets,"全部",()=>Preset(_=>true));Button(presets,"全不选",()=>Preset(_=>false));
         Button(presets,"食物",()=>Preset(i=>i is "meal" or "raw_food" or "wheat" or "flour" or "potato" or "mushroom"));Button(presets,"种子",()=>Preset(i=>CropCatalog.All.Any(c=>c.Seed==i)));
         var actions=new HBoxContainer();column.AddChild(actions);
-        Button(actions,"应用",()=>{if(_world==editedWorld)_world.ConfigureStorage(zone.Id,priority.Selected+1,toggles.Where(p=>p.Value.ButtonPressed).Select(p=>p.Key));panel.QueueFree();_storagePanel=null;RefreshUi();});
-        Button(actions,"关闭",()=>{panel.QueueFree();_storagePanel=null;});
+        Button(actions,"应用设置",()=>{if(_world==editedWorld)_world.ConfigureStorage(zone.Id,priority.Selected+1,toggles.Where(p=>p.Value.ButtonPressed).Select(p=>p.Key));panel.QueueFree();_storagePanel=null;RefreshUi();});
+        Button(actions,"取消",()=>{panel.QueueFree();_storagePanel=null;});
     }
 }

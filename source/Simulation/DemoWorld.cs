@@ -1,6 +1,6 @@
 namespace NoDwarf.Simulation;
 
-public enum BuildKind { Wall, Door, Furnace, Anvil, Log, Planks, Cobblestone, StoneBricks, LogStairs, PlankStairs, CobbleStairs, BrickStairs, Stove, Bed, Campfire, Mill, Loom, Floodgate, Workbench, Ladder }
+public enum BuildKind { Wall, Door, Furnace, Anvil, Log, Planks, Cobblestone, StoneBricks, LogStairs, PlankStairs, CobbleStairs, BrickStairs, Stove, Bed, Campfire, Mill, Loom, Floodgate, Workbench, Ladder, Table, Chair, GameTable }
 public readonly record struct Cell(int X, int Z, int Level = 0)
 {
     public static Cell operator +(Cell a, Cell b) => new(a.X + b.X, a.Z + b.Z, a.Level + b.Level);
@@ -16,11 +16,17 @@ public sealed class DemoJob
     public int Id { get; init; }
     public int Facing { get; init; }
     public int ConstructionGroup { get; set; }
+    public string DigRegion { get; set; } = "";
+    public Cell? DigRegionMin { get; set; }
+    public Cell? DigRegionMax { get; set; }
     public Cell Cell { get; set; }
     public BuildKind? Build { get; init; }
     public bool Dig { get; init; }
     public bool Demolish {get;init;}
     public int DigHeight { get; init; } = 1;
+    public bool WaterPaused { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string AcceptedWaterRisk { get; set; } = "";
     public bool Haul {get;init;}
     public bool Smelt {get;init;}
     public bool Cook {get;init;}
@@ -63,8 +69,13 @@ public sealed class DemoWorker
     public Cell? TravelFrom { get; set; }
     public double ClimbProgress {get;set;}
     public long CheckedNavigationVersion { get; set; } = -1;
+    public bool WaterEvacuating { get; set; }
+    public string WaterIssue { get; set; } = "";
+    public double WaterRetryAt { get; set; }
     public double NextJobSearch { get; set; }
     public double NextMedicalCheck {get;set;}
+    public double NextCareCheck {get;set;}
+    public double NextRescueCheck {get;set;}
     public string MedicalIssue {get;set;}="";
     public double NextPolicyCheck { get; set; }
     public Cell Tile => TravelFrom ?? new((int)Math.Round(X), (int)Math.Round(Z), Level);
@@ -183,9 +194,10 @@ public sealed partial class DemoWorld
         return true;
     }
     public static bool Inside(Cell c) => TerrainMap.InBounds(c);
-    public bool Walkable(Cell c)
+    public bool Walkable(Cell c) => WalkableCore(c,false);
+    private bool WalkableCore(Cell c,bool ignoreWater)
     {
-        if (!Inside(c) || c.Level <= TerrainMap.MinLevel || c.Level > TerrainMap.MaxLevel || NaturalSolid(c) || Fluids.Amount(c)>=500) return false;
+        if (!Inside(c) || c.Level <= TerrainMap.MinLevel || c.Level > TerrainMap.MaxLevel || NaturalSolid(c) || (!ignoreWater && Fluids.Amount(c)>=500)) return false;
         if (Terrain[c.X, c.Z].Tree && c.Level >= Terrain[c.X,c.Z].Level && c.Level < Terrain[c.X, c.Z].Level + TreeHeight(Surface(c.X,c.Z))) return false;
         bool stair = Buildings.TryGetValue(c, out var b) && BlockCatalog.IsStairs(b.Kind);
         if (b is not null && b.Kind != BuildKind.Door && !(b.Kind==BuildKind.Floodgate&&GateOpen(c)) && !stair && b.Kind!=BuildKind.Ladder) return false;
@@ -209,11 +221,12 @@ public sealed partial class DemoWorld
         var slope = Slope(c);
         return (float)(c.Level + (slope is Cell d ? Math.Clamp(.5 + localX * d.X + localZ * d.Z, 0, 1) : 0));
     }
-    public bool Connected(Cell a, Cell b)
+    public bool Connected(Cell a, Cell b) => ConnectedCore(a,b,false);
+    private bool ConnectedCore(Cell a, Cell b,bool escapeOrigin)
     {
-        if(LadderLink(a,b))return Walkable(a)&&Walkable(b);
+        if(LadderLink(a,b))return WalkableCore(a,escapeOrigin)&&Walkable(b);
         int dx = b.X - a.X, dz = b.Z - a.Z;
-        if (Math.Abs(dx) + Math.Abs(dz) != 1 || b.Level-a.Level > 1 || a.Level-b.Level > 2 || !Walkable(a) || !Walkable(b)) return false;
+        if (Math.Abs(dx) + Math.Abs(dz) != 1 || b.Level-a.Level > 1 || a.Level-b.Level > 2 || !WalkableCore(a,escapeOrigin) || !Walkable(b)) return false;
         // Match the height of the shared edge. Stairs cannot be entered through their sides.
         if (Slope(a) is Cell sa && dx * sa.X + dz * sa.Z == 0) return false;
         if (Slope(b) is Cell sb && dx * sb.X + dz * sb.Z == 0) return false;
@@ -348,27 +361,31 @@ public sealed partial class DemoWorld
         foreach(var actor in Actors)actor.Combat.Cooldown=Math.Max(0,actor.Combat.Cooldown-dt);
         AdvanceSupport();
         Fluids.Advance(dt);
+        RefreshWaterSafety();
         UpdateHomes(dt);UpdateRoomTemperatures();UpdateTrees(dt);
         UpdateFarming(dt);UpdateProductionOrders(dt);
         _residentElapsed += dt;
-        if(_residentElapsed>=2){UpdateResidentNeeds(_residentElapsed);_residentElapsed=0;}
+        if(_residentElapsed>=2){UpdateResidentNeeds(_residentElapsed);StepLife(_residentElapsed);AssignLifeNeeds();_residentElapsed=0;}
         _assignElapsed += dt;
         bool assign = _assignElapsed >= 0.25;
         if (assign) { foreach(var cached in _jobAccess.Keys.Where(j=>!Jobs.Contains(j)).ToArray()) _jobAccess.Remove(cached); _assignElapsed = 0; Demo?.Advance(this); Underground?.Advance(this); ScheduleHomeJobs(); ScheduleHauling(); SettleItems(); }
         int budget = Math.Max(1, NavigationRequestsPerTick);
         foreach(var enemy in Enemies)UpdateMilitary(enemy,dt,ref budget,true);
+        EmergencyMedical();
         int first = _assignmentCursor;
         // Broken routes take precedence over idle job searches. Otherwise hundreds
         // of idle residents can consume the budget before a blocked walker is served.
         for (int offset = 0; offset < Workers.Count; offset++)
         {
             var worker = Workers[(first + offset) % Workers.Count];
-            if (worker.Path.Count > 0) EnsureWorkerRoute(worker, ref budget);
+            if (!worker.WaterEvacuating && !FloodThreat(worker) && worker.Path.Count > 0) EnsureWorkerRoute(worker, ref budget);
         }
         for (int offset = 0; offset < Workers.Count; offset++)
         {
             int i = (first + offset) % Workers.Count;
             var worker = Workers[i];
+            if(UpdateWaterEscape(worker,dt,ref budget))continue;
+            if(UpdateMedicalPatient(worker,dt))continue;
             if(UpdateMilitary(worker,dt,ref budget))continue;
             if(ApplyResidentSchedule(worker,ref budget))continue;
             if(worker.Person.Activity is {Kind:"research",Origin:"work"}&&_simulationTime>=worker.NextJobSearch&&budget>0)
@@ -458,7 +475,7 @@ public sealed partial class DemoWorld
         int component=Navigation.ComponentAt(worker.Tile);
         foreach (var job in OrderedJobs())
         {
-            if (job.Worker >= 0) continue;
+            if (job.Worker >= 0 || !CheckDigWater(job)) continue;
             int rank=ResidentWork.Rank(worker.Person,ResidentWork.JobType(job));
             if(rank==int.MaxValue||rank>bestRank)continue;
             if (job.Build is BuildKind.Furnace or BuildKind.Anvil && PendingConstructionShell(job)) continue;
@@ -475,7 +492,7 @@ public sealed partial class DemoWorld
             foreach(var stand in AssignmentPositions(job))
             {
                 if (requireFlat && Slope(stand) is not null) continue;
-                if(occupiedStands.Contains(stand)) continue;
+                if(occupiedStands.Contains(stand) || Fluids.Amount(stand)>=EvacuationWater) continue;
                 if(component==0||Navigation.ComponentAt(stand)!=component||!Navigation.CanReach(stand,worker.Tile))continue;
                 if(rank<bestRank){bestRank=rank;targets.Clear();}
                 targets.TryAdd(stand,job);

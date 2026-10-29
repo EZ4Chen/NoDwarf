@@ -5,6 +5,7 @@ namespace NoDwarf.Simulation;
 // Stable string IDs are stored instead of enum ordinals or renderer resources.
 public sealed record CharacterAppearance
 {
+    public string BodySex { get; init; } = "male";
     public string Skin { get; init; } = "warm";
     public string Hair { get; init; } = "crop";
     public string HairColor { get; init; } = "chestnut";
@@ -20,18 +21,20 @@ public sealed record CharacterAppearance
     public static readonly string[] Faces = ["round", "oval", "square"];
     public static readonly string[] Outfits = ["apron", "tunic", "vest", "coat"];
     public static readonly string[] Cloths = ["sage", "ochre", "blue", "plum", "rust", "cream"];
-    public static readonly string[] Bodies = ["slim", "regular", "broad"];
+    public static readonly string[] Bodies = ["male", "female", "thin", "hulk", "fat"];
     public static readonly string[] Beards = ["none", "stubble", "full"];
     public CharacterAppearance Normalize() => this with
     {
+        BodySex = BodySex == "female" ? "female" : "male",
         Skin = Valid(Skin, Skins, "warm"), Hair = Valid(Hair, Hairs, "crop"),
         HairColor = Valid(HairColor, HairColors, "chestnut"), Face = Valid(Face, Faces, "round"),
         Outfit = Valid(Outfit, Outfits, "apron"), Cloth = Valid(Cloth, Cloths, "sage"),
-        Body = Valid(Body, Bodies, "regular"), Beard = Valid(Beard, Beards, "none")
+        Body = Valid(Body switch { "regular" or "standard" => BodySex == "female" ? "female" : "male", "slim" => "thin", "broad" => "hulk", "round" => "fat", _ => Body }, Bodies, BodySex == "female" ? "female" : "male"), Beard = Valid(Beard, Beards, "none")
     };
     private static string Valid(string value, string[] values, string fallback) => values.Contains(value) ? value : fallback;
     public static CharacterAppearance Randomize(Random random) => new()
     {
+        BodySex = random.Next(2) == 0 ? "male" : "female",
         Skin = Skins[random.Next(Skins.Length)], Hair = Hairs[random.Next(Hairs.Length)],
         HairColor = HairColors[random.Next(HairColors.Length)], Face = Faces[random.Next(Faces.Length)],
         Outfit = Outfits[random.Next(Outfits.Length)], Cloth = Cloths[random.Next(Cloths.Length)],

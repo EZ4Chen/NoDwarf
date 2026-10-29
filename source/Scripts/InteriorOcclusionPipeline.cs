@@ -13,7 +13,7 @@ public partial class Main
     private InteriorRequest? _pendingInterior;
     private InteriorWork? _interiorWork;
     private (long Generation,InteriorCutKey Key)? _desiredInterior;
-    private (long Generation,int Floor,int Height)? _publishedInterior;
+    private (long Generation,int Floor,int Height,bool Mining)? _publishedInterior;
     private bool _backgroundInterior=true,_interiorStopped;
     private int _interiorDiscarded,_interiorApplied;
     private double _interiorWorkerMs;
@@ -38,7 +38,7 @@ public partial class Main
     private void PublishInterior(InteriorCutKey key,Dictionary<Cell,float> caps)
     {
         using var trace=DiagnosticTrace.Span("interior.publish");
-        _publishedInterior=(_interiorGeneration,key.Floor,key.Height);
+        _publishedInterior=(_interiorGeneration,key.Floor,key.Height,key.Mining);
         if(SetInteriorCaps(caps))_revision=-1;
     }
     private void PrepareInteriorAsync(int floor,int height)
@@ -49,7 +49,7 @@ public partial class Main
         {DropPendingInterior();PublishInterior(key,caps);return;}
         // Retain the previous angle while computing on the same unchanged floor.
         // Edits, floor/world changes restore full walls until their new answer arrives.
-        if(_publishedInterior!=(_interiorGeneration,floor,height))
+        if(_publishedInterior!=(_interiorGeneration,floor,height,key.Mining))
         {SetInteriorCaps(null);_publishedInterior=null;}
         if(_interiorWork is {} current&&!current.Cancellation.IsCancellationRequested&&current.Request.Generation==_interiorGeneration&&current.Request.Key==key)
         {DropPendingInterior();return;}
@@ -65,7 +65,7 @@ public partial class Main
         if(TryInteriorCaps(request.Key,out var cached))
         {if(InteriorRequestCurrent(request))PublishInterior(request.Key,cached);DiagnosticTrace.Mark("interior","cache-reused",request.TraceId,request.Generation);return;}
         InteriorTopology? existing=null;
-        if(_interiorTopologies.TryGetValue(request.Key.Floor,out var topology))
+        if(_interiorTopologies.TryGetValue((request.Key.Floor,request.Key.Mining),out var topology))
         {existing=topology.Data;_topologyLru.Remove(topology.Age);_topologyLru.AddLast(topology.Age);}
         var cancellation=new CancellationTokenSource();var token=cancellation.Token;
         // Capture only immutable managed input and a scratch buffer owned by this
@@ -79,8 +79,8 @@ public partial class Main
             try
             {
             long started=Stopwatch.GetTimestamp();
-            var rooms=existing??InteriorOcclusionBuilder.Rooms(input,floor,token);
-            var caps=InteriorOcclusionBuilder.Caps(input,rooms,floor,height,offsets,scratch,token);
+            var rooms=existing??(request.Key.Mining?InteriorOcclusionBuilder.ExcavatedFloors(input,floor,token):InteriorOcclusionBuilder.Rooms(input,floor,token));
+            var caps=InteriorOcclusionBuilder.Caps(input,rooms,floor,height,offsets,scratch,token,request.Key.Mining?.1f:.2f);
             var result=new InteriorResult(rooms,caps,scratch.Touched.Count,System.Environment.CurrentManagedThreadId,Stopwatch.GetElapsedTime(started).TotalMilliseconds);
             DiagnosticTrace.Mark("interior","computed",request.TraceId,request.Generation);return result;
             }
@@ -90,10 +90,10 @@ public partial class Main
         _interiorWork=new(request,cancellation,task);_interiorOcclusionBuilds++;
         _world.Probe?.Count("view.interior-background-start");
     }
-    private bool InteriorRequestCurrent(InteriorRequest request)=>_backgroundInterior&&_interiorView&&_cutaway
+    private bool InteriorRequestCurrent(InteriorRequest request)=>_backgroundInterior&&LocalWallCutaway&&_cutaway
         &&request.Generation==_interiorGeneration&&_interiorCacheEpoch==(_world,_world.Navigation.Version,_world.Terrain.Revision)
         &&_desiredInterior==(request.Generation,request.Key)
-        &&request.Key==InteriorKey(ActiveLevel,_foundation?.FloorHeight??3);
+        &&request.Key==InteriorKey(WallCutFloor,WallCutHeight);
     private void PumpInteriorWork()
     {
         if(_interiorStopped)return;
@@ -120,7 +120,7 @@ public partial class Main
             {
                 var result=work.Task.GetAwaiter().GetResult(); // Already completed: never waits for computation.
                 _interiorWorkerThreads.Add(result.Thread);_interiorWorkerMs+=result.ComputeMs;
-                StoreInteriorTopology(work.Request.Key.Floor,result.Topology);
+                StoreInteriorTopology(work.Request.Key.Floor,result.Topology,work.Request.Key.Mining);
                 StoreInteriorCaps(work.Request.Key,result.Caps);
                 _world.Probe?.Count("view.interior-columns-tested",result.Columns);
                 if(InteriorRequestCurrent(work.Request)){PublishInterior(work.Request.Key,result.Caps);_interiorApplied++;DiagnosticTrace.Mark("interior","applied",work.Request.TraceId,work.Request.Generation);}
@@ -130,7 +130,7 @@ public partial class Main
                     // Yaw may move within Main's 5-degree redraw bucket while a cold
                     // job runs. Schedule that latest pose instead of leaving full walls
                     // indefinitely after rejecting the now-obsolete answer.
-                    if(_backgroundInterior&&_interiorView&&_cutaway&&_desiredInterior==(work.Request.Generation,work.Request.Key))
+                    if(_backgroundInterior&&LocalWallCutaway&&_cutaway&&_desiredInterior==(work.Request.Generation,work.Request.Key))
                     {_interiorInputs=null;_revision=-1;}
                 }
             }

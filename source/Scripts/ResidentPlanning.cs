@@ -23,9 +23,9 @@ public partial class Main
         var row=RH(parent);RT(row,_world.Calendar.DateText+" · "+_world.Calendar.TimeText,13,RMuted).SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
         int pages=Math.Max(1,(_world.Workers.Count+RosterPageSize-1)/RosterPageSize);
         if(pages<=1)return;
-        var previous=RB(row,"‹",()=>{_residentRosterPage--;RenderResidentPanel();});previous.Disabled=_residentRosterPage==0;
+        var previous=RB(row,"‹",()=>{_residentRosterPage--;RenderResidentPanel();},"上一页居民");previous.Disabled=_residentRosterPage==0;
         RT(row,$"{_residentRosterPage+1} / {pages}",13,RMuted);
-        var next=RB(row,"›",()=>{_residentRosterPage++;RenderResidentPanel();});next.Disabled=_residentRosterPage==pages-1;
+        var next=RB(row,"›",()=>{_residentRosterPage++;RenderResidentPanel();},"下一页居民");next.Disabled=_residentRosterPage==pages-1;
     }
     private void PlanningName(Node parent,DemoWorker worker,int height=30)
     {
@@ -36,7 +36,7 @@ public partial class Main
     private void RenderResidentSchedule(DemoWorker selected)
     {
         _scheduleCells.Clear();_scheduleBrushes.Clear();
-        RT(_residentBody,"每格 1 小时 · 选择颜色后按住左键涂抹",13,RMuted);
+        RT(_residentBody,"每格 1 小时 · 涂抹即生效",13,RMuted);
         var tools=RH(_residentBody,8);
         foreach(string mode in ResidentWork.Modes)
         {
@@ -47,7 +47,7 @@ public partial class Main
         RT(tools,"",12,RMuted).SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
         RB(tools,"日间作息",()=>ApplyDay(ResidentWork.DayShift()),"仅应用于当前选中居民：22—06 休息、08—18 工作、18—20 娱乐，其余无固定");
         RB(tools,"全天自由",()=>ApplyDay(ResidentWork.FreeDay()),"仅应用于当前选中居民");
-        RB(tools,"复制",()=>{_copiedSchedule=(string[])selected.Person.Schedule.Clone();_residentNotice.Text="已复制"+selected.Name+"的作息，切换居民后可粘贴。";RenderResidentPanel();});
+        RB(tools,"复制",()=>{_copiedSchedule=(string[])selected.Person.Schedule.Clone();ShowActionFeedback("已复制"+selected.Name+"的作息，切换居民后可粘贴。");RenderResidentPanel();});
         var paste=RB(tools,"粘贴",()=>{if(_copiedSchedule is not null)ApplyDay(_copiedSchedule);});paste.Disabled=_copiedSchedule is null;
         var hours=RH(_residentBody,1);RT(hours,"居民 / 时刻",12,RMuted).CustomMinimumSize=new(92,22);
         for(int hour=0;hour<24;hour++){var label=RT(hours,hour.ToString("00"),11,hour==_world.Calendar.Hour?RGold:RMuted);label.CustomMinimumSize=new(30,22);label.HorizontalAlignment=HorizontalAlignment.Center;}
@@ -72,8 +72,7 @@ public partial class Main
             }
         }
         PlanningPager(_residentBody);
-        RT(_residentBody,"休息、娱乐时段不领取普通工作；工作时段保留进食和极度疲劳保护。无固定时按需求与工作优先级行动。",12,RMuted,true);
-        RT(_residentBody,"手动指定的个人活动优先完成。新居民和旧存档默认全天无固定，可直接套用日间作息。",12,RMuted,true);
+        RT(_residentBody,"休息／娱乐时段暂停普通工作；无固定时按需求行动。手动活动优先，危急饥饿或疲劳会打断。",12,RMuted,true);
     }
     private void PaintScheduleAt(Vector2 pointer)
     {
@@ -83,7 +82,7 @@ public partial class Main
             var worker=_world.Workers.FirstOrDefault(w=>w.Id==key.Resident);
             if(worker is null||worker.Person.Schedule[key.Hour]==_scheduleBrush)return;
             var result=_world.ActResident(new(worker.Id,"schedule",_scheduleBrush,Hour:key.Hour));
-            _residentNotice.Text=result.Message;if(result.Ok)StyleScheduleCell(cell,worker,key.Hour);
+            ShowActionFeedback(result.Message,!result.Ok);if(result.Ok)StyleScheduleCell(cell,worker,key.Hour);
             return;
         }
     }
@@ -95,16 +94,16 @@ public partial class Main
     }
     private void ApplyDay(string[] hours)
     {
-        var result=_world.ActResident(new(_dossierId,"schedule",Hours:hours));_residentNotice.Text=result.Message;RenderResidentPanel();
+        var result=_world.ActResident(new(_dossierId,"schedule",Hours:hours));ShowActionFeedback(result.Message,!result.Ok);RenderResidentPanel();
     }
     private void RenderResidentWork(DemoWorker selected)
     {
         _priorityCells.Clear();
-        RT(_residentBody,"1 最高 · 4 最低 · — 不做。左键提高，右键反向；同级从左到右。",13,RMuted,true);
+        RT(_residentBody,"1 最高 · 4 最低 · — 不做。左键提高，右键反向；同级从左到右，修改即生效。",13,RMuted,true);
         var headings=RH(_residentBody,3);RT(headings,"居民",13,RMuted).CustomMinimumSize=new(92,34);
         foreach(var type in ResidentWork.Types)
         {
-            var label=RT(headings,type.Name,14,type.Available?RInk:RMuted);label.CustomMinimumSize=new(61,34);label.HorizontalAlignment=HorizontalAlignment.Center;
+            var label=RT(headings,type.Name,14,type.Available?RInk:RMuted);label.CustomMinimumSize=new(55,34);label.HorizontalAlignment=HorizontalAlignment.Center;
         }
         var roster=RScroll(_residentBody);roster.AddThemeConstantOverride("separation",6);
         foreach(var worker in PlanningRoster())
@@ -112,20 +111,20 @@ public partial class Main
             var row=RH(roster,3);PlanningName(row,worker,34);
             foreach(var type in ResidentWork.Types)
             {
-                var button=RB(row,"",()=>{},"",61);button.CustomMinimumSize=new(61,34);button.AddThemeFontSizeOverride("font_size",18);
+                var button=RB(row,"",()=>{},"",55);button.CustomMinimumSize=new(55,34);button.AddThemeFontSizeOverride("font_size",18);
                 _priorityCells[(worker.Id,type.Id)]=button;StylePriorityCell(button,worker,type);
                 button.GuiInput+=input=>
                 {
                     if(input is not InputEventMouseButton {Pressed:true} click||click.ButtonIndex is not (MouseButton.Left or MouseButton.Right))return;
                     button.AcceptEvent();if(!type.Available||worker.Person.Dead)return;
                     int old=worker.Person.WorkPriorities[type.Id];int priority=click.ButtonIndex==MouseButton.Left?(old+4)%5:(old+1)%5;
-                    var result=_world.ActResident(new(worker.Id,"work_priority",type.Id,Priority:priority));_residentNotice.Text=result.Message;
+                    var result=_world.ActResident(new(worker.Id,"work_priority",type.Id,Priority:priority));ShowActionFeedback(result.Message,!result.Ok);
                     if(result.Ok)StylePriorityCell(button,worker,type);
                 };
             }
         }
         PlanningPager(_residentBody);
-        RT(_residentBody,"研究：选择聚落项目后，按优先级自动研究。医疗：有随身绷带时照料可达、未处理的伤口。",12,RMuted,true);
+        RT(_residentBody,"照料：取粮喂给无法自理的伤员。医疗：处理伤口。研究：按选定项目执行。",12,RMuted,true);
         RT(_residentBody,"屠宰尚无对应生产流程，暂不可用。医疗和研究默认关闭；其他已有工作默认开启，搬运优先级较低。",12,RMuted,true);
     }
     private static void StylePriorityCell(Button b,DemoWorker worker,ResidentWorkType type)
