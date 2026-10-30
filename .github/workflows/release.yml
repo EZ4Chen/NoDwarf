@@ -55,7 +55,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: logs-${{ matrix.platform }}
-          path: source/.local/ci/*.log
+          path: |
+            source/.local/ci/*.log
+            source/.local/checks/*.log
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7

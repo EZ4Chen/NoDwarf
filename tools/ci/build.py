@@ -108,18 +108,6 @@ def install(target):
     return godot, template
 
 
-def checked_game(executable, argument, marker):
-    log = LOCAL / f"{argument.removeprefix('--')}.log"
-    with log.open("w", encoding="utf-8") as output:
-        result = subprocess.run([str(executable), "--headless", "--", argument],
-                                cwd=executable.parent, stdout=output,
-                                stderr=subprocess.STDOUT, timeout=180)
-    text = log.read_text(encoding="utf-8", errors="replace")
-    print(text, flush=True)
-    if result.returncode or marker not in text or re.search(r"ERROR:|Exception", text):
-        raise RuntimeError(f"Exported game failed {argument}; see {log}")
-
-
 def build(target):
     if (target == "macos") != (sys.platform == "darwin"):
         raise RuntimeError("Run each target on its native GitHub runner")
@@ -163,9 +151,8 @@ def build(target):
     if not executable.is_file():
         raise RuntimeError("Export did not produce a runnable game")
     # Exercise the actual self-contained export, including assets and bundled .NET.
-    checked_game(executable, "--smoke-test", "SMOKE_OK:")
-    checked_game(executable, "--interaction-test", "INTERACTION_OK:")
-    checked_game(executable, "--sprite-integration-test", "SPRITE_INTEGRATION_OK:")
+    run(["dotnet", "run", "--project", ROOT / "tools/checks/runner/CheckRunner.csproj",
+         "--", "--root", ROOT, "--group", "export", "--game", executable], timeout=1200)
     shutil.copy2(ROOT / "docs/PLAYER-README.txt", output / "README.txt")
     shutil.copy2(PROJECT / "Assets/Textures/PureBDcraft/terms of use.txt", output / "PureBDcraft-terms.txt")
     shutil.copy2(PROJECT / "Assets/Fonts/NotoSansCJK/LICENSE.txt", output / "NotoSansCJK-LICENSE.txt")
@@ -181,7 +168,8 @@ def build(target):
             run(["ditto", "-x", "-k", archive, folder])
             app = Path(folder) / filename
             verify_app(app)
-            checked_game(app / "Contents/MacOS/NoDwarf", "--smoke-test", "SMOKE_OK:")
+            run(["dotnet", "run", "--project", ROOT / "tools/checks/runner/CheckRunner.csproj",
+                 "--", "--root", ROOT, "--only", "smoke", "--game", app / "Contents/MacOS/NoDwarf"], timeout=720)
     else:
         shutil.make_archive(str(archive.with_suffix("")), "zip", output)
     manifest = {"platform": platform, "commit": commit, "version": version,
