@@ -18,12 +18,12 @@ public partial class Main
         column.AddChild(Text("允许储存的物品",13,Ink));
         var scroll=new ScrollContainer{CustomMinimumSize=new Vector2(340,300)};column.AddChild(scroll);
         var checks=new VBoxContainer();scroll.AddChild(checks);var toggles=new Dictionary<string,CheckBox>();
-        foreach(var item in ItemCatalog.All)
+        foreach(var item in _world.Content.Items)
         {var check=new CheckBox{Text=item.Name,ButtonPressed=zone.Allowed.Contains(item.Id),Icon=UiIcons.Get(item.Id)};check.ExpandIcon=true;check.AddThemeConstantOverride("icon_max_width",24);check.CustomMinimumSize=new Vector2(280,30);checks.AddChild(check);toggles[item.Id]=check;}
         var presets=new HBoxContainer();column.AddChild(presets);
         void Preset(Func<string,bool> include){foreach(var p in toggles)p.Value.ButtonPressed=include(p.Key);}
         Button(presets,"全部",()=>Preset(_=>true));Button(presets,"全不选",()=>Preset(_=>false));
-        Button(presets,"食物",()=>Preset(i=>i is "meal" or "raw_food" or "wheat" or "flour" or "potato" or "mushroom"));Button(presets,"种子",()=>Preset(i=>CropCatalog.All.Any(c=>c.Seed==i)));
+        Button(presets,"食物",()=>Preset(i=>editedWorld.Content.Item(i) is {Edible:not null} or {Category:"food" or "food_ingredient"}));Button(presets,"种子",()=>Preset(i=>CropCatalog.All.Any(c=>c.Seed==i)));
         var actions=new HBoxContainer();column.AddChild(actions);
         Button(actions,"应用设置",()=>{if(_world==editedWorld)_world.ConfigureStorage(zone.Id,priority.Selected+1,toggles.Where(p=>p.Value.ButtonPressed).Select(p=>p.Key));panel.QueueFree();_storagePanel=null;RefreshUi();});
         Button(actions,"取消",()=>{panel.QueueFree();_storagePanel=null;});

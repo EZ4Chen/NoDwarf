@@ -13,7 +13,7 @@ public sealed record CharacterAppearance
     public string Face { get; init; } = "round";
     public string Outfit { get; init; } = "apron";
     public string Cloth { get; init; } = "sage";
-    public string Body { get; init; } = "regular";
+    public string Body { get; init; } = "male";
     public string Beard { get; init; } = "none";
 
     public static readonly string[] Skins = ["porcelain", "warm", "tan", "brown", "deep"];
@@ -31,7 +31,7 @@ public sealed record CharacterAppearance
         Skin = ValidColor(Skin, Skins, "warm"), Hair = Valid(Hair, Hairs, "crop"),
         HairColor = ValidColor(HairColor, HairColors, "chestnut"), BeardColor = ValidColor(BeardColor, HairColors, "silver"), Face = Valid(Face, Faces, "round"),
         Outfit = Valid(Outfit, Outfits, "apron"), Cloth = Valid(Cloth, Cloths, "sage"),
-        Body = Valid(Body switch { "regular" or "standard" => BodySex == "female" ? "female" : "male", "slim" => "thin", "broad" => "hulk", "round" => "fat", _ => Body }, Bodies, BodySex == "female" ? "female" : "male"), Beard = Valid(Beard, Beards, "none")
+        Body = Valid(Body, Bodies, BodySex == "female" ? "female" : "male"), Beard = Valid(Beard, Beards, "none")
     };
     private static string Valid(string value, string[] values, string fallback) => values.Contains(value) ? value : fallback;
     private static string ValidColor(string value, string[] presets, string fallback) =>
@@ -49,7 +49,8 @@ public sealed record CharacterAppearance
 
 public sealed class AppearanceArchive
 {
-    public int Version { get; set; } = 1;
+    public const int CurrentVersion=2;
+    [System.Text.Json.Serialization.JsonRequired] public int Version { get; set; } = CurrentVersion;
     public Dictionary<string, CharacterAppearance> Residents { get; set; } = new();
 }
 
@@ -61,7 +62,7 @@ public static class AppearanceStorage
     public static Dictionary<string, CharacterAppearance> Deserialize(string json)
     {
         var archive = JsonSerializer.Deserialize<AppearanceArchive>(json) ?? throw new InvalidDataException("角色档案为空");
-        if (archive.Version != 1 || archive.Residents is null) throw new InvalidDataException("角色档案版本不受支持");
+        if (archive.Version != AppearanceArchive.CurrentVersion || archive.Residents is null) throw new InvalidDataException("角色档案版本不受支持");
         return archive.Residents.ToDictionary(p => p.Key, p => (p.Value ?? new CharacterAppearance()).Normalize());
     }
 

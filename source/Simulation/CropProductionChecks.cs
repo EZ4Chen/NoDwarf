@@ -43,10 +43,7 @@ public static class CropProductionChecks
         foreach(string item in new[]{"flour","potato","mushroom"})kitchen.SpawnItem(item,2,stand);kitchen.SpawnItem("wood",3,stand);
         Check(kitchen.QueueProcessing("bread")&&kitchen.QueueProcessing("potato_meal")&&kitchen.QueueProcessing("mushroom_meal"),"All food recipes accepted");
         Until(kitchen,()=>!kitchen.Jobs.Any(j=>j.Processing));Check(kitchen.Total("meal")==7&&kitchen.Total("wood")==0,"Food processing consumes fuel and gives distinct recipe yields");
-        var old=System.Text.Json.Nodes.JsonNode.Parse(w.SaveJson())!;old["Version"]=6;
-        foreach(var p in old["Workers"]!.AsArray())p!["Person"]!["WorkPriorities"]!.AsObject().Remove("crafting");
-        Check(DemoWorld.LoadJson(old.ToJsonString()).Workers[0].Person.WorkPriorities.ContainsKey("crafting"),"Legacy work settings migrate");
         Check(ClimateRules.TemperatureFactor("cotton",8)==0&&ClimateRules.TemperatureFactor("potato",8)>0,"Crop climate differences");
-        Console.WriteLine("CROP_PRODUCTION_OK: sparse forest, pending spacing, species seed return, cotton harvest/weaving/bandages, potatoes, wheat milling, persistence and legacy migration");
+        Console.WriteLine("CROP_PRODUCTION_OK: sparse forest, pending spacing, species seed return, cotton harvest/weaving/bandages, potatoes, wheat milling, persistence");
     }
 }

@@ -33,7 +33,7 @@ public static class WeatherRules
 }
 public sealed partial class DemoWorld
 {
-    public int ClimateVersion {get;private set;}
+    public int ClimateVersion=>1;
     public string? WeatherOverride {get;private set;}
     public double Latitude=>Terrain.Generation is {} g?(1-2*(g.SiteY+.5)/g.Height)*75:
         Terrain.Region?.Id switch {"rainforest"=>5,"savanna"=>15,"desert"=>25,"arid"=>30,"boreal"=>58,"tundra"=>70,"alpine"=>60,_=>42};
@@ -46,7 +46,6 @@ public sealed partial class DemoWorld
         {
             if(WeatherOverride is not null)return WeatherState.Get(WeatherOverride);
             if(Story.ActiveWeather!=""&&SimulationTime<Story.WeatherUntil)return WeatherState.Get(Story.ActiveWeather);
-            if(ClimateVersion==0)return WeatherState.Get("clear");
             var date=Calendar;
             if(_weatherMinute!=date.TotalMinutes)
             {
@@ -60,7 +59,7 @@ public sealed partial class DemoWorld
     public void SetWeather(string id)
     {
         if(id!="auto")WeatherState.Get(id);
-        _weatherMinute=-1;ClimateVersion=1;WeatherOverride=id=="auto"?null:id;Revision++;
+        _weatherMinute=-1;WeatherOverride=id=="auto"?null:id;Revision++;
         Log("天气："+(WeatherOverride is null?"自动变化":Weather.Name+"（开发者固定）"));
     }
 }

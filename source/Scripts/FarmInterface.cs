@@ -54,11 +54,11 @@ public partial class Main
         var world=_world;bool paused=_clock.Paused;_clock.Paused=true;
         _removeGrowingDialog?.QueueFree();
         var dialog=new ConfirmationDialog{Title="移除种植区",OkButtonText="确认移除",CancelButtonText="保留种植区",
-            DialogText=$"将移除 {plots.Length} 格种植区，损失 {plots.Count(p=>p.Planted&&!CropCatalog.IsTree(p.Crop))} 格未收获作物。\n现有树木保留，区域内播种与收获任务会取消。\n此操作无法撤销。"};
+            DialogText=$"将移除 {plots.Length} 格种植区，现有植物保留并继续生长。\n区域内自动播种与收获任务会取消。\n此操作无法撤销。"};
         _removeGrowingDialog=dialog;AddChild(dialog);
         dialog.Confirmed+=()=>{if(_world==world){_world.SetFarm(start,end,"grain",true);_clock.Paused=paused;}SyncWorld();RefreshUi();};
         dialog.Canceled+=()=>{if(_world==world)_clock.Paused=paused;SelectTool("select");};
-        _hoverCell=null;Clear(_hover);dialog.PopupCentered(new Vector2I(460,200));
+        _hoverCell=null;ClearHover();dialog.PopupCentered(new Vector2I(460,200));
         dialog.GetCancelButton().GrabFocus();
     }
     private void DrawFarmPreview(Cell end)
@@ -74,9 +74,9 @@ public partial class Main
     {
         if(_farmsView is null){_farmsView=new Node3D();AddChild(_farmsView);}
         if(_farmWorld!=_world){Clear(_farmsView);_farmNodes.Clear();_farmWorld=_world;}
-        foreach(var c in _farmNodes.Keys.Where(c=>!_world.Farms.ContainsKey(c)).ToArray())
+        foreach(var c in _farmNodes.Keys.Where(c=>!_world.Plants.ContainsKey(c)).ToArray())
         {var old=_farmNodes[c].Root;_farmsView.RemoveChild(old);old.QueueFree();_farmNodes.Remove(c);}
-        foreach(var p in _world.Farms.Values)
+        foreach(var p in _world.Plants.Values)
         {
             int stage=CropVisuals.Stage(p);
             if(_farmNodes.TryGetValue(p.Cell,out var existing)&&(existing.Stage!=stage||existing.Crop!=p.Crop))
@@ -84,7 +84,7 @@ public partial class Main
             if(!_farmNodes.TryGetValue(p.Cell,out var entry))
             {
                 var root=new Node3D{Position=WorldPosition(p.Cell)};_farmsView.AddChild(root);
-                CropVisuals.AddTo(root,p.Crop,stage);
+                CropVisuals.AddTo(root,p.Crop,stage,p.Prepared);
                 entry=(root,p.Crop,stage);_farmNodes[p.Cell]=entry;
             }
             entry.Root.Visible=VisibleAt(p.Cell);
@@ -98,9 +98,9 @@ public partial class Main
         if(zone is not null&&_selectedCell is Cell c&&_world.Farms.TryGetValue(c,out var plot))
         {
             var plots=_world.Farms.Values.Where(p=>p.ZoneId==zone.Id).ToArray();
-            int planted=plots.Count(p=>p.Planted),ready=plots.Count(p=>p.Planted&&p.Growth>=DemoWorld.GrowTime(p.Crop));
-            var climate=_world.FarmClimate(plot);
-            _selection.Text=$"种植区 #{zone.Id} · {plots.Length} 格\n未成熟 {planted-ready} · 待收获 {ready}\n选中地格：{_world.FarmStatus(plot)}\n温度 {climate.Temperature:F1}°C · 日光 {climate.Light:P0}";
+            int planted=plots.Count(p=>_world.Plants.ContainsKey(p.Cell)),ready=plots.Count(p=>_world.Plants.TryGetValue(p.Cell,out var plant)&&plant.Growth>=DemoWorld.GrowTime(plant.Crop));
+            var climate=_world.FarmClimate(_world.Plants.GetValueOrDefault(c) as PlantSite??plot);
+            _selection.Text=$"种植区 #{zone.Id} · {plots.Length} 格\n未成熟 {planted-ready} · 待收获 {ready}\n选中地格：{_world.FarmStatus(plot)}\n温度 {climate.Temperature:F1}°C · 日光 {climate.Light:P0} · 肥力 {climate.Fertility:P0}";
             _growingCrop.Select(Array.IndexOf(GrowingCrops,zone.Crop));_growingSowing.SetPressedNoSignal(zone.AllowSowing);
             _growingHelp.Text=CropCatalog.Get(zone.Crop).Description+"\n设置作用于整个区域。现有作物收获后按新设置续种。";
         }
@@ -134,8 +134,8 @@ public partial class Main
             _clock.Paused=true;_world=new DemoWorld();_world.Stockpiles.Clear();_overview.World=_world;_terrainRevision=-1;
             var origin=FarmingChecks.SurfacePlot(_world);SelectTool("growingzone");Act(origin);Act(origin+new Cell(2,1));
             if(_world.Farms.Count!=6)throw new InvalidOperationException("Two-corner farm UI failed");
-            for(int i=0;i<120*30&&!_world.Farms.Values.All(p=>p.Planted);i++)_world.Update(1d/30);
-            if(!_world.Farms.Values.All(p=>p.Planted))throw new InvalidOperationException("Residents did not plant preview plots");
+            for(int i=0;i<120*30&&!_world.Farms.Values.All(p=>_world.Plants.ContainsKey(p.Cell));i++)_world.Update(1d/30);
+            if(!_world.Farms.Values.All(p=>_world.Plants.ContainsKey(p.Cell)))throw new InvalidOperationException("Residents did not plant preview plots");
             _world.DeveloperResidents(false);for(int i=0;i<65*30;i++)_world.Update(1d/30);
             _world=DemoWorld.LoadJson(_world.SaveJson());_overview.World=_world;
             _foundation=null;_heightSelected=false;_layerOffset=0;_cameraYaw=0;_topDown=false;_focus=WorldPosition(origin+new Cell(1,1));_camera.Size=12;
@@ -156,32 +156,40 @@ public partial class Main
             await Snap("grain-farm-preview");
             if(Pick(_camera.UnprojectPosition(WorldPosition(origin)))!=origin)throw new InvalidOperationException("Farm selection must hit its ground cell");
             if(PickTarget(_camera.UnprojectPosition(WorldPosition(origin)))!=origin)throw new InvalidOperationException("Clicking terrain must select the zone above its soil block");
-            if(_farmNodes.Count!=6||_categoryButtons["区域"].GetGlobalRect().Intersects(_buildTab.GetGlobalRect()))throw new InvalidOperationException("Farm visuals or category layout failed");
+            if(_world.Farms.Keys.Any(c=>!_farmNodes.ContainsKey(c))||_categoryButtons["区域"].GetGlobalRect().Intersects(_buildTab.GetGlobalRect()))throw new InvalidOperationException("Farm visuals or category layout failed");
             SelectTool("select");Act(origin);await Snap("growing-zone-settings");
-            if(!_growingSettings.Visible||_architectTools.Visible||SelectedGrowingZone is null)throw new InvalidOperationException("Selecting a plot must open its zone settings");
+            if(!_growingSettings.IsVisibleInTree()||_architectTools.IsVisibleInTree()||SelectedGrowingZone is null)throw new InvalidOperationException("Selecting a plot must open its zone settings");
             _growingSowing.ButtonPressed=false;
             if(SelectedGrowingZone.AllowSowing)throw new InvalidOperationException("Zone checkbox did not disable sowing");
             _growingCrop.EmitSignal(OptionButton.SignalName.ItemSelected,(long)Array.IndexOf(GrowingCrops,"mushroom"));
-            if(SelectedGrowingZone.Crop!="mushroom"||_world.Farms.Values.Any(f=>f.Crop!="grain"))throw new InvalidOperationException("Changing zone crop must preserve existing grain");
+            if(SelectedGrowingZone.Crop!="mushroom"||_world.Plants.Values.Where(f=>_world.Farms.ContainsKey(f.Cell)).Any(f=>f.Crop!="grain"))throw new InvalidOperationException("Changing zone crop must preserve existing grain");
             _world.ConfigureGrowingZone(SelectedGrowingZone.Id,"grain",true);
-            bool wasPaused=_clock.Paused;int plotsBefore=_world.Farms.Count;
+            bool wasPaused=_clock.Paused;int plotsBefore=_world.Farms.Count,plantsBefore=_world.Plants.Count;
             SelectTool("unfarm");Act(origin);Act(origin+new Cell(2,1));
             if(_removeGrowingDialog?.Visible!=true||_world.Farms.Count!=plotsBefore||!_removeGrowingDialog.DialogText.Contains("6 格"))
-                throw new InvalidOperationException("Farm removal must explain losses before changing plots");
+                throw new InvalidOperationException("Farm removal must explain effects before changing plots");
             await Snap("growing-zone-removal");
             _removeGrowingDialog.Hide();_removeGrowingDialog.EmitSignal(ConfirmationDialog.SignalName.Canceled);
             if(_world.Farms.Count!=plotsBefore||_clock.Paused!=wasPaused)throw new InvalidOperationException("Cancel farm removal changed plots or clock");
             SelectTool("unfarm");Act(origin);Act(origin+new Cell(2,1));
             _removeGrowingDialog!.Hide();_removeGrowingDialog.EmitSignal(ConfirmationDialog.SignalName.Confirmed);
-            if(_world.Farms.Count!=plotsBefore-6||_clock.Paused!=wasPaused)throw new InvalidOperationException("Confirmed farm removal failed");
-            GD.Print("FARM_REMOVAL_OK: loss summary, cancel preserves crops, confirmation removes only the selected range");
+            if(_world.Farms.Count!=plotsBefore-6||_world.Plants.Count!=plantsBefore||_clock.Paused!=wasPaused)throw new InvalidOperationException("Confirmed farm removal failed");
+            SyncWorld();RefreshUi();await Snap("plants-after-zone-removal");
+            if(!_world.Plants.ContainsKey(origin)||!_farmNodes.ContainsKey(origin)||_growingSettings.IsVisibleInTree())throw new InvalidOperationException("Removed zone must leave a visible independent plant");
+            _world.Plants[origin].Growth=DemoWorld.GrowTime("grain");SelectTool("select");Act(origin);RefreshUi();
+            if(!_harvestPlantAction.IsVisibleInTree())throw new InvalidOperationException("Unmanaged mature plant must offer harvest");
+            _harvestPlantAction.EmitSignal(Godot.Button.SignalName.Pressed);
+            if(!_world.Jobs.At(origin).Any(j=>j.Harvest)||!_cancelHarvestPlantAction.IsVisibleInTree())throw new InvalidOperationException("Harvest command not wired");
+            _cancelHarvestPlantAction.EmitSignal(Godot.Button.SignalName.Pressed);
+            if(_world.Jobs.At(origin).Any(j=>j.Harvest)||!_world.Plants.ContainsKey(origin))throw new InvalidOperationException("Cancel harvest removed plant");
+            GD.Print("FARM_REMOVAL_OK: management removal, cancel and confirm both preserve plants");
             var p=new Cell(20,20,-5);
             for(int x=-1;x<=3;x++)for(int z=-1;z<=2;z++)for(int y=0;y<2;y++)_world.Terrain.Excavate(p+new Cell(x,z,y));
             _world.SetFarm(p,p+new Cell(2,1),"mushroom");_world.DeveloperResidents(true);
             foreach(var worker in _world.Workers){worker.X=p.X-1;worker.Z=p.Z;worker.Level=p.Level;}
             _world.SpawnItem("mushroom_spawn",6,p+new Cell(-1,0));_world.SpawnItem("soil",6,p+new Cell(-1,0));
-            for(int i=0;i<120*30&&!_world.Farms.Values.Where(f=>f.Crop=="mushroom").All(f=>f.Planted);i++)_world.Update(1d/30);
-            if(!_world.Farms.Values.Where(f=>f.Crop=="mushroom").All(f=>f.Planted))throw new InvalidOperationException("Cave plots never planted");
+            for(int i=0;i<120*30&&!_world.Farms.Values.Where(f=>f.Crop=="mushroom").All(f=>_world.Plants.ContainsKey(f.Cell));i++)_world.Update(1d/30);
+            if(!_world.Farms.Values.Where(f=>f.Crop=="mushroom").All(f=>_world.Plants.ContainsKey(f.Cell)))throw new InvalidOperationException("Cave plots never planted");
             _world.DeveloperResidents(false);for(int i=0;i<90*30;i++)_world.Update(1d/30);
             _foundation=new FoundationPlan(p,p+new Cell(2,1));_heightSelected=true;_layerOffset=0;_focus=WorldPosition(p+new Cell(1,1));_camera.Size=11;
             _buildMenu.Hide();CreatePeople();PositionCamera();SetViewMode(1);SyncWorld();RefreshUi();await Snap("mushroom-farm-preview");

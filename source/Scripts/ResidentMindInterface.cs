@@ -14,7 +14,7 @@ public partial class Main
     {
         if(!_world.ResidentMind.Enabled&&_residentMindDirector is null)return;
         _residentMindDirector??=new(LlmRuntime.Client);
-        _residentMindDirector.Pump(_world,LlmRuntime.Configuration,advance);
+        _residentMindDirector.Pump(_world,LlmRuntime.Configuration,advance,_dialogueDirector?.InFlight!=true);
     }
     private void BuildResidentMindInterface(Control root,Node menu)
     {

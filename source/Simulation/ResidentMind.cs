@@ -52,7 +52,7 @@ public sealed partial class DemoWorld
         {
             if(other.WaterEvacuating||MilitaryControlled(other)||FloodThreat(other))continue;
             double affinity=p.Affinity(other.Id);
-            if(p.WorkPriorities.GetValueOrDefault("care")>0&&NeedsFeeding(other)&&!FoodCareBusy(other.Id,w)&&Available("meal")>0)
+            if(p.WorkPriorities.GetValueOrDefault("care")>0&&NeedsFeeding(other)&&!FoodCareBusy(other.Id,w)&&AvailableFood()>0)
                 choices.Add(new("feed:"+other.Id,"feed",other.Id,"送饭给"+other.Name,60+affinity));
             if(p.WorkPriorities.GetValueOrDefault("doctor")>0&&HealthCare.Needed(other.Person)&&!RescueReserved(other.Id)&&!LifeReserved(other.Id)&&
                 !Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"treat" or "care_supply"} a&&a.Target==other.Id)&&
@@ -82,7 +82,7 @@ public sealed partial class DemoWorld
             personality=new{p.Age,p.Childhood,p.Adulthood,traits=p.Traits,disposition=p.Personality()},
             relationships=neighbors.Select(o=>new{resident=o.Id,name=o.Name,opinion=p.Relations.FirstOrDefault(r=>r.Target==o.Id)?.Opinion??0,gratitude=p.Gratitude(o.Id)}),
             goals=neighbors.Where(o=>p.Gratitude(o.Id)>0).Take(2).Select(o=>new{kind="reciprocate_care",target=o.Id,description="条件允许时帮助曾照料自己的同伴；不越过紧急救援与工作限制"}),
-            memories,archive=p.MemorySummaries.Where(s=>targets.Contains(s.Target)).OrderByDescending(s=>s.Until).Take(2).Select(s=>new{s.Kind,s.Target,s.Count,s.From,s.Until,s.Text,evidence=s.Evidence.Select(m=>m.EventId)})
+            memories,conversations=DialogueSettings.Enabled?RecallDialogue(w.Id,targets.FirstOrDefault()??""):Array.Empty<object>(),archive=p.MemorySummaries.Where(s=>targets.Contains(s.Target)).OrderByDescending(s=>s.Until).Take(2).Select(s=>new{s.Kind,s.Target,s.Count,s.From,s.Until,s.Text,evidence=s.Evidence.Select(m=>m.EventId)})
         };
     }
     public ResidentMindTurn? BeginMindTurn(string model)

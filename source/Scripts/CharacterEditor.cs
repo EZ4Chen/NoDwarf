@@ -16,13 +16,13 @@ public partial class Main
     private readonly List<(ColorPickerButton Button,Func<CharacterAppearance,string> Get,Func<string,Color> Resolve)> _appearanceColors = new();
     private int _characterPreviewDirection;
     private bool IsCheck => OS.GetCmdlineUserArgs().Any(a => a.EndsWith("-test"));
-    private string AppearancePath => ProjectSettings.GlobalizePath("user://characters-v1.json");
+    private string AppearancePath => ProjectSettings.GlobalizePath("user://characters.json");
 
     private void LoadCharacters()
     {
         if (IsCheck) return;
         try { AppearanceStorage.Load(AppearancePath, _world.Workers); }
-        catch (Exception e) when (e is System.IO.IOException or System.Text.Json.JsonException or UnauthorizedAccessException)
+        catch (Exception e) when (e is System.IO.IOException or System.IO.InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException)
         { _world.Events.Insert(0, "角色档案读取失败，已保留默认外观：" + e.Message); }
     }
 
@@ -155,7 +155,7 @@ public partial class Main
             _appearanceColors[2].Button.EmitSignal(ColorPickerButton.SignalName.ColorChanged,new Color("ba9876"));
             if(_draft.HairColor!="#abcdef"||_draft.BeardColor!="#654321"||_draft.Skin!="#ba9876")throw new InvalidOperationException("Palette controls must be independent");
         }
-        _draft = _draft with { Cloth = "plum", Body = "broad" }; UpdateCharacterPreview(); CloseCharacterEditor();
+        _draft = _draft with { Cloth = "plum", Body = "hulk" }; UpdateCharacterPreview(); CloseCharacterEditor();
         if (worker.Appearance != before || _clock.Paused != paused) throw new InvalidOperationException("Cancel must preserve appearance and pause state");
         OpenCharacterEditor(); _draft = before with { BodySex = "female",Hair="topknot",HairColor="#abcdef",BeardColor="#654321",Skin="#ba9876" }; ApplyCharacterAppearance();
         if (worker.Appearance.BodySex != "female" || _residentButtons[0].Icon != _people[0].GetChild<Sprite3D>(0).Texture) throw new InvalidOperationException("Applied portrait and world sprite must match");

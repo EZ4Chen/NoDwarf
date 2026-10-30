@@ -3,7 +3,7 @@ namespace NoDwarf.Simulation;
 public static class ResidentLivingChecks
 {
     private static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException("LIVING: "+message);}
-    private static void Advance(DemoWorld w,double seconds){for(int i=0;i<(int)(seconds*30);i++)w.Update(1d/30);}
+    private static void Advance(DemoWorld w,double seconds){for(int i=0;i<(int)(seconds*SimulationClock.BaseTicksPerSecond);i++)w.Update(SimulationClock.TickSeconds);}
     public static void Run()
     {
         var w=CombatChecks.Fixture();
@@ -50,9 +50,6 @@ public static class ResidentLivingChecks
         Check(r0.Person.Activity!.Target!=""&&r1.Person.Activity!.Target==r0.Person.Activity.Target&&r0.Person.Activity.Destination!=r1.Person.Activity.Destination,"shared leisure destination has separate seats");
         Advance(w,10);Check(r0.Person.MoodEffects.Any(e=>e.Key=="leisure")&&r0.Person.Recreation>20,"campfire leisure benefits");
         w.Buildings.Remove(fire);Advance(w,3);Check(r0.Person.Activity?.Kind=="relax","missing leisure facility has fallback");
-        var legacy=JsonNode.Parse(w.SaveJson())!;legacy["Version"]=17;
-        foreach(var worker in legacy["Workers"]!.AsArray()){worker!["Person"]!["WorkPriorities"]!.AsObject().Remove("care");worker["Person"]!.AsObject().Remove("HomeBed");}
-        var loaded=DemoWorld.LoadJson(legacy.ToJsonString());Check(loaded.Workers.All(r=>r.Person.WorkPriorities.ContainsKey("care")),"old work-table migration");
         // A loaded hauler must release job cargo before taking food, without losing supplies.
         w=CombatChecks.Fixture();r0=w.Workers[0];r0.Person.WorkPriorities["construction"]=1;
         w.SpawnItem("cobblestone",10,r0.Tile);Check(w.QueueBuild(new(70,60),BuildKind.Wall),"cargo fixture");
@@ -66,7 +63,7 @@ public static class ResidentLivingChecks
         helper.Person.WorkPriorities["care"]=1;patient.Person.Hunger=1;w.InjureResident(patient.Id,"torso","fracture",90);w.SpawnItem("meal",2,helper.Tile);
         for(int i=0;i<600&&!w.Workers.Any(r=>r.Person.Activity?.Kind=="feed");i++)w.Update(1d/30);
         Check(w.Workers.Count(r=>r.Person.Activity is {Kind:"food_supply" or "feed"})==1&&w.Workers.Any(r=>r.Person.Activity?.Kind=="feed"),"one carer per patient");
-        loaded=DemoWorld.LoadJson(w.SaveJson());Advance(loaded,15);Check(loaded.Total("meal")==1&&loaded.Workers[1].Person.Hunger>30,"feed-stage resume consumes one ration");
+        var loaded=DemoWorld.LoadJson(w.SaveJson());Advance(loaded,15);Check(loaded.Total("meal")==1&&loaded.Workers[1].Person.Hunger>30,"feed-stage resume consumes one ration");
         // Three-high sealed walls make meals genuinely unreachable.
         w=CombatChecks.Fixture();r0=w.Workers[0];r0.Person.Hunger=1;food=w.SpawnItem("meal",1,new(70,60));
         for(int x=68;x<=72;x++)for(int z=58;z<=62;z++)if(x==68||x==72||z==58||z==62)
@@ -76,6 +73,6 @@ public static class ResidentLivingChecks
         w=CombatChecks.Fixture();r0=w.Workers[0];RoomEnvironmentChecks.Shell(w,new(58,58));bed=new(61,61);w.Buildings[bed]=new(bed,BuildKind.Bed);
         r0.Person.Rest=20;Check(w.ActResident(new(r0.Id,"rest")).Ok,"indoor sleep");Advance(w,10);
         Check(w.RoomAt(bed).Enclosed&&r0.Person.MoodEffects.Any(e=>e.Key=="bedroom"&&e.Amount>=2),"bedroom quality connected to mood");
-        Console.WriteLine("RESIDENT_LIVING_OK: one-meal reservations, full-load drop, urgent interruption, feeding/disabled care, cancellation/missing food, bed ownership, leisure destinations, save/load/migration");
+        Console.WriteLine("RESIDENT_LIVING_OK: one-meal reservations, full-load drop, urgent interruption, feeding/disabled care, cancellation/missing food, bed ownership, leisure destinations, save/load");
     }
 }

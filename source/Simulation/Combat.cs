@@ -55,7 +55,7 @@ public sealed partial class DemoWorld
     public ResidentResult DraftResident(string id,bool drafted)
     {
         var w=Workers.FirstOrDefault(w=>w.Id==id);
-        if(w is null||drafted&&!Fighting(w))return new(false,"居民无法征召");
+        if(w is null||drafted&&(!Fighting(w)||!w.Person.Can("combat")))return new(false,"居民无法征召");
         InterruptForOrders(w);w.Combat.Drafted=drafted;w.NextJobSearch=0;
         w.Status=drafted?"已征召 · 原地警戒":"解除征召 · 等待工作";return new(true,w.Status);
     }
@@ -96,7 +96,7 @@ public sealed partial class DemoWorld
         foreach(var w in Workers.Where(w=>!w.Combat.Drafted)){InterruptForOrders(w);w.NextJobSearch=0;}
         Log(enabled?"集合警报：平民暂停工作并前往集合点。":"警报解除：重新检查并分配工作。");return new(true,enabled?"集合警报已开启":"集合警报已解除");
     }
-    public bool CanMelee(DemoWorker a,DemoWorker b)=>Fighting(a)&&Fighting(b)&&a.Person.Manipulation>=.05&&
+    public bool CanMelee(DemoWorker a,DemoWorker b)=>a.Person.Can("combat")&&Fighting(a)&&Fighting(b)&&a.Person.Manipulation>=.05&&
         Walkable(a.Tile)&&Walkable(b.Tile)&&MeleeInReach(a,b);
     public ResidentResult StartTestRaid(int count=1)
     {
@@ -116,6 +116,7 @@ public sealed partial class DemoWorld
         if(starts.Length<count)return new(false,"地图边缘没有通往居民的入口；未生成敌人");
         Enemies.Clear();_raidSerial++;BattleOutcome="";
         for(int i=0;i<count;i++)Enemies.Add(new(){Id=$"raider-{_raidSerial}-{i}",Name=$"袭击者 {i+1}",X=starts[i].X,Z=starts[i].Z,Level=starts[i].Level,Combat=new(){Drafted=true},Person=new()});
+        foreach(var enemy in Enemies)enemy.Person.BindSpeciesCatalog(Content.Creatures);
         var entry=starts[0];
         Revision++;Log($"袭击：{count} 名敌人从 {entry.X}, {entry.Z} 进入地图。");return new(true,"袭击已生成");
     }
@@ -137,9 +138,8 @@ public sealed partial class DemoWorld
             if(state.Destination is Cell assigned&&w.Tile==assigned)
             {
                 StopMovement(w);
-                if(w.Person.Hunger<40&&Inventory(w).Any(s=>s.Item=="meal"))
-                {ConsumePersonal(w,"meal");w.Person.Hunger=Math.Min(100,w.Person.Hunger+45);}
-                w.Status=Inventory(w).Any(s=>s.Item=="meal")?"集合警戒 · 暂停工作":"集合警戒 · 无随身口粮，需补给或解除警报";
+                if(w.Person.Hunger<40&&PersonalFood(w) is {} food)EatPersonal(w,new(){ItemId=food.Id},comfort:false);
+                w.Status=PersonalFood(w) is not null?"集合警戒 · 暂停工作":"集合警戒 · 无随身口粮，需补给或解除警报";
                 return true;
             }
             if(state.Destination is Cell rally)MilitaryRoute(w,rally,dt,ref budget,"集合点不可达");

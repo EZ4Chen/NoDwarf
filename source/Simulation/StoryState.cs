@@ -30,6 +30,7 @@ public sealed class StoryTurn
 }
 public sealed class StoryEvent
 {
+    public string DefinitionId {get;set;}="";
     public string Id { get; set; } = "";
     public string Kind { get; set; } = "";
     public double Due { get; set; }

@@ -75,13 +75,10 @@ Check(ResidentMindTools.Apply(independent,independentTurn).Contains("true"),"Unr
 var manual=World();var mt=Accept(manual);manual.ActResident(new(manual.Workers[0].Id,"rest"));ResidentMindTools.Apply(manual,mt);Check(manual.Workers[0].Person.Activity?.Kind=="rest","Model replaced manual order");
 var emergency=World();var et=Accept(emergency);emergency.Workers[1].Person.Blood=10;Check(ResidentMindTools.Apply(emergency,et).Contains("false"),"Emergency did not suppress discretionary action");
 var sleep=World();var sl=Accept(sleep);sleep.Workers[0].Person.Schedule=Enumerable.Repeat("sleep",24).ToArray();Check(ResidentMindTools.Apply(sleep,sl).Contains("false"),"Model bypassed sleep schedule");
-var legacy=JsonNode.Parse(World().SaveJson())!;legacy["Version"]=25;legacy.AsObject().Remove("ResidentMind");
-foreach(var worker in legacy["Workers"]!.AsArray())foreach(var m in worker!["Person"]!["Memories"]!.AsArray())m!.AsObject().Remove("EventId");
-var old=DemoWorld.LoadJson(legacy.ToJsonString());Check(!old.ResidentMind.Enabled&&old.Workers.All(w=>w.Person.Memories.All(m=>m.EventId!="")),"Legacy migration lost memory or enabled paid requests");
 var malformed=JsonNode.Parse(World().SaveJson())!;malformed["Workers"]![0]!["Person"]!["MemorySummaries"]=JsonNode.Parse("[{\"Kind\":\"x\",\"Count\":-1}]");Reject(()=>DemoWorld.LoadJson(malformed.ToJsonString()));
 var interrupted=World();Accept(interrupted);interrupted.ResidentMind.Turn!.Response="";interrupted.ResidentMind.Turn.Status="requesting";
 Check(DemoWorld.LoadJson(interrupted.SaveJson()).ResidentMind.Turn!.Status=="waiting","Interrupted request auto-retried");
-Console.WriteLine("MIND_GUARDS_OK: strict JSON/evidence, stale memory, manual orders, emergency, schedule, legacy opt-in, corrupt archive, interrupted-request recovery");
+Console.WriteLine("MIND_GUARDS_OK: strict JSON/evidence, stale memory, manual orders, emergency, schedule, corrupt archive, interrupted-request recovery");
 
 var config=new LlmConfiguration{ApiKey="offline-fixture"};var client=new Deferred();var asyncWorld=World();
 using(var director=new ResidentMindDirector(client))

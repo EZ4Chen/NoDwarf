@@ -35,7 +35,7 @@ public partial class Main
             _developerMode=true;_creative=true;var creative=start+new Cell(5,0);
             CommitDigDrag(creative,creative+new Cell(1,0,-1));
             foreach(var c in new[]{creative,creative+new Cell(1,0),creative+new Cell(0,0,-1),creative+new Cell(1,0,-1)})Check(!_world.NaturalSolid(c),"creative cuboid not excavated");
-            // Cancel only excavation plans, including reverse corners and legacy tall tasks.
+            // Cancel only excavation plans, including reverse corners and multi-level tasks.
             _developerMode=false;_creative=false;SelectTool("canceldig");_buildMenu.Hide();
             int planned=_world.Jobs.Count;var outside=start+new Cell(8,0);
             Check(_world.QueueDig(outside),"outside fixture");
@@ -60,9 +60,9 @@ public partial class Main
             Check(_planVisuals.Values.All(v=>v.Cell==outside),"canceled markers retained");
             Check(_world.Terrain.Excavated.ToHashSet().SetEquals(excavated)&&_world.Buildings.SequenceEqual(buildings),"cancel changed physical world");
             CommitCancelDig(start,end);Check(_world.Jobs.Count==2,"empty cancellation changed jobs");
-            var tall=outside+new Cell(3,0,-2);Check(_world.QueueDig(tall,height:3),"legacy tall fixture");
+            var tall=outside+new Cell(3,0,-2);Check(_world.QueueDig(tall,height:3),"multi-level fixture");
             CommitCancelDig(tall+new Cell(0,0,2),tall+new Cell(0,0,2));
-            Check(!_world.Jobs.Any(j=>j.Dig&&j.Cell==tall),"intersection missed legacy tall job");
+            Check(!_world.Jobs.Any(j=>j.Dig&&j.Cell==tall),"intersection missed multi-level job");
             GD.Print("CANCEL_DIG_VOLUME_OK: two clicks, layer change, reverse corners, release, Esc/right abort, outside/other jobs preserved, markers cleared, terrain preserved, tall-task intersection");
             // A new batch retains its original cuboid even after partial completion/save/load.
             _world=new DemoWorld(flat:true);_world.DeveloperResidents(false);_overview.World=_world;

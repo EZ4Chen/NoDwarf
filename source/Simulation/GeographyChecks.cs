@@ -85,14 +85,8 @@ public static class GeographyChecks
             var s=(basic with {Seed=seed,Temperature=extreme,Moisture=extreme,Elevation=extreme,Ruggedness=extreme,Drainage=-extreme,LandPercent=extreme<0?25:75}).WithRecommendedSite();
             var world=World(s);Check(world.Workers.All(a=>world.Walkable(a.Tile)&&world.Fluids.Amount(a.Tile)==0),"Extreme modern worlds have safe spawns");
         }
-        var legacySettings=new WorldGenerationSettings{Seed=23519}.WithRecommendedSite();var legacy=World(legacySettings);
-        var old=System.Text.Json.Nodes.JsonNode.Parse(legacy.SaveJson())!;old["Version"]=23;
-        foreach(string field in new[]{"Revision","WorldSize","LandPercent","FeatureScale","Ruggedness","Drainage","Erosion","Rivers","Minerals","SoilDepth","Aquifers","CavernLayers","CavernSize"})old["Generation"]!.AsObject().Remove(field);
-        old["Fluids"]!["Version"]=1;old["Fluids"]!.AsObject().Remove("RiverIn");old["Fluids"]!.AsObject().Remove("RiverOut");
-        var restored=DemoWorld.LoadJson(old.ToJsonString());
-        Check(restored.Terrain.GeneratorVersion==3&&restored.Terrain.Generation!.Revision==1&&restored.Terrain[81,92]==legacy.Terrain[81,92]&&restored.Terrain.Ores.OrderBy(p=>p.Key.X).SequenceEqual(legacy.Terrain.Ores.OrderBy(p=>p.Key.X))&&restored.Fluids.Mass==legacy.Fluids.Mass&&restored.Terrain.Caverns.Count==0,"Actual version 23 JSON without new fields preserves legacy terrain, ores and water");
         RiverBoundaryChecks();
-        Console.WriteLine("GEOGRAPHY_OK: 9 size/land combinations; climate, erosion, drainage graph, local rivers/lakes, safe spawns, mineral/soil/caves, discovery, old/new saves, deterministic fluid resume");
+        Console.WriteLine("GEOGRAPHY_OK: 9 size/land combinations; climate, erosion, drainage graph, local rivers/lakes, safe spawns, mineral/soil/caves, discovery, current saves, deterministic fluid resume");
     }
     private static void RiverBoundaryChecks()
     {

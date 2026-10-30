@@ -1,0 +1,7 @@
+<Creatures version="1">
+  <Species>
+    <Species id="copper:grazer" name="示例食草兽" body="base:quadruped" movement="base:ground" behavior="core:wander" thinkSeconds="3" limit="16">
+      <View kind="none" scale="1" />
+    </Species>
+  </Species>
+</Creatures>

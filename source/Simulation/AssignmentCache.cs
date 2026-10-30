@@ -11,11 +11,11 @@ public sealed partial class DemoWorld
     private readonly HashSet<Cell> _occupiedStands = new(), _occupiedJobs = new();
     private readonly HashSet<Cell> _residentFootCells = new();
     private DemoJob[]? _orderedJobs;
-    private int _orderedRevision, _orderedCount;
+    private long _orderedJobVersion=-1;
     private bool PendingConstructionShell(DemoJob equipment)
     {
         foreach(var job in Jobs)
-            if(job.Build is BuildKind kind&&(BlockCatalog.IsWall(kind)||kind==BuildKind.Door)&&SameConstructionSite(equipment,job))return true;
+            if(job.BuildingWork&&(BlockCatalog.IsWall(job.WorkKind)||job.WorkKind==BuildKind.Door)&&SameConstructionSite(equipment,job))return true;
         return false;
     }
     private static Cell AssignmentDestination(DemoWorker worker)
@@ -68,10 +68,11 @@ public sealed partial class DemoWorld
     }
     private DemoJob[] OrderedJobs()
     {
-        if (_orderedJobs is null || _orderedRevision != Revision || _orderedCount != Jobs.Count)
+        if (_orderedJobs is null || _orderedJobVersion != Jobs.Version)
         {
+            Probe?.Count("assignment.sort");
             _orderedJobs = Jobs.OrderBy(j => j.Haul ? 2 : j.Production ? 1 : 0).ThenBy(j => j.Id).ToArray();
-            _orderedRevision = Revision; _orderedCount = Jobs.Count;
+            _orderedJobVersion = Jobs.Version;
         }
         return _orderedJobs;
     }

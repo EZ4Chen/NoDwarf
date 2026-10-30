@@ -84,10 +84,9 @@ foreach(string json in new[]{"{\"tool\":\"arbitrary_code\",\"arguments\":{}}","{
 {var invalid=World();Reject(()=>StorytellerTools.Apply(invalid,Accept(invalid,json)));Check(invalid.Story.Pending.Count==0,"Invalid JSON changed world");}
 var stale=World();var st=Accept(stale,Supplies());stale.Workers[0].Person.Blood=10;Reject(()=>StorytellerTools.Apply(stale,st));
 var archive=JsonNode.Parse(w.SaveJson())!;archive["Story"]!["Pending"]=JsonNode.Parse("[{\"Id\":\"bad\",\"Kind\":\"raid\",\"Count\":999,\"Due\":1}]");Reject(()=>DemoWorld.LoadJson(archive.ToJsonString()));
-archive=JsonNode.Parse(w.SaveJson())!;archive["Version"]=24;archive.AsObject().Remove("Story");Check(!DemoWorld.LoadJson(archive.ToJsonString()).Story.Enabled,"Old save silently enabled paid AI");
 var interrupted=World();var it=Accept(interrupted,Supplies());it.AcceptedJson="";it.AcceptedCallId="";it.Status="requesting";
 Check(DemoWorld.LoadJson(interrupted.SaveJson()).Story.Turn!.Status=="waiting","Interrupted request silently resent");
-Console.WriteLine("STORY_GUARDS_OK: invalid tools/arguments/duplicate fields, stale health snapshot, malformed archive and old-save opt-in");
+Console.WriteLine("STORY_GUARDS_OK: invalid tools/arguments/duplicate fields, stale health snapshot, malformed archive");
 
 var delayed=new DelayedClient();var asyncWorld=World();using(var director=new StorytellerDirector(delayed))
 {

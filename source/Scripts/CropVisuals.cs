@@ -6,10 +6,10 @@ internal static class CropVisuals
 {
     private static readonly Dictionary<(string,int),Mesh> Meshes=new();
     private static readonly Dictionary<bool,Mesh> Beds=new();
-    public static int Stage(FarmPlot plot)
-        =>!plot.Planted?0:1+(int)(Math.Clamp(plot.Growth/DemoWorld.GrowTime(plot.Crop),0,1)*(plot.Crop=="grain"?7:3));
+    public static int Stage(PlantState plot)
+        =>1+(int)(Math.Clamp(plot.Growth/DemoWorld.GrowTime(plot.Crop),0,1)*(plot.Crop=="grain"?7:3));
 
-    public static void AddTo(Node3D root,string crop,int stage)
+    public static void AddTo(Node3D root,string crop,int stage,bool prepared)
     {
         bool fungus=crop=="mushroom";
         if(!Beds.TryGetValue(fungus,out var bed))
@@ -19,7 +19,7 @@ internal static class CropVisuals
             BlockTextures.Quad(surface,new(-.49f,.025f,-.49f),new(-.49f,.025f,.49f),new(.49f,.025f,.49f),new(.49f,.025f,-.49f));
             surface.GenerateNormals();Beds[fungus]=bed=surface.Commit();
         }
-        root.AddChild(new MeshInstance3D{Mesh=bed,CastShadow=GeometryInstance3D.ShadowCastingSetting.Off});
+        if(prepared)root.AddChild(new MeshInstance3D{Mesh=bed,CastShadow=GeometryInstance3D.ShadowCastingSetting.Off});
         if(stage==0||CropCatalog.IsTree(crop))return;
         if(!Meshes.TryGetValue((crop,stage),out var mesh))Meshes[(crop,stage)]=mesh=Build(crop,stage);
         root.AddChild(new MeshInstance3D{Mesh=mesh,Position=new(0,.035f,0),CastShadow=GeometryInstance3D.ShadowCastingSetting.Off});

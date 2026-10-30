@@ -33,7 +33,7 @@ public partial class Startup : Control
         _step=Label("",14,Muted);_step.SizeFlagsHorizontal=SizeFlags.ExpandFill;_step.HorizontalAlignment=HorizontalAlignment.Right;header.AddChild(_step);
         _content=new VBoxContainer{SizeFlagsVertical=SizeFlags.ExpandFill};_content.AddThemeConstantOverride("separation",16);column.AddChild(_content);
         column.AddChild(Label("一片土地，几位居民。故事从这里开始。",13,Muted));
-        InitializeLlm();
+        PreferencesRuntime.Initialize();PreferencesRuntime.Apply(GetTree().Root);
         Resized+=QueueRedraw;ShowHome();
         if(args.Contains("--startup-preview-test"))RunStartupPreview();
         if(args.Contains("--llm-settings-test"))RunLlmSettingsReview();
@@ -64,7 +64,6 @@ public partial class Startup : Control
     }
     private void ClearPage(string step)
     {
-        CancelLlmTest();
         foreach(var node in _content.GetChildren()){_content.RemoveChild(node);node.QueueFree();}
         _actions.Clear();_options.Clear();_step.Text=step;
     }
@@ -81,7 +80,7 @@ public partial class Startup : Control
         var choices=Card(row,340);choices.Alignment=BoxContainer.AlignmentMode.Center;
         var menuPanel=choices.GetParent<Control>();menuPanel.SizeFlagsHorizontal=SizeFlags.ShrinkEnd;menuPanel.SizeFlagsVertical=SizeFlags.ShrinkCenter;menuPanel.CustomMinimumSize=new(340,380);
         choices.AddChild(Label("新的故事",22,Gold));Action(choices,"new","新游戏",ShowSettings,true);
-        Action(choices,"load","读取存档",()=>ShowSaves());Action(choices,"settings","设置",ShowLlmSettings);Action(choices,"quit","退出游戏",()=>GetTree().Quit());
+        Action(choices,"load","读取存档",()=>ShowSaves());Action(choices,"settings","设置",ShowGameSettings);Action(choices,"quit","退出游戏",()=>GetTree().Quit());
         choices.AddChild(Label("新游戏不会覆盖已有存档。",13,Muted));
     }
     private void ShowSettings()
@@ -163,8 +162,6 @@ public partial class Startup : Control
     {
         ClearPage("读取营地");_content.AddChild(Label("继续之前的故事",32,Ink));_savePaths.Clear();
         if(Directory.Exists(SaveDirectory))_savePaths.AddRange(Directory.EnumerateFiles(SaveDirectory).Where(p=>p.EndsWith(".json")||p.EndsWith(".json.bak")).OrderByDescending(File.GetLastWriteTimeUtc).Take(100));
-        if(!OS.GetCmdlineUserArgs().Contains("--startup-preview-test"))
-        {string legacy=ProjectSettings.GlobalizePath("res://.local/colony-save.json");if(File.Exists(legacy))_savePaths.Add(legacy);}
         var card=Card(_content);_saveList=new ItemList{CustomMinimumSize=new(700,300),SizeFlagsVertical=SizeFlags.ExpandFill};card.AddChild(_saveList);
         foreach(string path in _savePaths)
         {var info=new FileInfo(path);_saveList.AddItem($"{SaveLabel(path)}    ·    {info.LastWriteTime:yyyy-MM-dd HH:mm}    ·    {info.Length/1024d:N0} KB");}
@@ -185,6 +182,7 @@ public partial class Startup : Control
         {
             var world=await Task.Run(()=>new DemoWorld(settings.LocalSeed,region:settings.Site.Region,generation:settings));
             string savePath=Path.Combine(SaveDirectory,$"colony-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6]}.json");
+            world.EnableResidentMind(PreferencesRuntime.Current.ResidentAi);world.ResidentMind.IntervalHours=PreferencesRuntime.Current.ResidentIntervalHours;world.EnableStory(PreferencesRuntime.Current.Storyteller);
             GameLaunch.Pending=new(world,SavePath:savePath);GetTree().ChangeSceneToFile("res://Scenes/Main.tscn");
         }
         catch(Exception e){_busy=false;ShowSettings();_message.Text="生成失败："+e.Message;}

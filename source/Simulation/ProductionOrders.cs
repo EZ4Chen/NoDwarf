@@ -4,7 +4,7 @@ public sealed class ProductionOrder
 {
     public int Id {get;set;}
     public string Recipe {get;set;}="";
-    public string Mode {get;set;}="maintain"; // Old target-only saves migrate without changing behavior.
+    public string Mode {get;set;}="maintain";
     public int Target {get;set;}
     public bool Enabled {get;set;}=true;
     public Cell? Station {get;set;}
@@ -20,8 +20,8 @@ public sealed class ProductionOrder
 }
 public static class ProductionCatalog
 {
-    public static readonly ProcessingRecipe[] All=ProductionDefinitions.Recipes;
-    public static ProcessingRecipe Get(string id)=>All.FirstOrDefault(r=>r.Id==id)??throw new ArgumentException("未知生产配方。");
+    public static IReadOnlyList<ProcessingRecipe> All=>ProductionDefinitions.Recipes;
+    public static ProcessingRecipe Get(string id)=>ContentRuntime.Current.RecipesById.GetValueOrDefault(id)??throw new ArgumentException("未知生产配方。");
     public static string RecipeOf(DemoJob j)=>j.Processing?j.Recipe:j.Cook?"cook":j.Smelt?"smelt":j.Forge?"sword":"";
 }
 public sealed partial class DemoWorld
@@ -32,7 +32,7 @@ public sealed partial class DemoWorld
     public double ProductionElapsed=>_productionElapsed;
     public ProductionOrder AddProductionOrder(string recipe,string mode="count",Cell? station=null)
     {
-        var r=ProductionCatalog.Get(recipe);var m=ProductionDefinitions.Mode(mode);
+        var r=Content.Recipe(recipe);var m=Content.Mode(mode);
         if(ProductionOrders.Count>=512)throw new InvalidOperationException("生产清单已满（512）。");
         if(station is Cell c&&(!Buildings.TryGetValue(c,out var b)||b.Kind!=r.Station))throw new ArgumentException("清单设施不匹配");
         var order=new ProductionOrder{Id=++_nextProductionOrder,Recipe=recipe,Mode=mode,Target=m.DefaultCount,Station=station};ProductionOrders.Add(order);Revision++;return order;
@@ -64,8 +64,8 @@ public sealed partial class DemoWorld
     }
     public bool SetProductionTarget(string recipe,int target,bool enabled=true)
     {
-        ProductionCatalog.Get(recipe);if(target is <0 or >10000)throw new ArgumentOutOfRangeException(nameof(target));
-        var order=ProductionOrders.FirstOrDefault(o=>o.Recipe==recipe&&ProductionDefinitions.Mode(o.Mode).Behavior=="maintain");
+        Content.Recipe(recipe);if(target is <0 or >10000)throw new ArgumentOutOfRangeException(nameof(target));
+        var order=ProductionOrders.FirstOrDefault(o=>o.Recipe==recipe&&Content.Mode(o.Mode).Behavior=="maintain");
         if(target==0){if(order is not null)RemoveProductionOrder(order.Id);}
         else{order??=AddProductionOrder(recipe,"maintain");order.Target=target;PauseProductionOrder(order.Id,!enabled);}
         Revision++;return true;
@@ -73,10 +73,10 @@ public sealed partial class DemoWorld
     public int ProductionStock(string item)=>Items.Where(s=>s.Owner==""&&s.Item==item).Sum(s=>s.Count)
         -Jobs.Where(j=>!j.Haul).SelectMany(j=>j.Materials).Where(r=>r.Item==item&&r.Stage!=1).Sum(r=>r.Count)
         +Jobs.Where(j=>j.Haul).SelectMany(j=>j.Materials).Where(r=>r.Item==item&&r.Stage==1).Sum(r=>r.Count);
-    public int PendingOutput(string item)=>Jobs.Where(j=>j.Production).Sum(j=>{var r=ProductionCatalog.Get(ProductionCatalog.RecipeOf(j));return r.Output==item?r.Count:0;});
+    public int PendingOutput(string item)=>Jobs.Where(j=>j.Production).Sum(j=>{var r=JobRecipe(j);return r.Output==item?r.Count:0;});
     public string ProductionTargetStatus(ProductionOrder order)
     {
-        var r=ProductionCatalog.Get(order.Recipe);string mode=ProductionDefinitions.Mode(order.Mode).Behavior;
+        var r=Content.Recipe(order.Recipe);string mode=Content.Mode(order.Mode).Behavior;
         string prefix=mode=="forever"?"永远":mode=="count"?$"{order.Target} 次 · 每次 {r.Count} 个":$"{ProductionStock(r.Output)}/{order.Target}";
         if(!order.Enabled)return prefix+" · 已暂停";
         if(mode=="count"&&order.Target==0)return prefix+" · 已完成";
@@ -89,7 +89,7 @@ public sealed partial class DemoWorld
         if(station is not null)
         {
             var probe=new DemoJob{Cell=station.Cell,Recipe=r.Id,ProductionOrderId=order.Id};
-            var missing=r.Inputs.Where(p=>Items.Where(s=>s.Item==p.Key&&s.Owner==""&&BillAllowsSource(probe,s)).Sum(s=>Math.Max(0,s.Count-Reserved(s.Id)))<p.Value).Select(p=>ItemCatalog.Get(p.Key).Name).ToArray();
+            var missing=r.Inputs.Where(p=>Items.Where(s=>s.Item==p.Key&&s.Owner==""&&BillAllowsSource(probe,s)).Sum(s=>Math.Max(0,s.Count-Reserved(s.Id)))<p.Value).Select(p=>Content.Item(p.Key).Name).ToArray();
             if(missing.Length>0)return prefix+" · 缺少符合条件的"+string.Join("、",missing);
         }
         return prefix+" · 等待符合条件的原料与设施";
@@ -114,13 +114,14 @@ public sealed partial class DemoWorld
         _productionElapsed+=dt;if(_productionElapsed<1)return;_productionElapsed%=1;
         foreach(var order in ProductionOrders.Where(o=>o.Enabled))
         {
-            var r=ProductionCatalog.Get(order.Recipe);string behavior=ProductionDefinitions.Mode(order.Mode).Behavior;
+            var r=Content.Recipe(order.Recipe);string behavior=Content.Mode(order.Mode).Behavior;
             if(behavior=="count"&&order.Target==0||behavior=="maintain"&&ProductionStock(r.Output)+PendingOutput(r.Output)>=order.Target||Jobs.Any(j=>j.ProductionOrderId==order.Id))continue;
             if(!ProductionStationReady(r))continue;
             foreach(var station in Buildings.Values.Where(b=>b.Kind==r.Station&&(order.Station is null||order.Station==b.Cell)))
             {
                 if(r.Id=="smelt"&&station.Cell!=_forgeFurnace||r.Id=="sword"&&station.Cell!=_forgeAnvil||Jobs.Any(j=>j.Production&&j.Cell==station.Cell)||r.Station==BuildKind.Stove&&!KitchenReady(station.Cell))continue;
                 var job=new DemoJob{Id=++_nextJob,Cell=station.Cell,Recipe=r.Id,ProductionOrderId=order.Id};
+                BindJobRecipe(job); // Work eligibility is checked before insertion into Jobs.
                 if(Workers.Count>0&&!Workers.Any(w=>!w.Person.Dead&&BillAllowsWorker(job,w)&&ResidentWork.Rank(w.Person,ResidentWork.JobType(job))!=int.MaxValue))continue;
                 if(!Reserve(job,r.Inputs))continue;
                 Jobs.Add(job);Revision++;break;
@@ -128,10 +129,10 @@ public sealed partial class DemoWorld
         }
     }
     private void CompleteProductionOrder(DemoJob job)
-    {if(Bill(job) is {} order&&ProductionDefinitions.Mode(order.Mode).Behavior=="count")order.Target=Math.Max(0,order.Target-1);}
-    private static void ValidateProductionOrder(ProductionOrder order)
+    {if(Bill(job) is {} order&&Content.Mode(order.Mode).Behavior=="count")order.Target=Math.Max(0,order.Target-1);}
+    private void ValidateProductionOrder(ProductionOrder order)
     {
-        if(order is null||!ProductionCatalog.All.Any(r=>r.Id==order.Recipe)||!ProductionDefinitions.Modes.Any(m=>m.Id==order.Mode)||order.Target is <0 or >10000||order.Target==0&&ProductionDefinitions.Mode(order.Mode).Behavior!="count"||order.SourceZone<0||order.DestinationZone< -1||order.Radius is <0 or >1024||order.MinSkill<0||order.MaxSkill>20||order.MinSkill>order.MaxSkill||order.MinDurability<0||order.MaxDurability>100||order.MinDurability>order.MaxDurability||order.WorkerId is null||order.AllowedIngredients?.Any(k=>!ProductionCatalog.Get(order.Recipe).Inputs.ContainsKey(k))==true||order.Station is Cell c&&!Inside(c))throw new InvalidDataException("生产清单存档无效。");
+        if(order is null||!Content.Recipes.Any(r=>r.Id==order.Recipe)||!Content.Modes.Any(m=>m.Id==order.Mode)||order.Target is <0 or >10000||order.Target==0&&Content.Mode(order.Mode).Behavior!="count"||order.SourceZone<0||order.DestinationZone< -1||order.Radius is <0 or >1024||order.MinSkill<0||order.MaxSkill>20||order.MinSkill>order.MaxSkill||order.MinDurability<0||order.MaxDurability>100||order.MinDurability>order.MaxDurability||order.WorkerId is null||order.AllowedIngredients?.Any(k=>!Content.Recipe(order.Recipe).Inputs.ContainsKey(k))==true||order.Station is Cell c&&!Inside(c))throw new InvalidDataException("生产清单存档无效。");
     }
     public void RestoreProductionOrders(ProductionOrder[] orders,double elapsed)
     {
@@ -139,13 +140,12 @@ public sealed partial class DemoWorld
         ProductionOrders.Clear();_nextProductionOrder=orders.Where(o=>o is not null).Select(o=>o.Id).DefaultIfEmpty().Max();
         foreach(var order in orders)
         {
-            ValidateProductionOrder(order);if(order.Id==0)order.Id=++_nextProductionOrder;
-            if(order.Id<0||ProductionOrders.Any(o=>o.Id==order.Id))throw new InvalidDataException("重复生产清单 ID。");
+            ValidateProductionOrder(order);
+            if(order.Id<=0||ProductionOrders.Any(o=>o.Id==order.Id))throw new InvalidDataException("重复生产清单 ID。");
             ProductionOrders.Add(order);
         }
         foreach(var job in Jobs.Where(j=>j.ProductionOrderId!=0))if(Bill(job) is not {} o||!job.Production||ProductionCatalog.RecipeOf(job)!=o.Recipe||o.Station is Cell c&&c!=job.Cell)throw new InvalidDataException("生产任务清单关联无效。");
-        foreach(var job in Jobs.Where(j=>j.Production&&j.ProductionOrderId==0).ToArray())
-        {var order=ProductionOrders.FirstOrDefault(o=>o.Recipe==ProductionCatalog.RecipeOf(job)&&!Jobs.Any(j=>j.ProductionOrderId==o.Id))??AddProductionOrder(ProductionCatalog.RecipeOf(job));job.ProductionOrderId=order.Id;}
+        if(Jobs.Any(j=>j.Production&&j.ProductionOrderId==0))throw new InvalidDataException("生产任务缺少清单关联");
         _productionElapsed=elapsed;
     }
 }

@@ -1,10 +1,11 @@
 namespace NoDwarf.Simulation;
 
 // Pure simulation state. No scene nodes or Godot dependencies.
-// 30 TPS is a scaffold setting, not a final game requirement.
+// Rendering is independent; speed changes tick throughput, never the fixed simulation step.
 public sealed class SimulationClock
 {
-    public const int BaseTicksPerSecond = 30;
+    public const int BaseTicksPerSecond = 60;
+    public const double TickSeconds = 1d / BaseTicksPerSecond;
     public long Tick { get; private set; }
     public bool Paused { get; set; }
     public int Speed { get; private set; } = 1;
@@ -26,18 +27,19 @@ public sealed class SimulationClock
         PendingSeconds += realSeconds * Speed;
         int count = 0;
         // Keep backlog rather than silently discarding simulation time.
-        while (PendingSeconds + 1e-12 >= 1.0 / BaseTicksPerSecond && count < 300)
+        while (PendingSeconds + 1e-12 >= TickSeconds && count < 300)
         {
-            PendingSeconds = Math.Max(0, PendingSeconds - 1.0 / BaseTicksPerSecond);
+            PendingSeconds = Math.Max(0, PendingSeconds - TickSeconds);
             Tick++;
             count++;
         }
         return count;
     }
 
-    public void Restore(long tick,int speed,bool paused,double pending)
+    public void Restore(long tick,int speed,bool paused,double pending,int savedTickRate=BaseTicksPerSecond)
     {
         if(tick<0||!double.IsFinite(pending)||pending<0)throw new ArgumentException("Invalid clock");
+        if(savedTickRate!=BaseTicksPerSecond)throw new ArgumentException("Unsupported saved tick rate");
         SetSpeed(speed);Tick=tick;Paused=paused;PendingSeconds=pending;
     }
     public void Step()

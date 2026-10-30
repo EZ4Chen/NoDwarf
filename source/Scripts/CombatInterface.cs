@@ -60,7 +60,8 @@ public partial class Main
     private void AnimateCombat()
     {
         if(_combatVisualWorld!=_world){foreach(var node in _enemyVisuals.Values)node.QueueFree();_enemyVisuals.Clear();_combatVisualWorld=_world;}
-        foreach(var id in _enemyVisuals.Keys.Where(id=>!_world.Enemies.Any(e=>e.Id==id)).ToArray()){_enemyVisuals[id].QueueFree();_enemyVisuals.Remove(id);}
+        foreach(var id in _enemyVisuals.Keys.Where(id=>!_world.Enemies.Any(e=>e.Id==id)).ToArray())
+        {_enemyVisuals[id].QueueFree();_enemyVisuals.Remove(id);_equipmentKeys.Remove(id);}
         foreach(var e in _world.Enemies)
         {
             if(!_enemyVisuals.TryGetValue(e.Id,out var node))
@@ -68,7 +69,7 @@ public partial class Main
                 node=new Node3D();AddChild(node);_enemyVisuals[e.Id]=node;
                 node.AddChild(new Sprite3D{Texture=EquipmentArt.Texture(e.Appearance,_world.Inventory(e)),PixelSize=WorldScale.DwarfHeightMeters/300f,Position=new(0,WorldScale.DwarfHeightMeters*.49f,0),Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Shaded=false,AlphaCut=SpriteBase3D.AlphaCutMode.Discard});
                 node.AddChild(new Label3D{Position=new(0,1.65f,0),FontSize=32,PixelSize=.006f,Font=GameFont.Regular,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Modulate=new Color("ff9c88"),OutlineSize=8});
-                var body=new StaticBody3D{CollisionLayer=16,CollisionMask=0,Position=new(0,.7f,0)};body.SetMeta("enemy",e.Id);node.AddChild(body);body.AddChild(new CollisionShape3D{Shape=new CapsuleShape3D{Radius=.3f,Height=1.4f}});
+                var body=new StaticBody3D{CollisionLayer=16,CollisionMask=0,Position=new(0,.7f,0)};body.SetMeta("enemy",e.Id);node.AddChild(body);using(var collisionShape=new CapsuleShape3D{Radius=.3f,Height=1.4f})body.AddChild(new CollisionShape3D{Shape=collisionShape});
             }
             if(node.GetNodeOrNull<ActorModelView>("ModelView") is null)
             {AddActorModel(node);node.GetNode<ActorModelView>("ModelView").UpdateEquipment(_world.Inventory(e),e.Appearance.Beard);}

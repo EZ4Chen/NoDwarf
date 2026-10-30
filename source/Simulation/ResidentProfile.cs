@@ -74,6 +74,8 @@ public sealed class ResidentRelation
 public sealed record MoodEffect(string Key,string Text,int Amount,double Until);
 public sealed class ResidentActivity
 {
+    public string TaskId {get;set;}="";
+    public string TaskType {get;set;}="";
     public string Kind {get;set;}="rest";
     public string Origin {get;set;}="manual";
     public string Target {get;set;}="";
@@ -210,7 +212,7 @@ public sealed partial class ResidentProfile
             Relations is null||Relations.Count>32||Relations.Any(r=>r is null||string.IsNullOrWhiteSpace(r.Target)||r.Kind is null||r.Kind.Length>30||r.Opinion is <-100 or >100||!double.IsFinite(r.LastSocial))||Relations.Select(r=>r.Target).Distinct().Count()!=Relations.Count||
             MoodEffects is null||MoodEffects.Count>8||MoodEffects.Any(m=>m is null||m.Key is null||m.Text is null||m.Key.Length>100||m.Text.Length>200||m.Amount is <-100 or >100||!Valid(m.Until,double.MaxValue)) ||
             PausedResearch is not null && (PausedResearch.Kind!="research"||!ValidOrigin(PausedResearch.Origin)||PausedResearch.Target!=""||PausedResearch.ItemId!=0||!Valid(PausedResearch.Progress,1)||PausedResearch.Progress>=1||!TerrainMap.InBounds(PausedResearch.Destination)) ||
-            Activity is not null && (Activity.Kind is not ("rest" or "relax" or "research" or "pickup" or "eat" or "treat" or "care_supply" or "food_supply" or "feed" or "social" or "rescue_pickup" or "rescue_carry" or "life_supply" or "life_use" or "water_fill")||!ValidOrigin(Activity.Origin)||Activity.Target is null||Activity.Target.Length>100||Activity.RescueBed is Cell rescueBed&&!TerrainMap.InBounds(rescueBed)||!Valid(Activity.Progress,100000)||!TerrainMap.InBounds(Activity.Destination)))
+            Activity is not null && (Activity.Kind is null||Activity.Kind.Length>100||Activity.TaskId is null||Activity.TaskId.Length>100||Activity.TaskType is null||Activity.TaskType.Length>100||!ValidOrigin(Activity.Origin)||Activity.Target is null||Activity.Target.Length>100||Activity.RescueBed is Cell rescueBed&&!TerrainMap.InBounds(rescueBed)||!Valid(Activity.Progress,100000)||!TerrainMap.InBounds(Activity.Destination)))
             throw new InvalidDataException("人物资料无效。");
     }
 }

@@ -73,26 +73,12 @@ public sealed partial class ResidentProfile
         var used=ids.ToHashSet();
         for(int i=0;i<Memories.Count;i++)if(used.Contains(Memories[i].EventId))Memories[i]=Memories[i] with{LastUsed=now};
     }
-    public void MigrateMemories()
-    {
-        // Old dossiers have no structured source. Do not infer actors from prose.
-        for(int i=0;i<Memories.Count;i++)
-        {
-            var m=Memories[i];if(m is null||m.Key is null)continue;
-            if(m.EventId=="")
-            {
-                string kind=m.Key.Split(':')[0];bool related=kind is "care" or "照料" or "交流" or "food" or "fed";
-                Memories[i]=m with{EventId=Guid.NewGuid().ToString("N"),Kind=kind,FirstTime=m.Time,Source="legacy",
-                    Target=related&&m.Key.Contains(':')?m.Key[(m.Key.IndexOf(':')+1)..]:"",Importance=kind is "care" or "照料" or "food" or "fed"?85:30};
-            }
-        }
-    }
     private void ValidateMemory()
     {
         static bool Text(string? s,int n)=>s is not null&&s.Length<=n;
         static bool Time(double t)=>double.IsFinite(t)&&t>=0;
         static bool Entry(ResidentMemory? m)=>m is not null&&Text(m.EventId,100)&&Text(m.Key,100)&&Text(m.Text,400)&&Text(m.Kind,100)&&Text(m.Target,100)&&Text(m.Actor,100)&&
-            m.Source is "simulation" or "legacy"&&m.Perspective is "self" or "actor" or "recipient"&&
+            m.Source is "simulation"&&m.Perspective is "self" or "actor" or "recipient"&&
             m.Importance is >=0 and <=100&&m.Count is >=1 and <=1000000&&Time(m.Time)&&Time(m.FirstTime)&&m.FirstTime<=m.Time&&Time(m.LastUsed);
         if(HelpedAt is null||HelpedAt.Count>32||HelpedAt.Any(p=>!Text(p.Key,100)||!Time(p.Value))||
             Memories is null||Memories.Any(m=>!Entry(m))||Memories.Where(m=>m.EventId!="").GroupBy(m=>m.EventId).Any(g=>g.Count()>1)||MemorySummaries is null||MemorySummaries.Count>8||

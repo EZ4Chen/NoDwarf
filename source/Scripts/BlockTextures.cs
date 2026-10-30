@@ -70,7 +70,7 @@ public static class BlockTextures
         => TerrainTextureStyle.Apply(BiomeTerrainMaterial(id,top,profile),id,top);
     private static StandardMaterial3D BiomeTerrainMaterial(string id,bool top,RegionProfile? profile)
     {
-        if(profile?.Modern!=true||id is not ("nodwarf:grass" or "nodwarf:dry_grass" or "nodwarf:dry_grass_ramp"))return RawMaterial(id,top);
+        if(profile is null||id is not ("nodwarf:grass" or "nodwarf:dry_grass" or "nodwarf:dry_grass_ramp"))return RawMaterial(id,top);
         var tint=BiomeGrassColor(profile);string key=$"biome:{id}:{top}:{tint.ToHtml()}";
         if(Cache.TryGetValue(key,out var found))return found;
         var basis=RawMaterial(id,top);
@@ -156,7 +156,7 @@ public static class BlockTextures
         s.SetUV(new(0,height));s.AddVertex(d);
         s.SetUV(new(width,height));s.AddVertex(c);
     }
-    public static void Box(Node parent, Vector3 position, Vector3 size, string id, BlockFaces faces=BlockFaces.All)
+    public static void Box(Node parent, Vector3 position, Vector3 size, string id, BlockFaces faces=BlockFaces.All, StandardMaterial3D? overrideMaterial=null)
     {
         if(faces==BlockFaces.None)return;
         var mesh=new ArrayMesh(); var h=size/2;
@@ -171,12 +171,12 @@ public static class BlockTextures
             }
             Quad(s,a,b,c,d,w,v);
         }
-        if((faces&BlockFaces.Top)!=0)Face(new(-h.X,h.Y,-h.Z),new(-h.X,h.Y,h.Z),new(h.X,h.Y,h.Z),new(h.X,h.Y,-h.Z),Material(id,true),size.Z,size.X);
-        if((faces&BlockFaces.Bottom)!=0)Face(new(-h.X,-h.Y,h.Z),new(-h.X,-h.Y,-h.Z),new(h.X,-h.Y,-h.Z),new(h.X,-h.Y,h.Z),Material(id,bottom:true),size.Z,size.X);
-        if((faces&BlockFaces.North)!=0)Face(new(-h.X,h.Y,-h.Z),new(h.X,h.Y,-h.Z),new(h.X,-h.Y,-h.Z),new(-h.X,-h.Y,-h.Z),Material(id),size.X,size.Y);
-        if((faces&BlockFaces.South)!=0)Face(new(h.X,h.Y,h.Z),new(-h.X,h.Y,h.Z),new(-h.X,-h.Y,h.Z),new(h.X,-h.Y,h.Z),Material(id,front:true),size.X,size.Y);
-        if((faces&BlockFaces.East)!=0)Face(new(h.X,h.Y,-h.Z),new(h.X,h.Y,h.Z),new(h.X,-h.Y,h.Z),new(h.X,-h.Y,-h.Z),Material(id),size.Z,size.Y);
-        if((faces&BlockFaces.West)!=0)Face(new(-h.X,h.Y,h.Z),new(-h.X,h.Y,-h.Z),new(-h.X,-h.Y,-h.Z),new(-h.X,-h.Y,h.Z),Material(id),size.Z,size.Y);
+        if((faces&BlockFaces.Top)!=0)Face(new(-h.X,h.Y,-h.Z),new(-h.X,h.Y,h.Z),new(h.X,h.Y,h.Z),new(h.X,h.Y,-h.Z),overrideMaterial??Material(id,true),size.Z,size.X);
+        if((faces&BlockFaces.Bottom)!=0)Face(new(-h.X,-h.Y,h.Z),new(-h.X,-h.Y,-h.Z),new(h.X,-h.Y,-h.Z),new(h.X,-h.Y,h.Z),overrideMaterial??Material(id,bottom:true),size.Z,size.X);
+        if((faces&BlockFaces.North)!=0)Face(new(-h.X,h.Y,-h.Z),new(h.X,h.Y,-h.Z),new(h.X,-h.Y,-h.Z),new(-h.X,-h.Y,-h.Z),overrideMaterial??Material(id),size.X,size.Y);
+        if((faces&BlockFaces.South)!=0)Face(new(h.X,h.Y,h.Z),new(-h.X,h.Y,h.Z),new(-h.X,-h.Y,h.Z),new(h.X,-h.Y,h.Z),overrideMaterial??Material(id,front:true),size.X,size.Y);
+        if((faces&BlockFaces.East)!=0)Face(new(h.X,h.Y,-h.Z),new(h.X,h.Y,h.Z),new(h.X,-h.Y,h.Z),new(h.X,-h.Y,-h.Z),overrideMaterial??Material(id),size.Z,size.Y);
+        if((faces&BlockFaces.West)!=0)Face(new(-h.X,h.Y,h.Z),new(-h.X,h.Y,-h.Z),new(-h.X,-h.Y,-h.Z),new(-h.X,-h.Y,h.Z),overrideMaterial??Material(id),size.Z,size.Y);
         foreach(var surface in surfaces.Values){surface.GenerateNormals();surface.Commit(mesh);surface.Dispose();}
         var instance=new MeshInstance3D { Position=position,Mesh=mesh };
         instance.SetMeta("voxel_bounds",new Aabb(-h,size));parent.AddChild(instance);

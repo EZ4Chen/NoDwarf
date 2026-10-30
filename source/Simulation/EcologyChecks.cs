@@ -29,22 +29,10 @@ public static class EcologyChecks
         var desert=new DemoWorld(region:"desert");Check(desert.Trees.Count==0,"Desert has no trees");
         int dry=0;for(int x=0;x<255;x++)for(int z=0;z<255;z++){string? cover=GroundCover.At(desert,desert.Surface(x,z));Check(cover is null or "dead_bush","Desert must not spawn green grass");if(cover is not null)dry++;}
         Check(dry>0,"Desert contains sparse dead bushes");
-        // Real old-style metadata: version 8 region map and version 9 atlas map lack ecology fields.
-        foreach(bool atlas in new[]{false,true})
-        {
-            var gen=atlas?(new WorldGenerationSettings{EcologyVersion=1}).WithRecommendedSite():null;
-            var oldWorld=gen is null?new DemoWorld(region:"savanna",ecologyVersion:1):new DemoWorld(gen.LocalSeed,region:gen.Site.Region,generation:gen);
-            var node=JsonNode.Parse(oldWorld.SaveJson())!;node["Version"]=atlas?9:8;node.AsObject().Remove("EcologyVersion");
-            if(atlas)node["Generation"]!.AsObject().Remove("EcologyVersion");
-            var loaded=DemoWorld.LoadJson(node.ToJsonString());
-            Check(loaded.Terrain.EcologyVersion==1&&loaded.Terrain.Region?.Modern==false,"Old ecology stays frozen");
-            for(int x=0;x<255;x+=7)for(int z=0;z<255;z+=7)Check(loaded.Terrain[x,z]==oldWorld.Terrain[x,z],"Old terrain and slopes preserved");
-            Check(loaded.Trees.Values.Select(t=>(t.Cell,t.Species,t.Height)).SequenceEqual(oldWorld.Trees.Values.Select(t=>(t.Cell,t.Species,t.Height))),"Old trees preserved");
-        }
         var biomes=new HashSet<string>();
-        foreach(int heat in new[]{-2,0,2})foreach(int moisture in new[]{-2,0,2})
-        {var atlas=new WorldGenerationSettings{Temperature=heat,Moisture=moisture};for(int x=0;x<72;x++)for(int y=0;y<44;y++){var tile=atlas.Tile(x,y);if(tile.Land)biomes.Add(tile.Region);}}
-        Check(RegionProfile.All.All(p=>biomes.Contains(p.Id)),"Atlas can generate every supported biome");
-        Console.WriteLine("ECOLOGY_OK: grass occupancy, acacia/jungle lifecycle, desert cover, legacy ecology and atlas diversity");
+        foreach(int heat in new[]{-2,0,2})foreach(int moisture in new[]{-2,0,2})foreach(int elevation in new[]{0,2})
+        {var atlas=new WorldGenerationSettings{Temperature=heat,Moisture=moisture,Elevation=elevation};for(int x=0;x<atlas.Width;x++)for(int y=0;y<atlas.Height;y++){var tile=atlas.Tile(x,y);if(tile.Land)biomes.Add(tile.Region);}}
+        Check(RegionProfile.All.All(p=>biomes.Contains(p.Id)),"Atlas can generate every supported biome; missing: "+string.Join(",",RegionProfile.All.Where(p=>!biomes.Contains(p.Id)).Select(p=>p.Id)));
+        Console.WriteLine("ECOLOGY_OK: grass occupancy, acacia/jungle lifecycle, desert cover, ecology and atlas diversity");
     }
 }

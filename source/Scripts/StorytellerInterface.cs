@@ -63,8 +63,8 @@ public partial class Main
             foreach(var e in s.Pending)
             {
                 var row=new HBoxContainer();_storyEvents.AddChild(row);
-                var label=Text($"{DemoWorld.StoryEventName(e.Kind)} · 第 {e.Due/GameCalendar.SecondsPerDay:0.00} 模拟日\n{e.Reason}",13,Ink,true);label.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;row.AddChild(label);
-                UiAccess.Name(Button(row,"取消",()=>{_world.CancelStoryEvent(e.Id,"玩家取消了待发生事件。");RefreshStoryInterface();}),"取消待发生的"+DemoWorld.StoryEventName(e.Kind));
+                var label=Text($"{_world.StoryEventLabel(e)} · 第 {e.Due/GameCalendar.SecondsPerDay:0.00} 模拟日\n{e.Reason}",13,Ink,true);label.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;row.AddChild(label);
+                UiAccess.Name(Button(row,"取消",()=>{_world.CancelStoryEvent(e.Id,"玩家取消了待发生事件。");RefreshStoryInterface();}),"取消待发生的"+_world.StoryEventLabel(e));
             }
             if(s.Pending.Count==0)_storyEvents.AddChild(Text("暂无事件",13,Muted));
         }

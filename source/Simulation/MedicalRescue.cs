@@ -46,6 +46,7 @@ public sealed partial class DemoWorld
     {
         var helper=Workers.FirstOrDefault(w=>w.Id==helperId);var patient=Workers.FirstOrDefault(w=>w.Id==patientId);
         if(helper is null||patient is null||helper==patient||helper.Person.Dead||helper.Person.Incapacitated||helper.Person.Mobility<.2||helper.Person.Manipulation<.2||MilitaryControlled(helper))return new(false,"需要一名能够移动和搬运、未征召的同伴");
+        if(!helper.Person.Can("care"))return new(false,"该物种不具备照料能力");
         if(helper.WaterEvacuating||FloodThreat(helper))return new(false,"照料者需要先撤离水患");
         if(!NeedsRescue(patient))return new(false,"目标不需要搬运或已有医疗床");
         if(ResidentHealth.Bleeding(patient.Person)>0)return new(false,"先原地止血，再搬运到医疗床");

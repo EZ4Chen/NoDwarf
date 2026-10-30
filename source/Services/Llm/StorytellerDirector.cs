@@ -84,18 +84,22 @@ public sealed class StorytellerDirector(ILlmClient client) : IDisposable
                 "\n你是 NoDwarf 的营地叙事者。根据真实状态安排有因果的机会、压力和恢复。只使用已实现工具，不虚构外部国家、人物或承诺。" +
                 "人口损失后优先恢复；允许本轮只 wait。事件时间按游戏小时计算。合理使用预算，不追求耗尽；排队不代表已发生。" +
                 "reason只解释安排依据，不得声称已发生或派遣具体居民执行行动。补给工具只生成物品，不会指派采集或移动；天气不会直接改变清洁或心情，不要承诺这些效果。" +
-                "工具失败可按反馈调整，最多四次请求。说明使用中文。\nTools: " + StorytellerTools.Catalog });
+                "工具失败可按反馈调整，最多四次请求。说明使用中文。\nTools: " + StorytellerTools.CatalogFor(world.Content) });
             turn.Messages.Add(new() { Role = "user", Content = JsonSerializer.Serialize(new
             {
                 time = world.SimulationTime, game_hour_seconds = DemoWorld.StoryHour, value_catalog_version = ValueCatalog.Version,
                 value, threat_budget = world.StoryThreatBudget(value), gift_budget = world.StoryGiftBudget(value),
-                supply_unit_values = new { meal = ValueCatalog.Base("meal"), wood = ValueCatalog.Base("wood"), bandage = ValueCatalog.Base("bandage"), grain_seed = ValueCatalog.Base("grain_seed") },
+                content_revision=world.Content.GameplayHash,
+                facilities=world.Buildings.Values.GroupBy(b=>world.BuildingDefinition(b).Id).Take(24).Select(g=>new{id=g.Key,name=world.Content.Building(g.Key).Name,function=world.Content.Building(g.Key).Handler.ToString(),count=g.Count()}),
+                supply_items = world.Content.Items.Where(i=>world.Content.StoryEvents.Values.Any(e=>e.Items.Contains(i.Id))).Select(i=>new{i.Id,i.Name,i.Category,unit_value=i.BaseValue,edible=i.Edible}),
                 story.GraceUntil, story.RaidAfter, story.SuppliesAfter, story.WeatherAfter, story.RecoveryUntil,
                 weather = world.Weather.Id, temperature = world.OutdoorTemperature,
                 residents = world.Workers.Take(8).Select(w => new { w.Id, w.Name, w.Person.Dead, w.Person.Incapacitated, w.Person.Traits, memories = w.Person.Memories.Take(2) }),
                 pending = story.Pending, history = story.History.TakeLast(12)
             }) });
             story.Turn = turn; story.Error = "";
+            if(turn.Messages.Any(m=>m.Content.Length>32768)||turn.Messages.Sum(m=>m.Content.Length)>44000)
+            {turn.Status="waiting";story.Error="内容目录和观察超出叙事上下文预算，请减少启用事件或补给物品范围。";return;}
             story.NextDecisionAt = world.SimulationTime + 6 * DemoWorld.StoryHour;
         }
         var active = story.Turn!;

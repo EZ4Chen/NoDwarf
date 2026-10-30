@@ -1,30 +1,38 @@
 namespace NoDwarf.Simulation;
 
-public sealed record ItemDefinition(string Id,string Name,string Texture,string Color);
+public sealed record ItemDefinition(string Id,string Name,string Texture,string Color):IContentDefinition
+{
+    public DefinitionInfo Info {get;init;}=DefinitionInfo.Empty;
+    public double BaseValue {get;init;}
+    public string Category {get;init;}="misc";
+    public double Weight {get;init;}=1;
+    public double ShelfLife {get;init;}
+    public bool StorySupply {get;init;}
+    public EdibleDefinition? Edible {get;init;}
+    public IReadOnlyList<PlacementDefinition> Placements {get;init;}=Array.Empty<PlacementDefinition>();
+}
 public static class ItemCatalog
 {
-    public static readonly ItemDefinition[] All=ProductionDefinitions.Items;
-    public static ItemDefinition Get(string id)=>All.FirstOrDefault(d=>d.Id==id)??throw new ArgumentException("Unknown item: "+id);
-    public static string? Drop(string block)=>block switch {
-        "nodwarf:iron_ore" or "nodwarf:deepslate_iron_ore"=>"raw_iron",
-        "nodwarf:coal_ore" or "nodwarf:deepslate_coal_ore"=>"coal",
-        "nodwarf:stone" or "nodwarf:stone_ramp" or "nodwarf:gravel" or "nodwarf:gravel_ramp" or
-        "nodwarf:granite" or "nodwarf:granite_ramp" or "nodwarf:limestone" or "nodwarf:limestone_ramp" or "nodwarf:sandstone" or "nodwarf:sandstone_ramp"=>"cobblestone",
-        "nodwarf:deepslate"=>"deep_rubble",
-        "nodwarf:grass" or "nodwarf:soil" or "nodwarf:soil_ramp" or "nodwarf:humus" or "nodwarf:humus_ramp" or "nodwarf:dry_grass" or "nodwarf:dry_grass_ramp"=>"soil",
-        "nodwarf:sand" or "nodwarf:sand_ramp"=>"sand",_=>null};
+    public static IReadOnlyList<ItemDefinition> All=>ProductionDefinitions.Items;
+    public static ItemDefinition Get(string id)=>ContentRuntime.Current.ItemsById.GetValueOrDefault(id)??throw new ArgumentException("Unknown item: "+id);
+    public static string? Drop(string block)=>ContentRuntime.Current.Block(block).Drops.Keys.FirstOrDefault();
 }
 public sealed class ItemStack
 {
     public ItemProperties Properties {get;set;}=new();
     [System.Text.Json.Serialization.JsonIgnore] public string EffectiveMaterial=>Properties.MaterialId!=""?Properties.MaterialId:EquipmentPhysicalCatalog.Find(Item)?.MaterialId??"";
     public int Id {get;set;}
-    public string Item {get;set;}="cobblestone";
+    private string _item="cobblestone",_owner="",_slot="";
+    internal event Action<ItemStack,bool>? EquipmentChanged;
+    internal bool Equipped=>_owner!=""&&_slot!="";
+    private void SetVisual(ref string field,string value)
+    {if(field==value)return;bool was=Equipped;field=value;EquipmentChanged?.Invoke(this,was);}
+    public string Item {get=>_item;set=>SetVisual(ref _item,value);}
     public Cell Cell {get;set;}
     public int Count {get;set;}
     public int DestinationZone {get;set;}
-    public string Owner {get;set;}="";
-    public string Slot {get;set;}="";
+    public string Owner {get=>_owner;set=>SetVisual(ref _owner,value);}
+    public string Slot {get=>_slot;set=>SetVisual(ref _slot,value);}
 }
 public sealed class MaterialReservation
 {
@@ -38,7 +46,7 @@ public sealed class MaterialReservation
 }
 public sealed partial class DemoWorld
 {
-    public List<ItemStack> Items {get;}=new();
+    public ItemCollection Items {get;}=new();
     public HashSet<Cell> Stockpiles {get;}=new();
     private int _nextItem;
     public int Available(string item)=>Items.Where(s=>s.Item==item&&s.Owner=="").Sum(s=>Math.Max(0,s.Count-Reserved(s.Id)));
@@ -52,8 +60,8 @@ public sealed partial class DemoWorld
     }
     public ItemStack SpawnItem(string item,int count,Cell cell,ItemProperties? properties=null,int destinationZone=0)
     {
-        ItemCatalog.Get(item);
-        properties??=new();if(LifeHealth.Perishable(item)&&properties.ExpiresAt is null)properties=properties with {ExpiresAt=_simulationTime+LifeHealth.ShelfLife(item)};properties.Validate();
+        Content.Item(item);
+        properties??=new();if(LifeHealth.Perishable(item,Content)&&properties.ExpiresAt is null)properties=properties with {ExpiresAt=_simulationTime+LifeHealth.ShelfLife(item,Content)};properties.Validate();
         if(count<=0||!Inside(cell))throw new ArgumentOutOfRangeException(nameof(count));
         var existing=Items.FirstOrDefault(s=>s.Item==item&&s.Cell==cell&&s.Owner==""&&Reserved(s.Id)==0&&s.Properties==properties&&s.DestinationZone==destinationZone);
         if(existing is not null){existing.Count+=count;Revision++;return existing;}
@@ -80,15 +88,8 @@ public sealed partial class DemoWorld
         if(!remove)DefineStorageZone(Stockpiles.Where(c=>c.Level==a.Level&&c.X>=Math.Min(a.X,b.X)&&c.X<=Math.Max(a.X,b.X)&&c.Z>=Math.Min(a.Z,b.Z)&&c.Z<=Math.Max(a.Z,b.Z)));
         Revision++;return true;
     }
-    private static Dictionary<string,int> BuildRecipe(BuildKind kind)
-    {
-        var c=BlockCatalog.Get(kind).Cost;var recipe=new Dictionary<string,int>();
-        if(c.Stone>0)recipe["cobblestone"]=c.Stone;
-        if(c.Wood>0)recipe["wood"]=c.Wood;
-        if(c.Iron>0)recipe["iron"]=c.Iron;
-        return recipe;
-    }
-    private bool Reserve(DemoJob job,Dictionary<string,int> recipe)
+    private IReadOnlyDictionary<string,int> BuildRecipe(BuildKind kind)=>Content.Building(BlockCatalog.Id(kind)).Cost;
+    private bool Reserve(DemoJob job,IReadOnlyDictionary<string,int> recipe)
     {
         if(recipe.Any(p=>Items.Where(s=>s.Item==p.Key&&s.Owner==""&&BillAllowsSource(job,s)).Sum(s=>Math.Max(0,s.Count-Reserved(s.Id)))<p.Value))return false;
         foreach(var (item,amount) in recipe)
@@ -147,7 +148,7 @@ public sealed partial class DemoWorld
         if(job.Worker>=0&&job.Worker<Workers.Count)
         {
             var next=job.Materials.FirstOrDefault(r=>r.Stage!=2);
-            return next is null?$"加工中 · {job.Progress:0.0} 秒":next.Stage==1?"搬入"+ItemCatalog.Get(next.Item).Name:"取料："+ItemCatalog.Get(next.Item).Name;
+            return next is null?$"加工中 · {job.Progress:0.0} 秒":next.Stage==1?"搬入"+Content.Item(next.Item).Name:"取料："+Content.Item(next.Item).Name;
         }
         if(job.ProductionOrderId>0&&Bill(job) is {Enabled:false})return "已暂停";
         if(!ProductionReady(job))return "等待：工坊未就绪";
@@ -195,7 +196,7 @@ public sealed partial class DemoWorld
             var stack=Items.FirstOrDefault(s=>s.Id==next.StackId);
             if(stack is null||stack.Count<next.Count||!BillAllowsSource(job,stack)){Release(job);return true;}
             RefreshWeight(worker);
-            int capacity=(int)Math.Floor((worker.Person.Capacity-worker.Person.CarriedWeight)/ResidentGear.Weight(next.Item));
+            int capacity=(int)Math.Floor((worker.Person.Capacity-worker.Person.CarriedWeight)/ResidentGear.Weight(next.Item,Content));
             if(capacity<=0){Release(job);worker.Status="负重已满，请放下物品";return true;}
             if(next.Count>capacity)
             {
@@ -204,7 +205,7 @@ public sealed partial class DemoWorld
             }
             next.Properties=stack.Properties;next.DestinationZone=stack.DestinationZone;
             stack.Count-=next.Count;if(stack.Count==0)Items.Remove(stack);
-            next.Stage=1;next.StackId=0;RefreshWeight(worker);Revision++;worker.Status="搬运"+ItemCatalog.Get(next.Item).Name;
+            next.Stage=1;next.StackId=0;RefreshWeight(worker);Revision++;worker.Status="搬运"+Content.Item(next.Item).Name;
             RouteJob(worker,job);return true;
         }
         // Install a ladder from carried wood: a rung is not a floor for staging materials.
@@ -292,7 +293,7 @@ public sealed partial class DemoWorld
         if(!WorkshopReady||_forgeFurnace is null){Log("需要就绪工坊中的熔炉。");return false;}
         if(Jobs.Count(j=>j.Smelt)>=3)return false;
         var job=new DemoJob{Id=++_nextJob,Cell=_forgeFurnace.Value,Smelt=true};
-        if(!Reserve(job,ProductionCatalog.Get("smelt").Inputs)){Log("熔炼需要 2 粗铁和 1 煤。");return false;}
+        if(!Reserve(job,Content.Recipe("smelt").Inputs)){Log("熔炼需要 2 粗铁和 1 煤。");return false;}
         job.ProductionOrderId=AddProductionOrder("smelt",station:job.Cell).Id;Jobs.Add(job);Revision++;Log("熔炼订单：搬入 2 粗铁 + 1 煤，产出 2 铁锭。");return true;
     }
     public bool QueueCook()
@@ -302,16 +303,16 @@ public sealed partial class DemoWorld
         if(stove is null){Log("需要有围墙和门的厨房，并放置炊炉。");return false;}
         if(Jobs.Count(j=>j.Cook)>=3)return false;
         var job=new DemoJob{Id=++_nextJob,Cell=stove.Cell,Cook=true};
-        if(!Reserve(job,ProductionCatalog.Get("cook").Inputs)){Log("烹饪需要 2 食材和 1 木料。");return false;}
+        if(!Reserve(job,Content.Recipe("cook").Inputs)){Log("烹饪需要 2 食材和 1 木料。");return false;}
         job.ProductionOrderId=AddProductionOrder("cook",station:job.Cell).Id;Jobs.Add(job);Revision++;Log("烹饪订单：2 食材 + 1 木料 → 2 口粮。");return true;
     }
     private bool ProductionReady(DemoJob job)=>job.Processing?ProcessingReady(job):job.Cook?KitchenReady(job.Cell):WorkshopReady&&job.Cell==(job.Smelt?_forgeFurnace:_forgeAnvil);
     private void MineWithDrop(Cell cell)
     {
         _blockDamage.Remove(cell);
-        string? drop=ItemCatalog.Drop(Terrain.BlockAt(cell));
+        var drops=Content.Block(Terrain.BlockAt(cell)).Drops;
         if(!Terrain.Excavate(cell))return;
-        if(drop is not null)SpawnItem(drop,1,cell);
+        foreach(var drop in drops)SpawnItem(drop.Key,drop.Value,cell);
         SettleItems();Revision++;
     }
     private void DisplaceItems(Cell cell,Cell destination,int height=1)

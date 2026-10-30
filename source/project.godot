@@ -29,3 +29,9 @@ textures/vram_compression/import_etc2_astc=true
 
 [physics]
 common/physics_ticks_per_second=60
+
+[performance]
+threads/forest_upload_budget_ms=3.0
+cache/pawn_body_mib=128
+cache/pawn_hands_mib=8
+cache/pawn_portraits_mib=128

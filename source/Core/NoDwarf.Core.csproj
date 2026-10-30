@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Simulation/*.cs;../Services/Llm/*.cs;../MenuLogic/*.cs" />
+    <EmbeddedResource Include="../Assets/Combat/*.json;../Assets/Definitions/*.xml" LogicalName="NoDwarf.%(Filename)%(Extension)" />
+    <!-- Transitional snapshot/benchmark access; gameplay still has one implementation. -->
+    <InternalsVisibleTo Include="NoDwarf" />
+    <InternalsVisibleTo Include="NavigationBench" />
+    <InternalsVisibleTo Include="CoreChecks" />
+    <InternalsVisibleTo Include="ExtensionChecks" />
+  </ItemGroup>
+</Project>

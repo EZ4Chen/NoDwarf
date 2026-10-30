@@ -8,13 +8,14 @@ public sealed class BuildingMap : IReadOnlyDictionary<Cell, Building>
 {
     private readonly Dictionary<Cell, Building> _items = new();
     private readonly Action<Cell> _changed;
-    public BuildingMap(Action<Cell> changed) => _changed = changed;
+    private readonly Func<Building,Building> _bind;
+    public BuildingMap(Action<Cell> changed,Func<Building,Building>? bind=null) { _changed=changed;_bind=bind??(b=>b); }
     public Building this[Cell key]
     {
         get => _items[key];
         set
         {
-            Validate(key,value);
+            value=_bind(value);Validate(key,value);
             if (_items.TryGetValue(key, out var old) && old == value) return;
             _items[key] = value;
             _changed(key);
@@ -23,7 +24,7 @@ public sealed class BuildingMap : IReadOnlyDictionary<Cell, Building>
     private static void Validate(Cell key,Building value)
     {
         int extent=value.Kind is BuildKind.Door or BuildKind.Furnace ? 2 : 1;
-        if(!TerrainMap.InBounds(key)||!TerrainMap.InBounds(key+new Cell(0,0,extent-1)))
+        if(key!=value.Cell||!TerrainMap.InBounds(key)||!TerrainMap.InBounds(key+new Cell(0,0,extent-1)))
             throw new ArgumentOutOfRangeException(nameof(key),"Building must fit inside world bounds");
     }
     public IEnumerable<Cell> Keys => _items.Keys;
@@ -31,7 +32,7 @@ public sealed class BuildingMap : IReadOnlyDictionary<Cell, Building>
     public int Count => _items.Count;
     public bool ContainsKey(Cell key) => _items.ContainsKey(key);
     public bool TryGetValue(Cell key, out Building value) => _items.TryGetValue(key, out value!);
-    public void Add(Cell key, Building value) { Validate(key,value); _items.Add(key, value); _changed(key); }
+    public void Add(Cell key, Building value) { value=_bind(value);Validate(key,value); _items.Add(key, value); _changed(key); }
     public bool Remove(Cell key) => Remove(key, out _);
     public bool Remove(Cell key, out Building value)
     {

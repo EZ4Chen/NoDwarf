@@ -11,7 +11,8 @@ public partial class Main
     private ConfirmationDialog? _loadDialog;
     private void ToggleTopDown()
     {
-        _topDown=!_topDown;PositionCamera();_revision=-1;_hoverCell=null;Clear(_hover);
+        AnchorCameraOrbit();
+        _topDown=!_topDown;PositionCamera();_revision=-1;_hoverCell=null;ClearHover();
         _angleButton.Text=_topDown?"斜视":"俯视";
     }
     private void MarkStockpile(Cell c)
@@ -35,16 +36,20 @@ public partial class Main
         void Remove(Node3D node){_itemsView.RemoveChild(node);node.QueueFree();}
         foreach(var c in _stockNodes.Keys.Where(c=>!_world.Stockpiles.Contains(c)).ToArray())
         {Remove(_stockNodes[c]);_stockNodes.Remove(c);}
+        var stockZones=_world.StorageZones.SelectMany(z=>z.Cells.Select(c=>(Cell:c,Id:z.Id))).ToDictionary(p=>p.Cell,p=>p.Id);
+        var visibleStocks=_world.Stockpiles.Where(VisibleAt).ToHashSet();
         foreach(var c in _world.Stockpiles)
         {
             if(!_stockNodes.TryGetValue(c,out var root))
+            {root=new Node3D{Position=WorldPosition(c)+Vector3.Up*.015f};_itemsView.AddChild(root);_stockNodes[c]=root;}
+            int zone=stockZones.GetValueOrDefault(c);
+            int mask=CellBoundary.Mask(c,n=>visibleStocks.Contains(n)&&stockZones.GetValueOrDefault(n)==zone);
+            if(!root.HasMeta("outline_mask")||root.GetMeta("outline_mask").AsInt32()!=mask)
             {
-                root=new Node3D{Position=WorldPosition(c)+Vector3.Up*.015f};_itemsView.AddChild(root);_stockNodes[c]=root;
-                var color=Mat("6e897b");
-                foreach(float side in new[]{-.46f,.46f})
-                {Box(root,new Vector3(side,0,0),new Vector3(.018f,.018f,.94f),color);Box(root,new Vector3(0,0,side),new Vector3(.94f,.018f,.018f),color);}
+                Clear(root);root.SetMeta("outline_mask",mask);
+                if(mask!=0)root.AddChild(new MeshInstance3D{Mesh=ConstructionOutlineMesh(mask),MaterialOverride=Mat("6e897b"),CastShadow=GeometryInstance3D.ShadowCastingSetting.Off});
             }
-            root.Visible=VisibleAt(c);
+            root.Visible=visibleStocks.Contains(c);
         }
         var stacks=_world.Items.Where(s=>s.Owner=="").ToArray();var ids=stacks.Select(s=>s.Id).ToHashSet();
         foreach(int id in _itemNodes.Keys.Where(id=>!ids.Contains(id)).ToArray()){Remove(_itemNodes[id].Root);_itemNodes.Remove(id);}
@@ -57,7 +62,7 @@ public partial class Main
                 if(!_itemNodes.TryGetValue(stack.Id,out var entry))
                 {
                     var root=new Node3D();_itemsView.AddChild(root);
-                    var def=ItemCatalog.Get(stack.Item);
+                    var def=_world.Content.Item(stack.Item);
                     string? spriteId=stack.Item switch{"raw_iron"=>"raw_iron","iron"=>"iron_ingot","sword"=>"iron_sword","coal"=>"coal",_=>null};
                     if(EquipmentArt.Icon(stack.Item) is {} equipment)root.AddChild(new Sprite3D{Texture=equipment,PixelSize=.45f/Math.Max(equipment.GetWidth(),equipment.GetHeight()),Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Shaded=false});
                     else if(stack.Item is "raw_food" or "meal" or "grain_seed" or "mushroom_spawn")root.AddChild(new Sprite3D{Texture=UiIcons.Get(stack.Item),PixelSize=.007f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Shaded=false});
@@ -65,12 +70,12 @@ public partial class Main
                     else root.AddChild(new Sprite3D{Texture=GD.Load<Texture2D>($"res://Assets/Textures/Items/{spriteId}.png"),PixelSize=.007f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Shaded=false});
                     var label=new Label3D{Position=Vector3.Up*.22f,Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,FontSize=28,PixelSize=.004f,OutlineSize=8,NoDepthTest=false};root.AddChild(label);
                     var body=new StaticBody3D{CollisionLayer=2,CollisionMask=0};root.AddChild(body);
-                    body.AddChild(new CollisionShape3D{Shape=new BoxShape3D{Size=new Vector3(.3f,.3f,.3f)}});
+                    using(var collisionShape=new BoxShape3D{Size=new Vector3(.3f,.3f,.3f)})body.AddChild(new CollisionShape3D{Shape=collisionShape});
                     entry=(root,label,body,stack.Item);_itemNodes[stack.Id]=entry;
                 }
                 bool visible=VisibleAt(stack.Cell);entry.Root.Visible=visible;entry.Body.CollisionLayer=visible?2u:0u;
                 entry.Root.Position=WorldPosition(stack.Cell)+new Vector3((index%2)*.32f-.16f,.14f,(index/2%2)*.32f-.16f);index++;
-                entry.Label.Text=stack.Count.ToString();entry.Body.SetMeta("cell",new Vector3I(stack.Cell.X,stack.Cell.Level,stack.Cell.Z));
+                entry.Body.SetMeta("item_id",stack.Id);entry.Label.Text=stack.Count.ToString();entry.Body.SetMeta("cell",new Vector3I(stack.Cell.X,stack.Cell.Level,stack.Cell.Z));
             }
         }
     }
@@ -86,8 +91,10 @@ public partial class Main
     }
     public sealed class SessionState
     {
-        public int Version {get;set;}=1;
-        public string World {get;set;}="";
+        [System.Text.Json.Serialization.JsonRequired] public int Version {get;set;}=2;
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public WorldSnapshot? WorldState {get;set;}
+        [System.Text.Json.Serialization.JsonRequired] public int TickRate {get;set;}=SimulationClock.BaseTicksPerSecond;
         public long Tick {get;set;} public int Speed {get;set;} public bool Paused {get;set;} public double Pending {get;set;}
         public bool Developer {get;set;} public bool Creative {get;set;}
         public Cell? FoundationMin {get;set;} public Cell? FoundationMax {get;set;} public int Floor {get;set;} public int FloorHeight {get;set;}=3;
@@ -98,22 +105,62 @@ public partial class Main
     }
     private string? _activeSavePath;
     private string SavePath=>_activeSavePath??ProjectSettings.GlobalizePath(OS.GetCmdlineUserArgs().Contains("--colony-preview-test")?"res://.local/test-colony-save.json":"user://saves/colony-save.json");
-    private string LegacySavePath=>ProjectSettings.GlobalizePath("res://.local/colony-save.json");
-    private string ReadSavePath=>ResolveReadSavePath(SavePath,LegacySavePath,_activeSavePath is not null||OS.GetCmdlineUserArgs().Contains("--colony-preview-test"));
-    private static string ResolveReadSavePath(string current,string legacy,bool hasActiveColony)=>hasActiveColony?current:SaveFiles.ReadPath(current,legacy);
-    private void SaveSession()=>TrySaveSession();
-    private bool TrySaveSession()
+    private string ReadSavePath=>SavePath;
+    private readonly SaveService _saveService=new();
+    private Task<bool>? _saveTask;
+    private DemoWorld? _saveOwner;
+    private string? _saveTarget;
+    private Task? _loadTask;
+    private double _sessionPrepareMs,_sessionPublishMs;
+    private bool _saveAgain,_sessionLeaving;
+    private bool SessionAlive=>GodotObject.IsInstanceValid(this)&&IsInsideTree();
+    private async void SaveSession()
     {
+        if(_sessionLeaving)return;
+        if(_loadTask is {IsCompleted:false}){ShowActionFeedback("正在读取营地，请稍候再保存。",true);return;}
+        ShowActionFeedback("正在保存营地……");await SaveSessionAsync();
+    }
+    private Task<bool> SaveSessionAsync()
+    {
+        if(_loadTask is {IsCompleted:false})return Task.FromResult(false);
+        if(_saveTask is {IsCompleted:false})
+        {
+            if(_saveOwner!=_world||_saveTarget!=SavePath)return SaveAfterCurrent(_saveTask,_world,SavePath);
+            _saveAgain=true;return _saveTask;
+        }
+        _saveOwner=_world;_saveTarget=SavePath;
+        return _saveTask=SavePendingSession();
+    }
+    private async Task<bool> SaveAfterCurrent(Task<bool> preceding,DemoWorld owner,string path)
+    {
+        await preceding;
+        return SessionAlive&&_world==owner&&SavePath==path&&await SaveSessionAsync();
+    }
+    private async Task<bool> SavePendingSession()
+    {
+        var owner=_world;string path=SavePath;
         try
         {
-            var state=new SessionState{World=_world.SaveJson(),Tick=_clock.Tick,Speed=_clock.Speed,Paused=_clock.Paused,Pending=_clock.PendingSeconds,
-                Developer=_developerMode,Creative=_creative,FoundationMin=_foundation?.Min,FoundationMax=_foundation?.Max,Floor=_foundation?.Floor??0,FloorHeight=_foundation?.FloorHeight??3,
-                LayerOffset=_layerOffset,Placement=_placement,HeightSelected=_heightSelected,ViewMode=!_cutaway?0:_interiorView?1:_floorWalls?3:2,TopDown=_topDown,Yaw=_cameraYaw,Pitch=_orbitPitch,Zoom=_camera.Size,FocusX=_focus.X,FocusY=_focus.Y,FocusZ=_focus.Z};
-            SaveFiles.Write(SavePath,JsonSerializer.Serialize(state,DemoWorld.SaveOptions),ReadSavePath);
-            _world.Log("营地已保存（F9 读取；上一份保留为 .bak）。");
-            RefreshUi();return true;
-        }catch(Exception e){_world.Log("保存失败："+e.Message);}
-        RefreshUi();return false;
+            await SaveService.Ready;
+            do
+            {
+                _saveAgain=false;
+                if(!SessionAlive||_world!=owner)return false;
+                // This continuation runs on Godot's main context, between simulation ticks.
+                var state=new SessionState{Version=2,TickRate=SimulationClock.BaseTicksPerSecond,WorldState=owner.CaptureSnapshot(),Tick=_clock.Tick,Speed=_clock.Speed,Paused=_clock.Paused,Pending=_clock.PendingSeconds,
+                    Developer=_developerMode,Creative=_creative,FoundationMin=_foundation?.Min,FoundationMax=_foundation?.Max,Floor=_foundation?.Floor??0,FloorHeight=_foundation?.FloorHeight??3,
+                    LayerOffset=_layerOffset,Placement=_placement,HeightSelected=_heightSelected,ViewMode=!_cutaway?0:_interiorView?1:_floorWalls?3:2,TopDown=_topDown,Yaw=_cameraYaw,Pitch=_orbitPitch,Zoom=_camera.Size,FocusX=_focus.X,FocusY=_focus.Y,FocusZ=_focus.Z};
+                await _saveService.Write(path,state);
+            }while(_saveAgain);
+            if(SessionAlive&&_world==owner){owner.Log("营地已保存（F9 读取；上一份保留为 .bak）。");RefreshUi();}
+            return SessionAlive&&_world==owner;
+        }
+        catch(Exception e)
+        {
+            if(SessionAlive&&_world==owner){owner.Log("保存失败："+e.Message);RefreshUi();}
+            return false;
+        }
+        finally{_saveOwner=null;_saveTarget=null;_saveTask=null;owner=null!;}
     }
     private void RequestLoadSession()
     {
@@ -125,43 +172,70 @@ public partial class Main
         }
         _loadDialog.PopupCentered();
     }
-    public sealed record PreparedSession(SessionState State,DemoWorld World,SimulationClock Clock,FoundationPlan? Foundation);
+    public sealed record PreparedSession(SessionState State,DemoWorld World,SimulationClock Clock,FoundationPlan? Foundation,TerrainView.ForestData Forest,WorldOverview.MapData Map);
     public static PreparedSession PrepareSession(string path)
     {
         if(new FileInfo(path).Length>64*1024*1024)throw new InvalidDataException("存档文件过大。");
         var s=JsonSerializer.Deserialize<SessionState>(File.ReadAllText(path),DemoWorld.SaveOptions)??throw new InvalidDataException("无效存档。");
             if(!float.IsFinite(s.Pitch)||s.Pitch<MinCameraPitch||s.Pitch>MaxCameraPitch)throw new InvalidDataException("视角俯仰无效。");
-            if(s.Version!=1||s.ViewMode is <0 or >3||s.Placement is <-1 or >1||!float.IsFinite(s.Yaw)||!float.IsFinite(s.Zoom)||s.Zoom is <12 or >240||!float.IsFinite(s.FocusX)||!float.IsFinite(s.FocusY)||!float.IsFinite(s.FocusZ))throw new InvalidDataException("视图存档无效。");
-            var loaded=DemoWorld.LoadJson(s.World);var clock=new SimulationClock();clock.Restore(s.Tick,s.Speed,s.Paused,s.Pending);
+            if(s.Version!=2)throw new InvalidDataException("不支持的存档版本。开发阶段请新建游戏；原存档未改写。");
+            if(s.ViewMode is <0 or >3||s.Placement is <-1 or >1||!float.IsFinite(s.Yaw)||!float.IsFinite(s.Zoom)||s.Zoom is <12 or >240||!float.IsFinite(s.FocusX)||!float.IsFinite(s.FocusY)||!float.IsFinite(s.FocusZ))throw new InvalidDataException("视图存档无效。");
+            if(s.WorldState is null)throw new InvalidDataException("世界存档结构无效。");
+            var loaded=DemoWorld.LoadSnapshot(s.WorldState!);var clock=new SimulationClock();clock.Restore(s.Tick,s.Speed,s.Paused,s.Pending,s.TickRate);
             FoundationPlan? foundation=null;
             if(s.FoundationMin is Cell a&&s.FoundationMax is Cell b){if(!DemoWorld.Inside(a)||!DemoWorld.Inside(b))throw new InvalidDataException("地基越界。");foundation=new FoundationPlan(a,b);foundation.SetFloorHeight(s.FloorHeight);foundation.Step(s.Floor);}
             int level=(foundation?.WorldLevel??loaded.Camp.Level)+s.LayerOffset;
             if(level<=TerrainMap.MinLevel||level>TerrainMap.MaxLevel)throw new InvalidDataException("视图高度越界。");
-        return new(s,loaded,clock,foundation);
+        return new(s,loaded,clock,foundation,TerrainView.PrepareForest(loaded),WorldOverview.PrepareMap(loaded));
     }
     private void ApplyPreparedSession(PreparedSession prepared)
     {
-        var (s,loaded,clock,foundation)=prepared;
+        var (s,loaded,clock,foundation,forest,map)=prepared;
+        _terrainView.UsePreparedForest(loaded,forest);
+        _storyDirector?.Dispose();_storyDirector=null;
+        _residentMindDirector?.Dispose();_residentMindDirector=null;
             _world=loaded;_clock=clock;_foundation=foundation;_layerOffset=s.LayerOffset;_placement=s.Placement;_heightSelected=s.HeightSelected;
             _developerMode=s.Developer;_creative=s.Creative;_revealUnknown=false;_topDown=s.TopDown;_cameraYaw=s.Yaw;_orbitPitch=s.Pitch;_camera.Size=s.Zoom;_focus=new(s.FocusX,s.FocusY,s.FocusZ);
             _selectedCell=null;_selectedWorker=-1;_stockpileStart=null;_farmStart=null;_foundationStart=null;_selectionPanel.Hide();_worldMenu.Hide();_terrainRevision=-1;
-            _overview.World=_world;_overview.RefreshMap();CreatePeople();PositionCamera();DrawFoundation();SetViewMode(s.ViewMode);_angleButton.Text=_topDown?"斜视":"俯视";
+            _overview.World=_world;_overview.ApplyPreparedMap(map);CreatePeople();PositionCamera();DrawFoundation();SetViewMode(s.ViewMode);_angleButton.Text=_topDown?"斜视":"俯视";
     }
-    private void LoadSession()
+    private async void LoadSession()=>await LoadSessionAsync();
+    private Task LoadSessionAsync()
     {
+        if(_sessionLeaving)return Task.CompletedTask;
+        if(_loadTask is {IsCompleted:false})return _loadTask;
+        return _loadTask=LoadPendingSession();
+    }
+    private async Task LoadPendingSession()
+    {
+        var owner=_world;string path=SavePath;
         try
         {
-            string readPath=ReadSavePath;
-            var prepared=PrepareSession(readPath);
-            // Only migrate a fully validated legacy save. Leave the original untouched.
-            string? migrationError=null;
-            if(readPath!=SavePath)
-            {try{SaveFiles.Write(SavePath,File.ReadAllText(readPath));}catch(Exception e){migrationError=e.Message;}}
-            ApplyPreparedSession(prepared);
+            if(_saveTask is {IsCompleted:false} saving&&!await saving)return;
+            if(!SessionAlive||_world!=owner||SavePath!=path)return;
+            string readPath=ReadSavePath;ShowActionFeedback("正在读取营地……");
+            var result=await Task.Run(()=>
+            {
+                long started=System.Diagnostics.Stopwatch.GetTimestamp();
+                var prepared=PrepareSession(readPath);
+                return (prepared,ms:System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            });
+            if(!SessionAlive||_world!=owner||SavePath!=path||_sessionLeaving)return;
+            _sessionPrepareMs=result.ms;
+            bool measurePublish=OS.GetCmdlineUserArgs().Contains("--session-async-test");
+            if(measurePublish)result.prepared.World.Probe=new PerformanceProbe();
+            long published=System.Diagnostics.Stopwatch.GetTimestamp();
+            ApplyPreparedSession(result.prepared);
             _world.Log("营地已恢复，可继续搬运、施工与生产。");
-            if(migrationError is not null)_world.Log("旧存档已读取，但迁移失败："+migrationError);RefreshUi();
-        }catch(Exception e){_world.Log("读取失败，保留当前营地："+e.Message);RefreshUi();}
+            RefreshUi();
+            _sessionPublishMs=System.Diagnostics.Stopwatch.GetElapsedTime(published).TotalMilliseconds;
+            if(measurePublish){GD.Print("SESSION_PUBLISH_PROFILE: "+JsonSerializer.Serialize(_world.Probe!.Report()));_world.Probe=null;}
+        }
+        catch(Exception e)
+        {if(SessionAlive&&_world==owner){owner.Log("读取失败，保留当前营地："+e.Message);RefreshUi();}}
+        finally{_loadTask=null;owner=null!;}
     }
+
 }
 
 public partial class Main
@@ -199,13 +273,12 @@ public partial class Main
             _world.DeveloperPlace(_world.Camp+new Cell(3,1),BuildKind.Stove);
             if(!_world.QueueCook())throw new InvalidOperationException("Preview cooking order unavailable");
             _orbitPitch=Mathf.DegToRad(55);
-            SaveSession();if(!File.Exists(SavePath))throw new InvalidOperationException("Session save missing");
-            _world.Items.Clear();_topDown=false;_orbitPitch=MinCameraPitch;LoadSession();
+            await SaveSessionAsync();if(!File.Exists(SavePath))throw new InvalidOperationException("Session save missing");
+            _world.Items.Clear();_topDown=false;_orbitPitch=MinCameraPitch;await LoadSessionAsync();
             if(!_topDown||_world.Total("raw_iron")!=7||!_world.Jobs.Any(j=>j.Smelt)||_world.Workers.Count!=0||_foundation?.WorldLevel!=_world.Camp.Level)throw new InvalidOperationException("Session restore lost world, editor or camera state");
             ToggleTopDown();_inspector.Show();RefreshUi();await Snap("colony-orders");
             if(!Mathf.IsEqualApprox(_cameraPitch,Mathf.DegToRad(55)))throw new InvalidOperationException("Session restore lost saved pitch");
-            var legacy=JsonSerializer.Deserialize<SessionState>("{}",DemoWorld.SaveOptions)!;
-            if(legacy.Pitch!=DefaultCameraPitch)throw new InvalidOperationException("Old saves must retain the original camera angle");
+            if(new SessionState().Pitch!=DefaultCameraPitch)throw new InvalidOperationException("Default camera angle changed");
             var order=_world.Jobs.Single(j=>j.Smelt);
             if(!_billRows.TryGetValue(order.ProductionOrderId,out var row)||!row.Count.TooltipText.Contains("尚未启用居民"))throw new InvalidOperationException("Order list must show individual waiting reason");
             _world.RemoveProductionOrder(order.ProductionOrderId);RefreshOrders();

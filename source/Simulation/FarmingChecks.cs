@@ -20,17 +20,17 @@ public static class FarmingChecks
         var w=new DemoWorld();w.Items.Clear();w.Stockpiles.Clear();w.Workers.RemoveRange(1,w.Workers.Count-1);
         var c=SurfacePlot(w);var worker=w.Workers[0];worker.X=c.X-1;worker.Z=c.Z;worker.Level=c.Level;
         Check(w.SetFarm(c,c,"grain"),"Surface soil supports grain");Advance(w,5);
-        Check(!w.Farms[c].Planted&&!w.Jobs.Any(j=>j.Sow),"No seeds means no planting");
+        Check(!w.Plants.ContainsKey(c)&&!w.Jobs.Any(j=>j.Sow),"No seeds means no planting");
         var seed=w.SpawnItem("grain_seed",1,c+new Cell(-2,0));
         Advance(w,1);Check(w.Jobs.Count(j=>j.Sow)==1&&w.Available("grain_seed")==0,"One seed reserves exactly one sowing job");
         var saved=DemoWorld.LoadJson(w.SaveJson());Check(saved.Jobs.Count(j=>j.Sow)==1,"Pending sowing survives load");
-        Until(saved,()=>saved.Farms[c].Planted);Check(saved.Total("grain_seed")==0,"Planting consumes physical seed");
+        Until(saved,()=>saved.Plants.ContainsKey(c));Check(saved.Total("grain_seed")==0,"Planting consumes physical seed");
         saved=DemoWorld.LoadJson(saved.SaveJson());
         var roof=c+new Cell(0,0,2);saved.Buildings[roof]=new(roof,BuildKind.Planks);
         // The shade roof needs a real pillar now that unsupported structures fall.
         var pillar=Enumerable.Range(0,3).Select(y=>c+new Cell(1,0,y)).ToArray();
         foreach(var post in pillar)saved.Buildings[post]=new(post,BuildKind.Planks);
-        double growth=saved.Farms[c].Growth;Advance(saved,10);Check(saved.Farms[c].Growth==growth,"Roof pauses sunlight crop");saved.Buildings.Remove(roof);foreach(var post in pillar)saved.Buildings.Remove(post);
+        double growth=saved.Plants[c].Growth;Advance(saved,10);Check(saved.Plants[c].Growth==growth,"Roof pauses sunlight crop");saved.Buildings.Remove(roof);foreach(var post in pillar)saved.Buildings.Remove(post);
         Until(saved,()=>saved.Farms[c].Harvests==1);Check(saved.Total("wheat")==3&&saved.Total("grain_seed")==1,"Harvest yields food and exactly one replacement seed");
         var matureRound=DemoWorld.LoadJson(saved.SaveJson());
         Until(matureRound,()=>matureRound.Farms[c].Harvests==2);
@@ -45,7 +45,7 @@ public static class FarmingChecks
         Check(!cave.SetFarm(new Cell(8,10),new Cell(8,10),"mushroom"),"Open surface cannot grow cave fungus");
         Check(cave.SetFarm(p,p,"mushroom"),"Excavated cave supports a future soil bed");cave.SpawnItem("mushroom_spawn",1,p+new Cell(-1,0));Advance(cave,5);
         Check(!cave.Jobs.Any(j=>j.Sow),"Mushroom bed requires physical soil on first planting");
-        cave.SpawnItem("soil",1,p+new Cell(-1,0));Until(cave,()=>cave.Farms[p].Planted);
+        cave.SpawnItem("soil",1,p+new Cell(-1,0));Until(cave,()=>cave.Plants.ContainsKey(p));
         Check(cave.Total("soil")==0&&cave.Total("mushroom_spawn")==0,"Bed soil and spawn both consumed");
         cave=DemoWorld.LoadJson(cave.SaveJson());Until(cave,()=>cave.Farms[p].Harvests==2,300);
         Check(cave.Total("mushroom")==6&&cave.Total("mushroom_spawn")==1&&cave.Farms[p].Prepared,"Cave mushrooms repeat with retained bed and harvested spawn");
@@ -53,7 +53,7 @@ public static class FarmingChecks
         for(int x=-2;x<=2;x++)for(int z=-2;z<=2;z++)if(Math.Abs(x)==2||Math.Abs(z)==2)
         {var wall=source+new Cell(x,z);noPath.Buildings[wall]=new(wall,BuildKind.Wall);var top=wall+new Cell(0,0,1);noPath.Buildings[top]=new(top,BuildKind.Wall);}
         noPath.SpawnItem("grain_seed",1,source);Check(noPath.SetFarm(c,c,"grain"),"Unreachable-seed farm created");Advance(noPath,20);
-        Check(!noPath.Farms[c].Planted&&noPath.Total("grain_seed")==1,"Sealed seeds cannot be consumed remotely");
+        Check(!noPath.Plants.ContainsKey(c)&&noPath.Total("grain_seed")==1,"Sealed seeds cannot be consumed remotely");
         noPath.SetFarm(c,c,"grain",true);Check(noPath.Available("grain_seed")==1,"Removing unplanted farm releases reserved seeds");
         Console.WriteLine("FARMING_OK: physical seeds, reservations, two harvest cycles, sunlight, cave soil beds, save/load, unreachable stock and plot removal");
     }
@@ -71,14 +71,11 @@ public static class FarmingChecks
         Check(w.Farms[c].Crop=="mushroom"&&w.Farms[c+new Cell(1,0)].Crop=="mushroom"&&w.Farms[c+new Cell(2,0)].Crop=="grain","Settings affect only the chosen zone");
         w=DemoWorld.LoadJson(w.SaveJson());Check(!w.GrowingZones[id].AllowSowing&&w.GrowingZones[id].Crop=="mushroom","Zone settings persist");
         w.ConfigureGrowingZone(id,"grain",true);w.DeveloperResidents(true);
-        Until(w,()=>w.Farms[c].Planted&&w.Farms[c+new Cell(1,0)].Planted);
-        w.ConfigureGrowingZone(id,"mushroom",false);double growth=w.Farms[c].Growth;
-        Check(w.Farms[c].Crop=="grain","Crop edit preserves growing plants");
+        Until(w,()=>w.Plants.ContainsKey(c)&&w.Plants.ContainsKey(c+new Cell(1,0)));
+        w.ConfigureGrowingZone(id,"mushroom",false);double growth=w.Plants[c].Growth;
+        Check(w.Plants[c].Crop=="grain","Crop edit preserves growing plants");
         w=DemoWorld.LoadJson(w.SaveJson());Until(w,()=>w.Farms[c].Harvests>=1);
-        Check(!w.Farms[c].Planted&&w.Farms[c].Crop=="mushroom"&&!w.Jobs.Any(j=>j.Sow&&j.Cell==c),"Old crop harvests, new sowing stays disabled");
-        var legacy=System.Text.Json.Nodes.JsonNode.Parse(w.SaveJson())!;legacy["Version"]=5;legacy.AsObject().Remove("GrowingZones");
-        foreach(var p in legacy["Farms"]!.AsArray())p!.AsObject().Remove("ZoneId");
-        var migrated=DemoWorld.LoadJson(legacy.ToJsonString());Check(migrated.Farms.Values.All(p=>migrated.GrowingZones.ContainsKey(p.ZoneId)),"Legacy farms gain editable zones");
+        Check(!w.Plants.ContainsKey(c)&&w.Farms[c].Crop=="mushroom"&&!w.Jobs.Any(j=>j.Sow&&j.Cell==c),"Old crop harvests, new sowing stays disabled");
         var invalid=System.Text.Json.Nodes.JsonNode.Parse(w.SaveJson())!;invalid["Farms"]![0]!["ZoneId"]=999;
         bool rejected=false;try{DemoWorld.LoadJson(invalid.ToJsonString());}catch(InvalidDataException){rejected=true;}Check(rejected,"Reject orphaned zone references");
         w.SetFarm(c,c,"grain",true);Check(w.GrowingZones.ContainsKey(id),"Partial erase retains zone settings");
@@ -88,6 +85,6 @@ public static class FarmingChecks
         Until(trees,()=>trees.Trees.ContainsKey(treeCell));trees=DemoWorld.LoadJson(trees.SaveJson());
         Check(trees.GrowingZones[treeZone].Crop=="sapling"&&trees.Trees.ContainsKey(treeCell),"Tree planting uses zone settings and persists");
         trees.SetFarm(treeCell,treeCell,"grain",true);Check(trees.Trees.ContainsKey(treeCell),"Removing tree zone preserves existing trees");
-        Console.WriteLine("GROWING_ZONES_OK: selection scope, seed cancellation, delayed crop changes, sowing switch, trees, migration, validation and partial removal");
+        Console.WriteLine("GROWING_ZONES_OK: selection scope, seed cancellation, delayed crop changes, sowing switch, trees, validation and partial removal");
     }
 }

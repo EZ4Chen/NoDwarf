@@ -11,7 +11,7 @@ public static class ResidentChecks
     public static void Run()
     {
         Progression();InventoryAndCare();ResearchAndArchive();WorkAndSocial();ResidentIntegrationChecks.Run();ResidentPlanningChecks.Run();
-        Console.WriteLine("RESIDENT_OK: independent XP/points, prerequisites, physical gear/cargo, body injury/care, needs, research, social memory, migration and AI validation");
+        Console.WriteLine("RESIDENT_OK: independent XP/points, prerequisites, physical gear/cargo, body injury/care, needs, research, social memory and AI validation");
     }
     private static void Progression()
     {
@@ -74,11 +74,6 @@ public static class ResidentChecks
         long total=loaded.Workers.Sum(p=>p.Person.GrowthXp);Advance(loaded,10);Check(loaded.Workers.Sum(p=>p.Person.GrowthXp)==total,"Finished research cannot award repeatedly");
         loaded.DeveloperResidents(false);var empty=DemoWorld.LoadJson(loaded.SaveJson());empty.DeveloperResidents(true);
         Check(empty.Workers.Sum(p=>p.Person.GrowthXp)==total&&empty.Inventory(empty.Workers[1]).Any(),"Editor removal retains complete dossier and equipment");
-        // Actual version-1 shape: no profile, no research, no owner fields.
-        var legacy=JsonNode.Parse(saved)!;legacy["Version"]=1;legacy.AsObject().Remove("Research");legacy.AsObject().Remove("ResidentElapsed");
-        foreach(var worker in legacy["Workers"]!.AsArray())worker!.AsObject().Remove("Person");
-        var items=legacy["Items"]!.AsArray();for(int i=items.Count-1;i>=0;i--)if(items[i]!["Owner"]!.GetValue<string>()!="")items.RemoveAt(i);
-        var upgraded=DemoWorld.LoadJson(legacy.ToJsonString());Check(upgraded.Workers.All(p=>p.Person.SkillXp.Count==11&&p.Person.Points==0),"Old world migrates without bonus points");
         void Invalid(Action<JsonNode> mutate,string message)
         {
             var data=JsonNode.Parse(saved)!;mutate(data);bool rejected=false;
@@ -89,11 +84,8 @@ public static class ResidentChecks
         Invalid(n=>n["Items"]![0]!["Owner"]="ghost","Unknown inventory owner rejected");
         Invalid(n=>n["Workers"]![1]!["Id"]=n["Workers"]![0]!["Id"]!.GetValue<string>(),"Duplicate resident identity rejected");
         Invalid(n=>n["Workers"]![0]!["Person"]!["Blood"]=-1,"Invalid health rejected");
-        foreach(int version in new[]{2,3})
-        {
-            Invalid(n=>{n["Version"]=version;n.AsObject().Remove("Research");},"Modern archive must retain research");
-            Invalid(n=>{n["Version"]=version;n["Workers"]![0]!.AsObject().Remove("Person");},"Modern archive must retain character profile");
-        }
+        Invalid(n=>n.AsObject().Remove("Research"),"Archive must retain research");
+        Invalid(n=>n["Workers"]![0]!.AsObject().Remove("Person"),"Archive must retain character profile");
     }
     private static void WorkAndSocial()
     {

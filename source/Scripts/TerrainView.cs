@@ -57,12 +57,15 @@ public partial class TerrainView : Node3D
         }
         // Only exposed candidates need meshing; buried rock is implicit.
         QueueMeshes(world,view,dirty,all);
-        if(_trees is null||_lastTrees!=world.TreeRevision)
+        bool treeContactChanged=_lastRevision!=terrain.Revision&&terrain.ChangesSince(_lastRevision).Any(_treeContacts.Contains)
+            ||wallsChanged&&wallCells.Except(_lastWallCells).Concat(_lastWallCells.Except(wallCells)).Any(_treeContacts.Contains)
+            ||_lastStamp!=view.Stamp&&_lastCaps.Keys.Concat(view.WallCaps?.Keys??Enumerable.Empty<Cell>()).Any(c=>_treeContacts.Contains(c)&&_lastCaps.GetValueOrDefault(c,float.PositiveInfinity)!=(view.WallCaps?.GetValueOrDefault(c,float.PositiveInfinity)??float.PositiveInfinity));
+        if(_trees is null||_lastTrees!=world.TreeRevision||treeContactChanged)
         {
             _lastTrees=world.TreeRevision;
             if(_trees is not null){RemoveChild(_trees);_trees.QueueFree();}
             _trees=new Node3D();AddChild(_trees);
-            BuildVoxelTrees(world,clip);
+            BuildVoxelTrees(world,view);
         }
         UpdateTreeClip(clip);
         CaptureTreeFalls(world,view);
@@ -110,42 +113,60 @@ public partial class WorldOverview : Control
     {
         if(_mapTerrain!=World.Terrain||_mapImage is null)RenderMap();
     }
+    public sealed record MapData(int TerrainRevision,long FluidRevision,HashSet<(int X,int Z)> Water,byte[] Pixels);
+    private static HashSet<(int X,int Z)> MapWater(DemoWorld world)=>world.Fluids.Cells.Values.Where(f=>f.Amount>=100&&f.Cell.Level>=world.Terrain[f.Cell.X,f.Cell.Z].Level).Select(f=>(f.Cell.X,f.Cell.Z)).ToHashSet();
+    public static MapData PrepareMap(DemoWorld world)
+    {
+        var water=MapWater(world);var sample=MapSampler(world,water);
+        var pixels=new byte[TerrainMap.Size*TerrainMap.Size*4];
+        for(int z=0;z<TerrainMap.Size;z++)for(int x=0;x<TerrainMap.Size;x++)
+            EncodeMapPixel(sample(x,z),pixels.AsSpan((z*TerrainMap.Size+x)*4,4));
+        return new(world.Terrain.Revision,world.Fluids.Revision,water,pixels);
+    }
+    public void ApplyPreparedMap(MapData data)
+    {
+        using var timing=World.Probe?.Measure("view.overview-upload")??default;
+        _mapTerrain=World.Terrain;_mapRevision=data.TerrainRevision;_mapFluidRevision=data.FluidRevision;_mapWater=data.Water;
+        _mapImage?.Dispose();_mapImage=Image.CreateFromData(TerrainMap.Size,TerrainMap.Size,false,Image.Format.Rgba8,data.Pixels);
+        _texture=ImageTexture.CreateFromImage(_mapImage);_mapRefreshElapsed=0;MapRefreshCount++;QueueRedraw();
+    }
+    private static Func<int,int,Color> MapSampler(DemoWorld world,HashSet<(int X,int Z)> water)
+    {
+        var palette=new Dictionary<string,Color>();
+        Color BaseColor(string id){if(!palette.TryGetValue(id,out var color))palette[id]=color=new Color(world.Content.Block(id).Color);return color;}
+        var placed=world.Terrain.PlacedBlocks.Where(p=>p.Cell.Level>=world.Terrain[p.Cell.X,p.Cell.Z].Level-1).GroupBy(p=>(p.Cell.X,p.Cell.Z)).ToDictionary(g=>g.Key,g=>g.MaxBy(p=>p.Cell.Level)!);
+        var tree=new Color("35472f");var excavation=new Color("514d46");var wet=new Color("428fba");
+        return (x,z)=>
+        {
+            var g=world.Terrain[x,z];var c=BaseColor(g.BlockId)*Math.Clamp(.72f+(g.Level-TerrainMap.SeaLevel)*.025f,.5f,1.15f);
+            if(g.Tree)c=tree;
+            if(world.Terrain.Excavated.Contains(new Cell(x,z,g.Level-1)))c=excavation;
+            if(placed.TryGetValue((x,z),out var fill))c=BaseColor(fill.DefinitionId);
+            if(water.Contains((x,z)))c=wet;
+            c.A=1;return c;
+        };
+    }
     private void RenderMap()
     {
-        bool full = _mapTerrain != World.Terrain || _mapImage is null;
-        var changed = full ? null : World.Terrain.ChangesSince(_mapRevision)
-            .Where(c => c.Level >= World.Terrain[c.X,c.Z].Level - 1).Select(c => (c.X,c.Z)).ToHashSet();
-        if(full||_mapFluidRevision!=World.Fluids.Revision)
+        bool full=_mapTerrain!=World.Terrain||_mapImage is null;
+        using var timing=World.Probe?.Measure(full?"view.overview-full-refresh":"view.overview-patch")??default;
+        if(full){ApplyPreparedMap(PrepareMap(World));return;}
+        var changed=World.Terrain.ChangesSince(_mapRevision).Where(c=>c.Level>=World.Terrain[c.X,c.Z].Level-1).Select(c=>(c.X,c.Z)).ToHashSet();
+        if(_mapFluidRevision!=World.Fluids.Revision)
         {
-            var water=World.Fluids.Cells.Values.Where(f=>f.Amount>=100&&f.Cell.Level>=World.Terrain[f.Cell.X,f.Cell.Z].Level).Select(f=>(f.Cell.X,f.Cell.Z)).ToHashSet();
-            if(!full){var difference=new HashSet<(int X,int Z)>(_mapWater);difference.SymmetricExceptWith(water);changed!.UnionWith(difference);}
+            var water=MapWater(World);var difference=new HashSet<(int X,int Z)>(_mapWater);difference.SymmetricExceptWith(water);changed.UnionWith(difference);
             _mapWater=water;_mapFluidRevision=World.Fluids.Revision;
         }
-        _mapTerrain = World.Terrain; _mapRevision = World.Terrain.Revision;
-        if (!full && changed!.Count == 0) { QueueRedraw(); return; }
-        using var timing = World.Probe?.Measure(full ? "view.overview-full-refresh" : "view.overview-patch") ?? default;
-        if (full) _mapImage = Image.CreateEmpty(TerrainMap.Size, TerrainMap.Size, false, Image.Format.Rgba8);
-        void Pixel(int x, int z)
-        {
-            var g = World.Terrain[x,z];
-            var c = TerrainView.ColorOf(g) * Math.Clamp(.72f + (g.Level-TerrainMap.SeaLevel)*.025f,.5f,1.15f);
-            if (g.Tree) c = new Color("35472f");
-            if (World.Terrain.Excavated.Contains(new Cell(x,z,g.Level-1))) c = new Color("514d46");
-            if(_mapWater.Contains((x,z)))c=new Color("428fba");
-            c.A = 1; _mapImage!.SetPixel(x,z,c);
-        }
-        if (full)
-        {
-            for (int x=0;x<TerrainMap.Size;x++) for (int z=0;z<TerrainMap.Size;z++) Pixel(x,z);
-            _texture = ImageTexture.CreateFromImage(_mapImage!);
-        }
-        else
-        {
-            foreach (var (x,z) in changed!) Pixel(x,z);
-            _texture.Update(_mapImage!);
-        }
-        _mapRefreshElapsed=0;MapRefreshCount++;
-        QueueRedraw();
+        _mapRevision=World.Terrain.Revision;
+        if(changed.Count==0){QueueRedraw();return;}
+        var sample=MapSampler(World,_mapWater);
+        foreach(var (x,z) in changed)_mapImage!.SetPixel(x,z,sample(x,z));
+        _texture.Update(_mapImage!);_mapRefreshElapsed=0;MapRefreshCount++;QueueRedraw();
+    }
+    internal static void EncodeMapPixel(Color color,Span<byte> target)
+    {
+        target[0]=(byte)Math.Clamp(color.R*255f,0,255);target[1]=(byte)Math.Clamp(color.G*255f,0,255);
+        target[2]=(byte)Math.Clamp(color.B*255f,0,255);target[3]=(byte)Math.Clamp(color.A*255f,0,255);
     }
     public override void _Draw()
     {

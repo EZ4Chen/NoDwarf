@@ -88,7 +88,7 @@ public partial class Main
     private static Dictionary<Cell,float> TraceInteriorReference(DemoWorld world,IEnumerable<List<Cell>> rooms,int floor,int height,Vector3 cameraBack,float pitch)
     {
         var caps=new Dictionary<Cell,float>();var dirs=new[]{new Cell(1,0),new Cell(-1,0),new Cell(0,1),new Cell(0,-1)};
-        float ceiling=floor+height-1,reach=(ceiling-floor+.5f)/Mathf.Tan(pitch);
+        float ceiling=floor+height-1,reach=Math.Max(1.5f,(ceiling-floor+.5f)/Mathf.Tan(pitch));
         foreach(var room in rooms)
         {
             var roomCells=room.ToHashSet();

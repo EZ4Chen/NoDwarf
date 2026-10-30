@@ -3,8 +3,8 @@ public static class LifeHealth
 {
     public static IEnumerable<(string,double)> Exposures(ResidentProfile p)
     {yield return ("dehydration",p.Dehydration);yield return ("cold",p.ColdExposure);yield return ("heat",p.HeatExposure);}
-    public static bool Perishable(string item)=>item is "meal" or "raw_food" or "potato" or "mushroom" or "flour" or "wheat";
-    public static double ShelfLife(string item)=>item=="meal"?1800:item is "flour" or "wheat"?18000:6000;
+    public static bool Perishable(string item,ContentCatalog? content=null)=>(content??ContentRuntime.Current).Item(item).ShelfLife>0;
+    public static double ShelfLife(string item,ContentCatalog? content=null)=>(content??ContentRuntime.Current).Item(item).ShelfLife;
     public static bool Valid(ResidentProfile p)
     {
         static bool Range(double v,double max)=>double.IsFinite(v)&&v>=0&&v<=max;
@@ -35,21 +35,16 @@ public sealed partial class DemoWorld
         if(enabled)WaterPoints.Add(c);else WaterPoints.Remove(c);
         Revision++;return new(true,enabled?"已指定饮用水源；居民只在安全岸边取水":"已取消取水点，现有水桶仍可饮用");
     }
-    public void MigrateLifeItems()
-    {
-        foreach(var s in Items)if(LifeHealth.Perishable(s.Item)&&s.Properties.ExpiresAt is null)s.Properties=s.Properties with{ExpiresAt=_simulationTime+LifeHealth.ShelfLife(s.Item)};
-        foreach(var r in Jobs.SelectMany(j=>j.Materials))if(LifeHealth.Perishable(r.Item)&&r.Properties.ExpiresAt is null)r.Properties=r.Properties with{ExpiresAt=_simulationTime+LifeHealth.ShelfLife(r.Item)};
-    }
     private void SpoilFood()
     {
         bool Expired(ItemProperties p)=>p.ExpiresAt is double t&&t<=_simulationTime;
         // Cancel whole reservations first, returning in-transit ingredients through the normal cargo path.
         var expiredIds=Items.Where(s=>Expired(s.Properties)).Select(s=>s.Id).ToHashSet();
         foreach(var j in Jobs.Where(j=>j.Materials.Any(r=>Expired(r.Properties)||expiredIds.Contains(r.StackId))).ToArray())CancelJob(j);
-        foreach(var s in Items.Where(s=>LifeHealth.Perishable(s.Item)&&Expired(s.Properties)).ToArray())
+        foreach(var s in Items.Where(s=>LifeHealth.Perishable(s.Item,Content)&&Expired(s.Properties)).ToArray())
         {s.Item="rot";s.Properties=new();s.Slot="";Revision++;}
         foreach(var w in Workers)if(w.Person.Activity is {Kind:"food_supply" or "feed" or "eat"} a&&
-            (a.Kind=="eat"?!Inventory(w).Any(s=>s.Item=="meal"):!Items.Any(s=>s.Id==a.ItemId&&s.Item=="meal")))CancelResidentActivity(w);
+            (a.Kind=="eat"?PersonalFood(w,a.ItemId) is null:!Items.Any(s=>s.Id==a.ItemId&&CanEat(s))))CancelResidentActivity(w);
     }
     private void StepLife(double dt)
     {
@@ -73,9 +68,10 @@ public sealed partial class DemoWorld
     public void RefreshLifeAlerts()
     {
         LifeAlerts.Clear();AddWaterAlerts();var alive=Workers.Where(w=>!w.Person.Dead).ToArray();if(alive.Length==0)return;
-        int meals=Available("meal"),personal=Items.Where(s=>s.Item=="meal"&&s.Owner!="").Sum(s=>s.Count),raw=Items.Where(s=>s.Owner==""&&s.Item is "raw_food" or "wheat" or "flour" or "potato" or "mushroom").Sum(s=>s.Count);
-        double days=(meals+personal)*45d/(alive.Length*.035*600);
-        if(days<2)LifeAlerts.Add(new("food",$"口粮约 {days:F1} 天：公共 {meals}／随身 {personal}，食材 {raw}（未计收成）",2,Location:Items.FirstOrDefault(s=>s.Item=="meal")?.Cell));
+        int meals=AvailableFood(),personal=Items.Where(s=>s.Owner!=""&&CanEat(s)).Sum(s=>s.Count),raw=Items.Where(s=>s.Owner==""&&Content.Item(s.Item).Category=="food_ingredient").Sum(s=>s.Count);
+        double nutrition=Items.Where(CanEat).Sum(s=>s.Count*Content.Item(s.Item).Edible!.Nutrition);
+        double days=nutrition/(alive.Length*.035*600);
+        if(days<2)LifeAlerts.Add(new("food",$"口粮约 {days:F1} 天：公共 {meals}／随身 {personal}，食材 {raw}（未计收成）",2,Location:Items.FirstOrDefault(CanEat)?.Cell));
         if(Available("water_bucket")==0)LifeAlerts.Add(new("water","饮水不足：检查水桶、取水点及安全通路",2));
         foreach(var w in alive)
         {

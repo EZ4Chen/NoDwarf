@@ -18,14 +18,14 @@ internal static class TerrainMeshReference
             if(!extra.TryGetValue((c.X,c.Z),out var ys))extra[(c.X,c.Z)]=ys=new();
             ys.Add(c.Level);
         }
-        foreach(var c in terrain.Excavated.Concat(view.WallCaps?.Keys ?? Enumerable.Empty<Cell>()))
+        foreach(var c in terrain.Excavated.Concat(terrain.PlacedBlocks.Select(p=>p.Cell)).Concat(view.WallCaps?.Keys ?? Enumerable.Empty<Cell>()))
             foreach(var d in new[]{new Cell(0,0),new Cell(1,0),new Cell(-1,0),new Cell(0,1),new Cell(0,-1),new Cell(0,0,1),new Cell(0,0,-1)})Candidate(c+d);
             var holder=new Node3D();
             var surfaces=new Dictionary<(string,bool,bool,bool,bool,bool),SurfaceTool>();
             SurfaceTool Surface(string id,bool top,bool section=false,bool cut=false,bool rim=false,bool underground=false)
             {
                 if(surfaces.TryGetValue((id,top,section,cut,rim,underground),out var found))return found;
-                var material=BlockTextures.TerrainMaterial(id,top,terrain.Region);
+                var material=id.StartsWith("nodwarf:",StringComparison.Ordinal)?BlockTextures.TerrainMaterial(id,top,terrain.Region):new StandardMaterial3D{AlbedoColor=new Color(world.Content.Block(id).Color),Roughness=1};
                 if(section)material=Fog;
                 else if(rim){material=(StandardMaterial3D)material.Duplicate();material.AlbedoColor=new Color(.26f,.28f,.30f,1);}
                 else if(cut){material=(StandardMaterial3D)material.Duplicate();material.AlbedoColor*=new Color(.62f,.65f,.68f,1);}
@@ -54,7 +54,7 @@ internal static class TerrainMeshReference
                 foreach(int y in levels)
 
                 {
-                    if(y<TerrainMap.MinLevel||y>highest)continue;
+                    if(y<TerrainMap.MinLevel||y>TerrainMap.MaxLevel||y>highest&&y>=clip)continue;
                     var cell=new Cell(x,z,y);bool ramp=terrain.Ramp(cell);
                     float cellClip=view.CellTop(cell);
                     if(y>=cellClip||(!terrain.Solid(cell)&&!ramp))continue;
@@ -63,7 +63,7 @@ internal static class TerrainMeshReference
                     Vector3 Corner(float dx,float dz)=>Point(x+dx,ramp?Math.Min(terrain.TileHeight(x,z,dx,dz),cellClip):top,z+dz);
                     var a=Corner(-.5f,-.5f);var b=Corner(.5f,-.5f);var c=Corner(.5f,.5f);var d=Corner(-.5f,.5f);
                     var above=cell+new Cell(0,0,1);
-                    bool solidAbove=terrain.Solid(above)||terrain.Ramp(above);
+                    bool solidAbove=terrain.Solid(above)||terrain.Ramp(above)||world.Buildings.TryGetValue(above,out var aboveBuilding)&&BlockCatalog.IsWall(aboveBuilding.Kind);
                     // A camera cut also exposes the top below a hidden solid. Seal it
                     // with the existing knowledge/material policy, never the sky background.
                     bool cutAbove=solidAbove&&view.CellTop(above)<=above.Level;
@@ -84,11 +84,11 @@ internal static class TerrainMeshReference
                     }
                     foreach(var (p,q,dx,dz) in new[]{(a,b,0,-1),(b,c,1,0),(c,d,0,1),(d,a,-1,0)})
                     {
-                        if(terrain.Solid(cell+new Cell(dx,dz)) && view.CellTop(cell+new Cell(dx,dz))>=top)continue;
+                        if((terrain.Solid(cell+new Cell(dx,dz))||world.Buildings.TryGetValue(cell+new Cell(dx,dz),out var sideBuilding)&&BlockCatalog.IsWall(sideBuilding.Kind)) && view.CellTop(cell+new Cell(dx,dz))>=top)continue;
                         if(p.Y<=y&&q.Y<=y)continue;
                         BlockTextures.Quad(Surface(id,false,fog,rim:rim,underground:underground),p,q,new(q.X,y,q.Z),new(p.X,y,p.Z),1,top-y);
                     }
-                    if(y>TerrainMap.MinLevel&&!terrain.Solid(cell+new Cell(0,0,-1)))
+                    if(y>TerrainMap.MinLevel&&!terrain.Solid(cell+new Cell(0,0,-1))&&!(world.Buildings.TryGetValue(cell+new Cell(0,0,-1),out var belowBuilding)&&BlockCatalog.IsWall(belowBuilding.Kind)&&view.CellTop(cell+new Cell(0,0,-1))>=y))
                         BlockTextures.Quad(Surface(id,false,fog,rim:rim,underground:underground),Point(x-.5f,y,z+.5f),Point(x-.5f,y,z-.5f),Point(x+.5f,y,z-.5f),Point(x+.5f,y,z+.5f));
                 }
             }

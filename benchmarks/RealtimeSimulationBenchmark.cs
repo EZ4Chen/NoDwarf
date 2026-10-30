@@ -10,20 +10,20 @@ internal static class RealtimeSimulationBenchmark
         try
         {
         var scenario = new RealtimeStressScenario();
-        for (int i = 0; i < 150; i++)
-        { scenario.BeforeTick(i); scenario.World.Update(1d / 30); if (i % 30 == 0) scenario.Sample(); }
+        for (int i = 0; i < 5*SimulationClock.BaseTicksPerSecond; i++)
+        { scenario.BeforeTick(i); scenario.World.Update(SimulationClock.TickSeconds); if (i % SimulationClock.BaseTicksPerSecond == 0) scenario.Sample(); }
         if (profile) scenario.World.Probe = new PerformanceProbe();
         long allocatedStart=GC.GetTotalAllocatedBytes(true);
         var gcStart=Enumerable.Range(0,3).Select(GC.CollectionCount).ToArray();
         var times = new List<double>();
         DiagnosticTrace.Mark("measurement","start");
-        for (int i = 150; i < 1950; i++)
+        for (int i = 5*SimulationClock.BaseTicksPerSecond; i < 65*SimulationClock.BaseTicksPerSecond; i++)
         {
             using var trace=DiagnosticTrace.Span("simulation.tick");
             long start = Stopwatch.GetTimestamp();
-            scenario.BeforeTick(i); scenario.World.Update(1d / 30);
+            scenario.BeforeTick(i); scenario.World.Update(SimulationClock.TickSeconds);
             times.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
-            if (i % 30 == 0) scenario.Sample();
+            if (i % SimulationClock.BaseTicksPerSecond == 0) scenario.Sample();
         }
         DiagnosticTrace.Mark("measurement","end");
         long allocatedBytes=GC.GetTotalAllocatedBytes(true)-allocatedStart;
@@ -32,9 +32,9 @@ internal static class RealtimeSimulationBenchmark
         var sorted = times.Order().ToArray();
         double Quantile(double q) => sorted[(int)Math.Ceiling(sorted.Length * q) - 1];
         var result = new { mode = "simulation-only, no frame pacing or scene synchronization", residents = 100,
-            mapSize = DemoWorld.Width, ticks = times.Count, gameSeconds = times.Count / 30d, allocatedBytes, collections, stateHash,
+            mapSize = DemoWorld.Width, ticks = times.Count, gameSeconds = times.Count / (double)SimulationClock.BaseTicksPerSecond, allocatedBytes, collections, stateHash,
             totalComputeSeconds = times.Sum() / 1000, meanTickMs = times.Average(), p50 = Quantile(.5), p95 = Quantile(.95), p99 = Quantile(.99), max = times.Max(),
-            ticksOver33ms = times.Count(v => v > 1000d / 30), ticksOver11ms = times.Count(v => v > 1000d / 90),
+            ticksOverBaseBudget = times.Count(v => v > 1000d / SimulationClock.BaseTicksPerSecond), ticksOver3xBudget = times.Count(v => v > 1000d / (3*SimulationClock.BaseTicksPerSecond)),
             scenario.GateChanges, scenario.CompletedConstruction, scenario.LevelTransitions, profiling = scenario.World.Probe?.Report(),
             averageBusy = scenario.BusyResidentSum / scenario.Samples, averageMoving = scenario.MovingResidentSum / scenario.Samples };
         Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));

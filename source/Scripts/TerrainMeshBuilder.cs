@@ -15,7 +15,7 @@ internal sealed class TerrainMeshSnapshot
     public TerrainMeshSnapshot(TerrainMap terrain,WorldView view,HashSet<Cell> walls)
     {
         Terrain=terrain;View=view;Walls=walls;
-        foreach(var c in terrain.Excavated.Concat(terrain.Caverns.Where(c=>view.RevealAll||terrain.KnownAir(c))).Concat(view.WallCaps?.Keys??Enumerable.Empty<Cell>()))
+        foreach(var c in terrain.Excavated.Concat(terrain.PlacedBlocks.Select(p=>p.Cell)).Concat(terrain.Caverns.Where(c=>view.RevealAll||terrain.KnownAir(c))).Concat(view.WallCaps?.Keys??Enumerable.Empty<Cell>()))
             foreach(var d in Offsets)
             {
                 var p=c+d;if(!DemoWorld.Inside(p))continue;
@@ -80,7 +80,7 @@ internal static class TerrainMeshBuilder
                 foreach(int y in levels)
 
                 {
-                    if(y<TerrainMap.MinLevel||y>highest)continue;
+                    if(y<TerrainMap.MinLevel||y>TerrainMap.MaxLevel||y>highest&&y>=clip)continue;
                     var cell=new Cell(x,z,y);bool ramp=terrain.Ramp(cell);
                     float cellClip=view.CellTop(cell);
                     if(y>=cellClip||(!terrain.Solid(cell)&&!ramp))continue;
@@ -89,7 +89,7 @@ internal static class TerrainMeshBuilder
                     Vector3 Corner(float dx,float dz)=>Point(x+dx,ramp?Math.Min(terrain.TileHeight(x,z,dx,dz),cellClip):top,z+dz);
                     var a=Corner(-.5f,-.5f);var b=Corner(.5f,-.5f);var c=Corner(.5f,.5f);var d=Corner(-.5f,.5f);
                     var above=cell+new Cell(0,0,1);
-                    bool solidAbove=terrain.Solid(above)||terrain.Ramp(above);
+                    bool solidAbove=terrain.Solid(above)||terrain.Ramp(above)||snapshot.Walls.Contains(above);
                     // A camera cut also exposes the top below a hidden solid. Seal it
                     // with the existing knowledge/material policy, never the sky background.
                     bool cutAbove=solidAbove&&view.CellTop(above)<=above.Level;
@@ -120,11 +120,11 @@ internal static class TerrainMeshBuilder
                     }
                     foreach(var (p,q,dx,dz) in new[]{(a,b,0,-1),(b,c,1,0),(c,d,0,1),(d,a,-1,0)})
                     {
-                        if(terrain.Solid(cell+new Cell(dx,dz)) && view.CellTop(cell+new Cell(dx,dz))>=top)continue;
+                        if((terrain.Solid(cell+new Cell(dx,dz))||snapshot.Walls.Contains(cell+new Cell(dx,dz))) && view.CellTop(cell+new Cell(dx,dz))>=top)continue;
                         if(p.Y<=y&&q.Y<=y)continue;
                         Quad(Surface(id,false,fog,rim:rim,underground:underground),p,q,new(q.X,y,q.Z),new(p.X,y,p.Z),1,top-y);
                     }
-                    if(y>TerrainMap.MinLevel&&!terrain.Solid(cell+new Cell(0,0,-1)))
+                    if(y>TerrainMap.MinLevel&&!terrain.Solid(cell+new Cell(0,0,-1))&&!(snapshot.Walls.Contains(cell+new Cell(0,0,-1))&&view.CellTop(cell+new Cell(0,0,-1))>=y))
                         Quad(Surface(id,false,fog,rim:rim,underground:underground),Point(x-.5f,y,z+.5f),Point(x-.5f,y,z-.5f),Point(x+.5f,y,z-.5f),Point(x+.5f,y,z+.5f));
                 }
             }

@@ -17,7 +17,7 @@ public partial class TerrainView
         if(!all&&_coverRevision==world.Terrain.Revision&&_coverWorldRevision==world.Revision)
         {if(_coverTop!=view.Top)UpdateCoverClip(view.Top);return;}
         if(_coverWorld!=world){foreach(var n in _coverChunks.Values)if(IsInstanceValid(n)){n.GetParent()?.RemoveChild(n);n.QueueFree();}_coverChunks.Clear();_coverCounts.Clear();_coverMeshes.Clear();_coverSlices.Clear();}
-        var occupied=world.Buildings.Keys.Concat(world.Farms.Keys).Concat(world.Stockpiles).ToHashSet();
+        var occupied=world.Buildings.Keys.Concat(world.Farms.Keys).Concat(world.Plants.Keys).Concat(world.Stockpiles).ToHashSet();
         var dirty=new HashSet<(int,int)>();
         void Dirty(Cell c){if(DemoWorld.Inside(c))dirty.Add((c.X/32*32,c.Z/32*32));}
         if(all)for(int x=0;x<TerrainMap.Size;x+=32)for(int z=0;z<TerrainMap.Size;z+=32)dirty.Add((x,z));
@@ -30,7 +30,7 @@ public partial class TerrainView
         {
             if(_coverChunks.Remove(key,out var old)&&IsInstanceValid(old)){RemoveChild(old);old.QueueFree();}
             _coverCounts[key]=0;_coverSlices[key]=new();
-            if(world.Terrain.Region?.Modern!=true)continue;
+            if(world.Terrain.Region is null)continue;
             var groups=new Dictionary<string,List<Transform3D>>();
             for(int x=key.Item1;x<Math.Min(key.Item1+32,TerrainMap.Size);x++)for(int z=key.Item2;z<Math.Min(key.Item2+32,TerrainMap.Size);z++)
             {

@@ -10,11 +10,26 @@ public partial class DirectionalDwarfView : Node3D
     public const string Root="res://Assets/Characters/FlatPawn/";
     private const string HeldRoot="res://Assets/Characters/Sprites4/";
     private static readonly Dictionary<string,Texture2D> Textures=new();
-    private static readonly Dictionary<string,ImageTexture> Wardrobes=new();
-    private static readonly Dictionary<string,ImageTexture> Hands=new();
+    [Flags] private enum Clothes {None=0,Shirt=1,Trousers=2,Armor=4,Helmet=8,Cap=16}
+    private readonly record struct WardrobeKey(CharacterAppearance Appearance,int Direction,Clothes Worn);
+    private readonly record struct PreviewKey(WardrobeKey Body,bool Mirrored);
+    // Source appearances are immutable. Weak ownership keeps old editor drafts and
+    // unloaded worlds collectable; each live appearance resolves a variant only once.
+    private sealed class VisualVariants(CharacterAppearance source)
+    {
+        public readonly CharacterAppearance Appearance=source.Normalize();
+        public readonly Dictionary<(int Direction,Clothes Worn),WardrobeKey> Keys=new();
+    }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CharacterAppearance,VisualVariants> VisualKeys=new();
+    private static readonly NoDwarf.Collections.ByteBudgetCache<WardrobeKey,ImageTexture> Wardrobes=PawnTextureCache.Create<WardrobeKey>("performance/cache/pawn_body_mib",128);
+    private static readonly NoDwarf.Collections.ByteBudgetCache<string,ImageTexture> Hands=PawnTextureCache.Create<string>("performance/cache/pawn_hands_mib",8);
+    private static readonly NoDwarf.Collections.ByteBudgetCache<PreviewKey,ImageTexture> Previews=PawnTextureCache.Create<PreviewKey>("performance/cache/pawn_portraits_mib",128,shared:true);
+    private WardrobeKey? _bodyKey;
+    private readonly Dictionary<string,string> _palmKeys=new();
     private readonly Dictionary<string,Node3D> _hands=new();
     private readonly Dictionary<string,string> _equipment=new();
     private CharacterAppearance _appearance=new();
+    private CharacterAppearance? _sourceAppearance;
     private Node3D _paper=null!;
     private Sprite3D _body=null!;
     private Vector3 _facing=Vector3.Back;
@@ -42,7 +57,10 @@ public partial class DirectionalDwarfView : Node3D
         Refresh();
     }
     public void SetAppearance(CharacterAppearance appearance)
-    {var a=appearance.Normalize();if(a==_appearance)return;_appearance=a;Refresh();}
+    {
+        if(appearance==_sourceAppearance)return;
+        _sourceAppearance=appearance;var a=appearance.Normalize();if(a==_appearance)return;_appearance=a;Refresh();
+    }
     public void SetEquipment(IEnumerable<ItemStack> items)
     {
         var next=items.Where(i=>i.Slot!="").GroupBy(i=>i.Slot).ToDictionary(g=>g.Key,g=>g.Last().Item);
@@ -51,22 +69,37 @@ public partial class DirectionalDwarfView : Node3D
     }
     private void Refresh()
     {
-        if(_paper is null)return;
+        if(_paper is null||!IsInsideTree())return;
         int d=Math.Max(0,_direction),frame=d==3?1:d;bool flip=d==3;
-        _body.Texture=Composite(_appearance,_equipment.Values,frame);_body.FlipH=flip;
+        var bodyKey=VisualKey(_appearance,_equipment.Values,frame);
+        if(_bodyKey!=bodyKey)
+        {
+            _body.Texture=AcquireBody(bodyKey);
+            var oldBodyKey=_bodyKey;_bodyKey=bodyKey;if(oldBodyKey is {} old)Wardrobes.Release(old);
+        }
+        _body.FlipH=flip;
         foreach(var slot in _hands.Keys)
         {
             bool main=slot=="main";var hand=_hands[slot];var palm=hand.GetNode<Sprite3D>("Palm");
-            palm.Texture=Atlas($"hand-{(Wears("gloves")?"glove":"bare")}-{frame}");
             if(!Wears("gloves"))
             {
-                string key=$"{frame}|{_appearance.Skin}";
-                if(!Hands.TryGetValue(key,out var handTexture))
+                string key=$"{frame}|{PawnColors.Skin(_appearance.Skin).ToHtml(false)}";
+                if(_palmKeys.GetValueOrDefault(slot)!=key)
                 {
-                    handTexture=ImageTexture.CreateFromImage(PawnColors.Recolor(palm.Texture.GetImage(),PawnColors.Skin(_appearance.Skin),"skin"));
-                    if(Hands.Count>=48)Hands.Clear();Hands[key]=handTexture;
+                    palm.Texture=Hands.Acquire(key,()=>
+                    {
+                        using var pixels=Atlas($"hand-bare-{frame}").GetImage();
+                        using var recolored=PawnColors.Recolor(pixels,PawnColors.Skin(_appearance.Skin),"skin");
+                        return (ImageTexture.CreateFromImage(recolored),PawnTextureCache.RgbaBytes(recolored));
+                    });
+                    if(_palmKeys.Remove(slot,out var oldKey))Hands.Release(oldKey);
+                    _palmKeys[slot]=key;
                 }
-                palm.Texture=handTexture;
+            }
+            else
+            {
+                palm.Texture=Atlas($"hand-glove-{frame}");
+                if(_palmKeys.Remove(slot,out var oldKey))Hands.Release(oldKey);
             }
             palm.PixelSize=(Wears("gloves")?48:42)*Pixel/palm.Texture.GetHeight();
             // Front right hand is screen-left; rear reverses the anatomical ordering.
@@ -79,6 +112,13 @@ public partial class DirectionalDwarfView : Node3D
             {float height=item=="shield"?.55f:item=="sword"?.85f:item=="pickaxe"?360*Pixel:.72f;held.PixelSize=height/tex.GetHeight();held.Position=new(0,item=="shield"?0:height*.32f,0);}
         }
         Tint(_tint);
+    }
+    public override void _EnterTree(){if(_paper is not null)Refresh();}
+    public override void _ExitTree()
+    {
+        if(_bodyKey is {} key){_body.Texture=null;Wardrobes.Release(key);_bodyKey=null;}
+        foreach(var pair in _palmKeys){_hands[pair.Key].GetNode<Sprite3D>("Palm").Texture=null;Hands.Release(pair.Value);}
+        _palmKeys.Clear();
     }
     public void Tint(Color color)
     {
@@ -143,38 +183,99 @@ public partial class DirectionalDwarfView : Node3D
     private static string Body(CharacterAppearance a)=>a.Normalize().Body;
     private static string Head(CharacterAppearance a)=>a.Face switch{"square"=>"square","oval"=>"lean",_=>"round"};
     private static string Hair(CharacterAppearance a)=>a.Hair switch{"bald"=>"none","braid"=>"braids","bob"=>"waves","sweep"=>"swept",_=>a.Hair};
-    private static ImageTexture Composite(CharacterAppearance a,IEnumerable<string> items,int d)
+    private static WardrobeKey VisualKey(CharacterAppearance appearance,IEnumerable<string> items,int direction)
     {
-        var worn=items.ToHashSet();string key=$"{a}|{d}|"+string.Join(';',worn.Where(n=>n is "shirt" or "trousers" or "armor" or "helmet" or "cap").OrderBy(n=>n));
-        if(Wardrobes.TryGetValue(key,out var cache))return cache;
-        var image=Image.CreateEmpty(200,280,false,Image.Format.Rgba8);
+        if(direction is <0 or >3)throw new ArgumentOutOfRangeException(nameof(direction));
+        int d=direction==3?1:direction;var variants=VisualKeys.GetValue(appearance,static a=>new(a));var a=variants.Appearance;
+        Clothes worn=Clothes.None;
+        foreach(var item in items)worn|=item switch {"shirt"=>Clothes.Shirt,"trousers"=>Clothes.Trousers,"armor"=>Clothes.Armor,"helmet"=>Clothes.Helmet,"cap"=>Clothes.Cap,_=>Clothes.None};
+        bool armor=(worn&Clothes.Armor)!=0,shirt=(worn&Clothes.Shirt)!=0;
+        if(armor)worn&=~(Clothes.Shirt|Clothes.Trousers);
+        else if(shirt)worn&=~Clothes.Trousers;
+        if((worn&Clothes.Helmet)!=0)worn&=~Clothes.Cap;
+        if(variants.Keys.TryGetValue((d,worn),out var cached))return cached;
+        bool hair=a.Hair!="bald"&&(worn&(Clothes.Helmet|Clothes.Cap))==0;
+        bool beard=a.Beard!="none"&&d!=2;
+        // Keep only inputs that Compose actually draws. Hidden choices stay in
+        // _appearance/the save, and become visible when the occluding gear is removed.
+        a=a with
+        {
+            Cloth="sage",BodySex=!armor&&!shirt&&a.Body!="female"?a.BodySex:"male",
+            Outfit=!armor&&shirt&&a.Outfit=="apron"?"apron":"tunic",
+            Skin="#"+PawnColors.Skin(a.Skin).ToHtml(false),
+            Hair=hair?a.Hair:"bald",HairColor=hair?"#"+PawnColors.Hair(a.HairColor).ToHtml(false):"chestnut",
+            Beard=beard?a.Beard:"none",BeardColor=beard?"#"+PawnColors.Hair(a.BeardColor).ToHtml(false):"silver"
+        };
+        var key=new WardrobeKey(a,d,worn);variants.Keys.Add((d,worn),key);return key;
+    }
+    private static ImageTexture AcquireBody(WardrobeKey key)=>Wardrobes.TryAcquire(key,out var texture)?texture:CreateComposite(key);
+    private static ImageTexture Composite(CharacterAppearance a,IEnumerable<string> items,int d,out WardrobeKey key)
+    {key=VisualKey(a,items,d);return AcquireBody(key);}
+    private static ImageTexture CreateComposite(WardrobeKey key)=>Wardrobes.Acquire(key,()=>Compose(key.Appearance,key.Worn,key.Direction));
+    private static (ImageTexture,long) Compose(CharacterAppearance a,Clothes worn,int d)
+    {
+        bool Wears(Clothes garment)=>(worn&garment)!=0;
+        using var image=Image.CreateEmpty(200,280,false,Image.Format.Rgba8);
         void Layer(string name,Color? tint=null,string material="hair")
         {
-            var src=Atlas(name).GetImage().GetRegion(new Rect2I(d*200,0,200,280));src.Convert(Image.Format.Rgba8);
-            if(tint is {} c)src=PawnColors.Recolor(src,c,material);
-            image.BlendRect(src,new Rect2I(0,0,200,280),Vector2I.Zero);
+            using var atlas=Atlas(name).GetImage();
+            using var src=atlas.GetRegion(new Rect2I(d*200,0,200,280));src.Convert(Image.Format.Rgba8);
+            if(tint is {} c){using var recolored=PawnColors.Recolor(src,c,material);image.BlendRect(recolored,new Rect2I(0,0,200,280),Vector2I.Zero);}
+            else image.BlendRect(src,new Rect2I(0,0,200,280),Vector2I.Zero);
         }
         string body=Body(a);
         // These opaque garments replace the torso surface. Drawing a differently
         // shaped naked base underneath would leave a skin fringe at its edges.
-        if(worn.Contains("armor"))Layer("armor-"+body);
-        else if(worn.Contains("shirt"))Layer((a.Outfit=="apron"?"apron-":"work-")+body);
+        if(Wears(Clothes.Armor))Layer("armor-"+body);
+        else if(Wears(Clothes.Shirt))Layer((a.Outfit=="apron"?"apron-":"work-")+body);
         else
         {
             Layer("body-"+body,PawnColors.Skin(a.Skin),"skin");
             if(a.BodySex=="female"&&body!="female")Layer("underwear-"+body);
-            if(worn.Contains("trousers"))Layer("trousers-"+body);
+            if(Wears(Clothes.Trousers))Layer("trousers-"+body);
         }
         Layer("head-"+Head(a),PawnColors.Skin(a.Skin),"skin");
-        if(Hair(a)!="none"&&!worn.Contains("helmet")&&!worn.Contains("cap"))
+        if(Hair(a)!="none"&&!Wears(Clothes.Helmet)&&!Wears(Clothes.Cap))
         {
             Layer("roots-"+Head(a),PawnColors.Hair(a.HairColor));
             Layer("hair-"+Hair(a),PawnColors.Hair(a.HairColor));
         }
         if(a.Beard!="none"&&d!=2)Layer("beard-"+(a.Beard=="full"?"full":"short"),PawnColors.Hair(a.BeardColor),"beard");
-        if(worn.Contains("helmet"))Layer("helmet");else if(worn.Contains("cap"))Layer("cap");
+        if(Wears(Clothes.Helmet))Layer("helmet");else if(Wears(Clothes.Cap))Layer("cap");
         image.GenerateMipmaps();var result=ImageTexture.CreateFromImage(image);
-        if(Wardrobes.Count>=48)Wardrobes.Clear();Wardrobes[key]=result;return result;
+        return (result,PawnTextureCache.RgbaBytes(image));
+    }
+    internal static ulong CompositeIdentity(CharacterAppearance a,IEnumerable<string> items,int direction)
+    {
+        var texture=Composite(a,items,direction,out var key);
+        try{return texture.GetInstanceId();}finally{Wardrobes.Release(key);}
+    }
+    internal static object CacheStatistics=>new {bodyEntries=Wardrobes.Count,bodyBytes=Wardrobes.Bytes,bodyBudget=Wardrobes.Budget,pinnedBodyBytes=Wardrobes.PinnedBytes,hits=Wardrobes.Hits,misses=Wardrobes.Misses,evictions=Wardrobes.Evictions,handBytes=Hands.Bytes,portraitEntries=Previews.Count,portraitBytes=Previews.Bytes,portraitHits=Previews.Hits,portraitMisses=Previews.Misses,portraitEvictions=Previews.Evictions};
+    internal static void CheckPinnedTextures(Node parent)
+    {
+        long bodyBudget=Wardrobes.Budget,handBudget=Hands.Budget;
+        long pinnedBody=Wardrobes.PinnedBytes,pinnedHands=Hands.PinnedBytes;var views=new List<DirectionalDwarfView>();
+        try
+        {
+            Wardrobes.Budget=0;Hands.Budget=0;
+            for(int i=0;i<8;i++)
+            {
+                var view=new DirectionalDwarfView();parent.AddChild(view);view.Initialize();views.Add(view);
+                view.SetAppearance(new CharacterAppearance{Skin=$"#80{90+i:x2}60"});
+            }
+            foreach(var view in views)
+            {
+                using var image=view._body.Texture.GetImage();
+                if(image.GetWidth()!=200)throw new Exception("Pinned body texture lost under pressure");
+                foreach(var hand in view._hands.Values)
+                    if(hand.GetNode<Sprite3D>("Palm").Texture.GetWidth()==0)throw new Exception("Pinned palm texture lost under pressure");
+                view.SetEquipment([new ItemStack{Item="gloves",Slot="hands",Count=1}]);
+                view.SetEquipment([]);
+            }
+            foreach(var view in views){parent.RemoveChild(view);parent.AddChild(view);}
+        }
+        finally{foreach(var view in views)view.Free();Wardrobes.Budget=bodyBudget;Hands.Budget=handBudget;}
+        if(Wardrobes.PinnedBytes!=pinnedBody||Hands.PinnedBytes!=pinnedHands)throw new Exception("Removed pawn views retained cache leases");
     }
     public static ImageTexture Portrait(CharacterAppearance appearance,IEnumerable<ItemStack> items)
     {
@@ -182,7 +283,17 @@ public partial class DirectionalDwarfView : Node3D
     }
     public static ImageTexture Preview(CharacterAppearance appearance,IEnumerable<ItemStack> items,int direction)
     {
-        var image=Composite(appearance.Normalize(),items.Where(i=>i.Slot!="").Select(i=>i.Item),direction==3?1:direction).GetImage();
-        image.ClearMipmaps();if(direction==3)image.FlipX();return ImageTexture.CreateFromImage(image);
+        var key=new PreviewKey(VisualKey(appearance,items.Where(i=>i.Slot!="").Select(i=>i.Item),direction),direction==3);
+        var result=Previews.Acquire(key,()=>
+        {
+            var body=AcquireBody(key.Body);
+            try
+            {
+                using var image=body.GetImage();image.ClearMipmaps();if(key.Mirrored)image.FlipX();
+                return (ImageTexture.CreateFromImage(image),PawnTextureCache.RgbaBytes(image));
+            }
+            finally{Wardrobes.Release(key.Body);}
+        });
+        Previews.Release(key);return result;
     }
 }

@@ -46,12 +46,8 @@ public static class HealthConditionChecks
         w.ActResident(new(medic.Id,"treat",patient.Id));loaded=DemoWorld.LoadJson(w.SaveJson());
         Check(loaded.Available("bandage")==0,"disease supply reservation restored");loaded.ActResident(new(medic.Id,"cancel"));Check(loaded.Available("bandage")==1,"cancel releases supply");
         Advance(w,40);Check(w.Total("bandage")==0&&patient.Person.Diseases[0].Treatment.Remaining>0,"delivery completes");
-        var legacy=JsonNode.Parse(w.SaveJson())!;legacy["Version"]=19;var person=legacy["Workers"]![0]!["Person"]!;
-        person["Injuries"]=new JsonArray(new JsonObject{["Part"]="left_arm",["Kind"]="cut",["Severity"]=15,["Treated"]=true});
-        foreach(var d in person["Diseases"]!.AsArray())d!.AsObject().Remove("Treatment");
-        loaded=DemoWorld.LoadJson(legacy.ToJsonString());Check(loaded.Workers[0].Person.Injuries[0].Treatment.Remaining==600&&loaded.Workers[0].Person.Diseases[0].Treatment.Remaining==0,"legacy dressing migration only");
         var invalid=JsonNode.Parse(w.SaveJson())!;invalid["Workers"]![0]!["Person"]!["Diseases"]![0]!["Treatment"]!["Remaining"]=-1;
         bool rejected=false;try{DemoWorld.LoadJson(invalid.ToJsonString());}catch(InvalidDataException){rejected=true;}Check(rejected,"invalid treatment archive rejected");
-        Console.WriteLine("HEALTH_CONDITIONS_OK: unified definitions/views, distinct abilities, quality/expiry, immune independence, supply/cancel/renewal, save and migration");
+        Console.WriteLine("HEALTH_CONDITIONS_OK: unified definitions/views, distinct abilities, quality/expiry, immune independence, supply/cancel/renewal, save roundtrip");
     }
 }

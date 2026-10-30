@@ -21,23 +21,23 @@ public partial class Main
             _architectCategories.MoveChild(_categoryRows[key],index++);
         foreach(var (key,button) in _categoryPins)UiAccess.Name(button,(_pinnedCategories.Contains(key)?"取消置顶":"置顶")+key+"分类");
     }
-    private static MintEntry ArchitectEntry(string id,string label,string category,string help)
+    private MintEntry ArchitectEntry(string id,string label,string category,string help)
     {
         var materials=new List<string>();var tags=new List<string>{help,id};
-        if(Enum.TryParse<BuildKind>(id,out var kind))
+        if(TryBuildTool(id,out var kind))
         {
-            var definition=BlockCatalog.Get(kind);tags.Add(definition.Id);
+            var definition=_world.Content.Block(ToolDefinition(id)!.Block);tags.Add(ToolDefinition(id)!.Id);tags.AddRange(ToolDefinition(id)!.Info.Tags);materials.AddRange(ToolDefinition(id)!.Cost.Keys.Select(k=>_world.Content.Item(k).Name));
             if(definition.Cost.Stone>0)materials.Add("石料 石材 stone");
             if(definition.Cost.Wood>0)materials.Add("木料 木材 wood");
             if(definition.Cost.Iron>0)materials.Add("铁锭 金属 iron metal");
         }
         return new(id,label,category,"NoDwarf",materials,tags);
     }
-    private static double? ArchitectStat(string id,int mode)
+    private double? ArchitectStat(string id,int mode)
     {
-        if(!Enum.TryParse<BuildKind>(id,out var kind))return null;
-        var definition=BlockCatalog.Get(kind);
-        return mode is 2 or 3?definition.Durability:definition.Cost.Stone+definition.Cost.Wood+definition.Cost.Iron;
+        if(!TryBuildTool(id,out var kind))return null;
+        var definition=_world.Content.Block(ToolDefinition(id)!.Block);
+        return mode is 2 or 3?definition.Durability:ToolDefinition(id)!.Cost.Values.Sum();
     }
     private void SortArchitectResults()
     {
@@ -66,13 +66,13 @@ public partial class Main
         }
         _architectEmpty.Visible=!_architectEntries.Any(e=>e.Button.Visible);
     }
-    private static MintEntry RecipeEntry(ProcessingRecipe recipe)
+    private MintEntry RecipeEntry(ProcessingRecipe recipe)
     {
-        var tags=new List<string>{recipe.Id,ItemCatalog.Get(recipe.Output).Name,DemoWorld.NameOf(recipe.Station)};
+        var tags=new List<string>{recipe.Id,_world.Content.Item(recipe.Output).Name,DemoWorld.NameOf(recipe.Station)};
         string slot=ResidentGear.Get(recipe.Output)?.Slot??"";
         if(slot!="")tags.Add(slot);
         if(slot=="main")tags.Add("近战 melee 武器");
         if(slot is "body" or "legs" or "feet" or "head")tags.Add("衣物 apparel");
-        return new(recipe.Id,recipe.Name,RecipeCategory(recipe),"NoDwarf",recipe.Inputs.Keys.Select(k=>ItemCatalog.Get(k).Name).ToArray(),tags);
+        return new(recipe.Id,recipe.Name,RecipeCategory(recipe),"NoDwarf",recipe.Inputs.Keys.Select(k=>_world.Content.Item(k).Name).ToArray(),tags);
     }
 }

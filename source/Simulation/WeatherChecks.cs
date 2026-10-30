@@ -11,7 +11,7 @@ public static class WeatherChecks
             var c=world.Surface(world.Camp.X+x,world.Camp.Z+z);
             if(world.SetFarm(c,c,"grain"))return world.Farms[c];
         }
-        throw new InvalidOperationException($"Weather test setup: no plantable outdoor cell within 6 tiles of camp; seed={world.Terrain.Seed}, region={world.Terrain.Region?.Id??"legacy"}, camp={world.Camp}");
+        throw new InvalidOperationException($"Weather test setup: no plantable outdoor cell within 6 tiles of camp; seed={world.Terrain.Seed}, region={world.Terrain.Region?.Id??"basic"}, camp={world.Camp}");
     }
     private static void CheckRainOnPlot(DemoWorld world,FarmPlot plot)
     {
@@ -23,7 +23,7 @@ public static class WeatherChecks
     }
     public static void Run()
     {
-        CalendarDate Date(int day,int hour=12,double lat=45)=>new(day*1440L+hour*60,lat,true);
+        CalendarDate Date(int day,int hour=12,double lat=45)=>new(day*1440L+hour*60,lat);
         Check(Math.Abs(Date(0,0).DaylightHours-12)<.001,"Equinox twelve hour day");
         Check(Date(30).DaylightHours>Date(90).DaylightHours&&Date(30,12,-45).DaylightHours<Date(90,12,-45).DaylightHours,"Hemisphere day lengths reversed");
         Check(Date(30,12,-45).SeasonIndex==3&&Date(90,12,-45).SeasonIndex==1,"Southern local seasons");
@@ -41,9 +41,7 @@ public static class WeatherChecks
         }
         Check(wet>dry*3&&seen.Count==4,"Humidity influences rain and all weather occurs");
         var atlas=new WorldGenerationSettings().WithRecommendedSite();
-        var selected=new DemoWorld(atlas.LocalSeed,region:atlas.Site.Region,generation:atlas);Check(selected.ClimateVersion==1&&selected.Calendar.Astronomical,"Atlas start enables weather and astronomy");
-        var old=System.Text.Json.Nodes.JsonNode.Parse(selected.SaveJson())!;old["Version"]=10;old.AsObject().Remove("ClimateVersion");old.AsObject().Remove("WeatherOverride");
-        Check(DemoWorld.LoadJson(old.ToJsonString()).ClimateVersion==1,"Old regional saves adopt climate without regenerating terrain");
+        var selected=new DemoWorld(atlas.LocalSeed,region:atlas.Site.Region,generation:atlas);Check(selected.ClimateVersion==1&&selected.Calendar.Latitude==selected.Latitude,"Atlas start enables weather and astronomy");
         var world=new DemoWorld();world.DeveloperResidents(false);world.SetWeather("clear");world.Update(100);
         var farm=CreateWeatherPlot(world);CheckRainOnPlot(world,farm);
         var loaded=DemoWorld.LoadJson(world.SaveJson());Check(loaded.Weather==world.Weather&&loaded.Calendar==world.Calendar,"Weather override and solar clock saved");

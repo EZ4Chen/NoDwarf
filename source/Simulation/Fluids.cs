@@ -215,7 +215,7 @@ public sealed class FluidSimulation
     public FluidArchive Save(IEnumerable<Cell> gates)=>new(){Cells=_cells.Values.ToArray(),Sources=Sources.ToArray(),OpenGates=gates.ToArray(),Active=_active.ToArray(),Elapsed=Elapsed,Added=Added,Removed=Removed,Initial=Initial,Recharged=Recharged,Step=Step,RiverIn=RiverIn,RiverOut=RiverOut};
     public void Restore(FluidArchive s)
     {
-        if(s.Version is not (1 or 2)||s.RiverIn<0||s.RiverOut<0||s.RiverIn>s.Added||s.RiverOut>s.Removed||s.Cells is null||s.Sources is null||s.Active is null||s.Cells.Length>MaxCells||s.Sources.Length>128||s.Active.Length>MaxCells*7||!double.IsFinite(s.Elapsed)||s.Elapsed<0||s.Elapsed>86400||s.Added<0||s.Removed<0||s.Initial<0||s.Recharged<0||s.Step<0)throw new InvalidDataException("流体存档无效。");
+        if(s.Version!=2||s.RiverIn<0||s.RiverOut<0||s.RiverIn>s.Added||s.RiverOut>s.Removed||s.Cells is null||s.Sources is null||s.Active is null||s.Cells.Length>MaxCells||s.Sources.Length>128||s.Active.Length>MaxCells*7||!double.IsFinite(s.Elapsed)||s.Elapsed<0||s.Elapsed>86400||s.Added<0||s.Removed<0||s.Initial<0||s.Recharged<0||s.Step<0)throw new InvalidDataException("流体存档无效。");
         _cells.Clear();Sources.Clear();_active.Clear();_queued.Clear();
         foreach(var f in s.Cells)
         {

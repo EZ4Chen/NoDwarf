@@ -2,7 +2,7 @@ namespace NoDwarf.Simulation;
 public static class CombatChecks
 {
     private static void Check(bool ok,string why){if(!ok)throw new InvalidOperationException("COMBAT: "+why);}
-    private static void Advance(DemoWorld w,double seconds){for(int i=0;i<(int)(seconds*30);i++)w.Update(1d/30);}
+    private static void Advance(DemoWorld w,double seconds){for(int i=0;i<(int)(seconds*SimulationClock.BaseTicksPerSecond);i++)w.Update(SimulationClock.TickSeconds);}
     public static DemoWorld Fixture()
     {
         var w=new DemoWorld(flat:true);w.Workers.Clear();w.Items.Clear();w.Stockpiles.Clear();w.Jobs.Clear();
@@ -51,10 +51,10 @@ public static class CombatChecks
     private static void ClockAndBlockedChecks()
     {
         var w=Fixture();var e=Enemy(w,new(61,60));w.DraftResident("guard",true);
-        var clock=new SimulationClock{Paused=true};for(int i=0;i<clock.Advance(2);i++)w.Update(1d/30);
+        var clock=new SimulationClock{Paused=true};for(int i=0;i<clock.Advance(2);i++)w.Update(SimulationClock.TickSeconds);
         Check(w.SimulationTime==0&&e.Person.Injuries.Count==0,"paused clock does not hit");
-        clock.Paused=false;clock.SetSpeed(3);int ticks=clock.Advance(1);for(int i=0;i<ticks;i++)w.Update(1d/30);
-        Check(ticks==90&&Math.Abs(w.SimulationTime-3)<.00001&&e.Person.Injuries.Count>0,"3x simulation advances combat exactly 90 ticks");
+        clock.Paused=false;clock.SetSpeed(3);int ticks=clock.Advance(1);for(int i=0;i<ticks;i++)w.Update(SimulationClock.TickSeconds);
+        Check(ticks==3*SimulationClock.BaseTicksPerSecond&&Math.Abs(w.SimulationTime-3)<.00001&&e.Person.Injuries.Count>0,"3x simulation advances combat exactly the configured 3x tick count");
         w=Fixture();foreach(var r in w.Workers){r.X=60;r.Z=60;w.DraftResident(r.Id,true);}
         for(int x=58;x<=62;x++)for(int z=58;z<=62;z++)if(x is 58 or 62||z is 58 or 62)
             for(int y=0;y<3;y++){var c=new Cell(x,z,y);w.Buildings[c]=new(c,BuildKind.Wall);}

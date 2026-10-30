@@ -109,7 +109,7 @@ public partial class Main
             if(item is not null)
             {
                 ResidentItemIcon(row,item.Item);
-                var label=RT(row,ItemCatalog.Get(item.Item).Name,14);label.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
+                var label=RT(row,_world.Content.Item(item.Item).Name,14);label.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
                 row.TooltipText=GearDescription(item.Item);RB(row,"卸下",()=>ResidentDo("unequip",item:item.Id),"卸下后收入随身物品",45);
             }
             else RT(row,"—",14,RMuted).SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
@@ -125,9 +125,9 @@ public partial class Main
         foreach(var item in items)
         {
             var row=RH(bag,8);row.CustomMinimumSize=new(0,36);ResidentItemIcon(row,item.Item);
-            var name=RT(row,$"{ItemCatalog.Get(item.Item).Name} ×{item.Count}"+(item.Properties.ExpiresAt is double expiry?$" · {Math.Max(0,(expiry-_world.SimulationTime)/600):F1} 天":""),14);name.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
+            var name=RT(row,$"{_world.Content.Item(item.Item).Name} ×{item.Count}"+(item.Properties.ExpiresAt is double expiry?$" · {Math.Max(0,(expiry-_world.SimulationTime)/600):F1} 天":""),14);name.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;
             row.TooltipText=GearDescription(item.Item)+(_dossierNearby?$"\n位置 {item.Cell.X}, {item.Cell.Z}, {item.Cell.Level}":"");
-            RT(row,$"{item.Count*ResidentGear.Weight(item.Item):F1} kg",12,RMuted);
+            RT(row,$"{item.Count*ResidentGear.Weight(item.Item,_world.Content):F1} kg",12,RMuted);
             if(_dossierNearby)RB(row,"拾取",()=>ResidentDo("pickup",item:item.Id));
             else
             {
@@ -139,7 +139,7 @@ public partial class Main
         if(items.Length==0)RT(bag,_dossierNearby?"附近没有可拾取的物品。":"没有未装备的随身物品。",14,RMuted,true);
         if(!_dossierNearby&&w.Job is {} job&&job.Materials.Any(r=>r.Stage==1))
         {
-            RSection(bag,"任务货物");foreach(var cargo in job.Materials.Where(r=>r.Stage==1))RStat(bag,ItemCatalog.Get(cargo.Item).Name,$"×{cargo.Count}");
+            RSection(bag,"任务货物");foreach(var cargo in job.Materials.Where(r=>r.Stage==1))RStat(bag,_world.Content.Item(cargo.Item).Name,$"×{cargo.Count}");
         }
         RT(right,_dossierNearby?"实际前往拾取 · 最多 5 件，装备 1 件":"换装会将旧装备收入物品栏。",12,RMuted,true);
     }

@@ -6,8 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../source/Simulation/*.cs" />
+    <ProjectReference Include="../source/Core/NoDwarf.Core.csproj" />
   </ItemGroup>
-  <ItemGroup><EmbeddedResource Include="../source/Assets/Combat/equipment-geometry.json" LogicalName="NoDwarf.equipment-geometry.json" /></ItemGroup>
-  <ItemGroup><EmbeddedResource Include="../source/Assets/Combat/grip-poses.json" LogicalName="NoDwarf.grip-poses.json" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../source/Assets/Definitions/plant-growth.xml" LogicalName="NoDwarf.plant-growth.xml" /></ItemGroup>
 </Project>

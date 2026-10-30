@@ -12,7 +12,7 @@ public partial class TerrainView
     private readonly Dictionary<(int,int),MeshRequest> _pendingMeshes=new();
     private readonly Dictionary<(int,int),long> _meshVersions=new();
     private readonly List<MeshWork> _meshWorkers=new();
-    private readonly Dictionary<TerrainSurface,Material> _terrainMaterials=new();
+    private readonly Dictionary<(string,TerrainSurface),Material> _terrainMaterials=new();
     private TerrainMap? _snapshotSource,_snapshotTerrain;
     private int _snapshotRevision=-1;
     private long _nextMeshVersion;
@@ -153,19 +153,20 @@ public partial class TerrainView
         arrays[(int)Mesh.ArrayType.Vertex]=data.Vertices;arrays[(int)Mesh.ArrayType.Normal]=data.Normals;arrays[(int)Mesh.ArrayType.TexUV]=data.Uvs;arrays[(int)Mesh.ArrayType.Color]=data.Colors;
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles,arrays);mesh.SurfaceSetMaterial(mesh.GetSurfaceCount()-1,material);
     }
-    private Material TerrainMaterial(TerrainSurface key,RegionProfile? region)
+    private Material TerrainMaterial(TerrainSurface key,RegionProfile? region,ContentCatalog catalog)
     {
-        if(_terrainMaterials.TryGetValue(key,out var cached))return cached;
-        var material=BlockTextures.TerrainMaterial(key.Id,key.Top,region);
+        if(_terrainMaterials.TryGetValue((catalog.Revision,key),out var cached))return cached;
+        var material=key.Id.StartsWith("nodwarf:",StringComparison.Ordinal)?BlockTextures.TerrainMaterial(key.Id,key.Top,region):new StandardMaterial3D{AlbedoColor=new Color(catalog.Block(key.Id).Color),Roughness=1};
         if(key.Section)material=Fog;
         else if(key.Rim){material=(StandardMaterial3D)material.Duplicate();material.AlbedoColor=new(.26f,.28f,.30f,1);}
         else if(key.Cut){material=(StandardMaterial3D)material.Duplicate();material.AlbedoColor*=new Color(.62f,.65f,.68f,1);}
         if(key.Underground&&!key.Section)
         {
             material=(StandardMaterial3D)material.Duplicate();material.ShadingMode=BaseMaterial3D.ShadingModeEnum.PerPixel;
-            material.AlbedoColor=key.Rim?new(.18f,.20f,.22f,1):key.Cut?new(.34f,.40f,.45f,1):key.Top?new(.94f,.96f,1,1):new(.70f,.75f,.82f,1);
+            Color lighting=key.Rim?new(.18f,.20f,.22f,1):key.Cut?new(.34f,.40f,.45f,1):key.Top?new(.94f,.96f,1,1):new Color(.70f,.75f,.82f,1);
+            material.AlbedoColor=key.Id.StartsWith("nodwarf:",StringComparison.Ordinal)?lighting:material.AlbedoColor*lighting;
         }
-        return _terrainMaterials[key]=material;
+        return _terrainMaterials[(catalog.Revision,key)]=material;
     }
     private static readonly StandardMaterial3D ContactLineMaterial=new(){AlbedoColor=new("20272e"),ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,CullMode=BaseMaterial3D.CullModeEnum.Disabled};
     private void ApplyMesh(MeshRequest request,TerrainMeshResult result)
@@ -177,10 +178,10 @@ public partial class TerrainView
         if(result.Surfaces.Count>0)
         {
             var mesh=new ArrayMesh();
-            foreach(var surface in result.Surfaces)AddSurface(mesh,surface.Value,TerrainMaterial(surface.Key,request.Snapshot.Terrain.Region));
+            foreach(var surface in result.Surfaces)AddSurface(mesh,surface.Value,TerrainMaterial(surface.Key,request.Snapshot.Terrain.Region,request.Snapshot.Terrain.Definitions??ContentRuntime.Current));
             holder.AddChild(new MeshInstance3D{Mesh=mesh});
             using var collisionTiming=_meshProbe?.Measure("view.terrain-collision-create")??default;
-            var shape=new ConcavePolygonShape3D();shape.SetFaces(result.Collision);
+            using var shape=new ConcavePolygonShape3D();shape.SetFaces(result.Collision);
             var body=new StaticBody3D();body.AddChild(new CollisionShape3D{Shape=shape});holder.AddChild(body);
         }
         RetireChunk(request.Key);
@@ -199,6 +200,7 @@ public partial class TerrainView
     }
     public override void _ExitTree()
     {
+        _forestUpload=null;_preparedForest=null;
         _meshStopped=true;ResetMeshPipeline();
         foreach(var work in _meshWorkers)
         {

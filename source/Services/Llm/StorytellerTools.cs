@@ -7,19 +7,15 @@ public static class StorytellerTools
 {
     private static object Number(double min, double max, string type = "number") => new { type, minimum = min, maximum = max };
     private static object Text(int max) => new { type = "string", maxLength = max };
-    private static object Choice(params string[] values) => new Dictionary<string, object> { ["type"] = "string", ["enum"] = values };
     private static object Tool(string name, string description, params (string Name, object Schema)[] fields) => new
     {
         name, description, parameters = new { type = "object", properties = fields.ToDictionary(f => f.Name, f => f.Schema), required = fields.Select(f => f.Name).ToArray(), additionalProperties = false }
     };
-    public static readonly string Catalog = JsonSerializer.Serialize(new[]
-    {
-        Tool("schedule_raid", "安排有限规模的徒手袭击。每人占 100 威胁点；受宽限、恢复、冷却和当前战力限制。", ("count",Number(1,DemoWorld.MaxStoryRaid,"integer")),("delay_hours",Number(2,24)),("reason",Text(240))),
-        Tool("schedule_supplies", "在可行动居民所在安全位置发现物资；必须使用机会预算，并遵守冷却。",("item",Choice("meal","wood","bandage","grain_seed")),("count",Number(1,100,"integer")),("delay_hours",Number(.1,24)),("reason",Text(240))),
-        Tool("schedule_weather", "短期天气变化；结束自动恢复自然天气。",("weather",Choice("clear","cloudy","rain","fog")),("duration_hours",Number(1,12)),("delay_hours",Number(.1,24)),("reason",Text(240))),
+    public static string Catalog=>CatalogFor(ContentRuntime.Current);
+    public static string CatalogFor(ContentCatalog content)=>JsonSerializer.Serialize(content.StoryEvents.Values.Select(e=>e.ToolSchema()).Concat(new[]{
         Tool("cancel_event", "取消尚未发生的事件，不能撤销已发生的后果。",("event_id",Text(100)),("reason",Text(240))),
         Tool("wait", "让营地休养，安排下次决策；不会取消已排队事件。",("hours",Number(1,24)),("reason",Text(240)))
-    });
+    }));
 
     public static string Apply(DemoWorld world, StoryTurn turn)
     {
@@ -66,28 +62,11 @@ public static class StorytellerTools
         }
         else
         {
-            var e = new StoryEvent { Id = call };
-            switch (name)
-            {
-                case "schedule_raid":
-                    AgentJson.Fields(args, "count", "delay_hours", "reason");
-                    e.Kind = "raid"; e.Count = (int)Num("count", 1, DemoWorld.MaxStoryRaid, true); break;
-                case "schedule_supplies":
-                    AgentJson.Fields(args, "item", "count", "delay_hours", "reason");
-                    e.Kind = "supplies"; e.Item = Str("item", 40); e.Count = (int)Num("count", 1, 100, true);
-                    if (e.Item is not ("meal" or "wood" or "bandage" or "grain_seed")) throw new LlmException("不允许的补给物品。");
-                    break;
-                case "schedule_weather":
-                    AgentJson.Fields(args, "weather", "duration_hours", "delay_hours", "reason");
-                    e.Kind = "weather"; e.Weather = Str("weather", 20); e.Duration = Num("duration_hours", 1, 12) * DemoWorld.StoryHour;
-                    if (e.Weather is not ("clear" or "cloudy" or "rain" or "fog")) throw new LlmException("不允许的天气。");
-                    break;
-                default: throw new LlmException("未注册的叙事工具。");
-            }
-            e.Due = world.SimulationTime + Num("delay_hours", e.Kind == "raid" ? 2 : .1, 24) * DemoWorld.StoryHour;
-            e.Reason = Str("reason"); result = world.ScheduleStoryEvent(e);
+            if(!world.Content.StoryTools.TryGetValue(name,out var definition))throw new LlmException("未注册的叙事工具。");
+            var e=definition.Create(args,call,world.SimulationTime);
+            result=world.ScheduleStoryEvent(e);
         }
-        string json = JsonSerializer.Serialize(new { ok = result.Ok, message = result.Message, event_id = name.StartsWith("schedule_", StringComparison.Ordinal) && result.Ok ? call : null });
+        string json = JsonSerializer.Serialize(new { ok = result.Ok, message = result.Message, event_id = world.Content.StoryTools.ContainsKey(name) && result.Ok ? call : null });
         turn.Receipts.Add(new() { CallId = call, Command = command, Result = json });
         return json;
     }

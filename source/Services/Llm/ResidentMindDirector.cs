@@ -35,6 +35,7 @@ public static class ResidentMindTools
 // Exactly one request globally for residents; no work or world object reaches the HTTP task.
 public sealed class ResidentMindDirector(ILlmClient client):IDisposable
 {
+    public bool InFlight=>_pending is not null;
     private DemoWorld? _world;
     private ResidentMindTurn? _turn;
     private LlmConfiguration? _configuration;
@@ -47,7 +48,7 @@ public sealed class ResidentMindDirector(ILlmClient client):IDisposable
         _pending=null;_turn=null;
     }
     public void Dispose(){Cancel();_world=null;}
-    public void Pump(DemoWorld world,LlmConfiguration configuration,bool advance)
+    public void Pump(DemoWorld world,LlmConfiguration configuration,bool advance,bool requestSlot=true)
     {
         if(_world!=world){Cancel();_world=world;}
         var state=world.ResidentMind;
@@ -78,7 +79,7 @@ public sealed class ResidentMindDirector(ILlmClient client):IDisposable
             {received.Status="waiting";state.Error=e is LlmException?e.Message:"居民 JSON 格式无效，未执行。";}
             return;
         }
-        if(world.SimulationTime<state.NextAt)return;
+        if(!requestSlot||world.SimulationTime<state.NextAt)return;
         if(configuration.ApiKey==""&&!configuration.Settings.Endpoint().IsLoopback)
         {state.Error="请先在主菜单设置 AI 服务和密钥。";state.Enabled=false;return;}
         var active=world.BeginMindTurn(configuration.Settings.Model);if(active is null)return;

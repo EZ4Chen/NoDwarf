@@ -32,7 +32,7 @@ public static class RegionChecks
             int count=w.Total("cobblestone");Check(w.DamageBlock(c,1000),"Regional rock can be mined");
             Check(w.Total("cobblestone")==count+1,"Regional rock drops usable stone");
             var loaded=DemoWorld.LoadJson(w.SaveJson());
-            Check(loaded.Terrain.Region==profile&&loaded.Terrain.GeneratorVersion==2&&loaded.BlockAt(c)=="nodwarf:air"&&loaded.Total("cobblestone")==w.Total("cobblestone"),"Region and excavations survive reload");
+            Check(loaded.Terrain.Region==profile&&loaded.Terrain.GeneratorVersion==TerrainMap.CurrentGeneratorVersion&&loaded.BlockAt(c)=="nodwarf:air"&&loaded.Total("cobblestone")==w.Total("cobblestone"),"Region and excavations survive reload");
             Check(loaded.Trees.Count==trees&&loaded.Terrain[17,29]==w.Terrain[17,29],"Reload keeps landscape and trees");
             Console.WriteLine($"REGION_SAMPLE: {profile.Id} height={min}..{max} trees={trees} fingerprint={hash}");
         }
@@ -42,13 +42,7 @@ public static class RegionChecks
         Check(a>15&&b<0&&ClimateRules.TemperatureFactor("cotton",a)>0&&ClimateRules.TemperatureFactor("cotton",b)==0,"Region temperatures change crop viability");
         foreach(string id in new[]{"humus","dry_grass","gravel","granite","limestone","sandstone"})
             foreach(string suffix in new[]{"","_ramp"})Check(ItemCatalog.Drop("nodwarf:"+id+suffix) is not null&&BlockCatalog.Get("nodwarf:"+id+suffix).Durability>0,"New materials have drops and durability");
-        var legacy=new DemoWorld();var old=JsonNode.Parse(legacy.SaveJson())!;old["Version"]=7;old.AsObject().Remove("Region");
-        var restored=DemoWorld.LoadJson(old.ToJsonString());
-        Check(restored.Terrain.Region is null&&restored.Terrain.GeneratorVersion==1&&restored.Terrain[81,92]==legacy.Terrain[81,92],"Version 7 saves keep legacy terrain");
-        old["GeneratorVersion"]=2;
-        bool rejected=false;try{DemoWorld.LoadJson(old.ToJsonString());}catch(InvalidDataException){rejected=true;}
-        Check(rejected,"Unsupported region/version combinations rejected");
         EcologyChecks.Run();
-        Console.WriteLine("REGION_OK: ten reproducible regions, bounds, ecology, climate, drops and save compatibility");
+        Console.WriteLine("REGION_OK: ten reproducible regions, bounds, ecology, climate, drops and save roundtrip");
     }
 }

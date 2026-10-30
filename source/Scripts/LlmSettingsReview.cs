@@ -1,6 +1,6 @@
 using Godot;
 using NoDwarf.Services.Llm;
-
+using NoDwarf.Simulation;
 namespace NoDwarf;
 public partial class Startup
 {
@@ -10,40 +10,53 @@ public partial class Startup
         {
             void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             async Task Frame(){await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);}
-            Check(_actions.ContainsKey("settings"),"Main menu settings entry missing");
-            _actions["settings"].EmitSignal(Button.SignalName.Pressed);await Frame();
-            Check(_llmKey.Secret&&_llmKey.AccessibilityName!=""&&_llmModel.AccessibilityName!="","Secret field/accessibility missing");
-            _llmUrl.Text="http://external.example";SaveLlmSettings();
-            Check(_llmStatus.Text.Contains("HTTPS"),"Invalid endpoint was saved");
-            _llmUrl.Text="https://example.invalid/v1";_llmModel.Text="fixture-model";_llmKey.Text="fixture-only-secret";
-            _llmRemember.ButtonPressed=false;SaveLlmSettings();
-            Check(File.Exists(LlmSettingsPath)&&!File.ReadAllText(LlmSettingsPath).Contains("fixture-only-secret"),"Session key leaked into settings");
-            Check(LlmRuntime.Configuration.ApiKey=="fixture-only-secret","Session key lost");
-            _actions["llm-back"].EmitSignal(Button.SignalName.Pressed);await Frame();
-            _actions["settings"].EmitSignal(Button.SignalName.Pressed);await Frame();
-            Check(_llmModel.Text=="fixture-model"&&_llmKey.Text=="fixture-only-secret","Saved settings did not survive menu navigation");
-            _llmModel.Text="unsaved";ShowHome();ShowLlmSettings();await Frame();
-            Check(_llmModel.Text=="fixture-model","Back applied unsaved changes");
-            _llmProvider.Select(1);_llmProvider.EmitSignal(OptionButton.SignalName.ItemSelected,1L);
-            Check(_llmKey.Text==""&&!_llmRemember.ButtonPressed,"Switching provider retained credentials");
-            var scroll=_llmLimit.GetParent().GetParent().GetParent<ScrollContainer>();
-            _llmLimit.GetLineEdit().GrabFocus();await Frame();
-            Check(scroll.GetGlobalRect().Intersects(_llmLimit.GetGlobalRect()),"Keyboard cannot reach last setting");
-            foreach(var b in _actions.Values)Check(GetViewport().GetVisibleRect().Encloses(b.GetGlobalRect()),"Settings button outside viewport: "+b.Text);
-            _llmUrl.Text="http://127.0.0.1:1234/v1";_llmModel.Text="test";_llmClient=new WaitingLlmClient();
-            var pending=TestLlmAsync();await Frame();
-            Check(_actions["llm-test"].Disabled&&!_actions["llm-cancel"].Disabled,"Request did not enter busy state");
-            _actions["llm-cancel"].EmitSignal(Button.SignalName.Pressed);await pending;
-            Check(!_actions["llm-test"].Disabled&&_llmStatus.Text.Contains("取消"),"Cancellation did not restore controls");
-            pending=TestLlmAsync();ShowHome();await pending;await Frame();
-            Check(_actions.ContainsKey("settings")&&_llmTest is null,"Leaving settings did not cancel request");
-            File.Delete(LlmSettingsPath);LlmRuntime.Configure(new());
-            GD.Print("LLM_SETTINGS_OK: menu navigation, validation, masked key, session-only persistence, draft discard, provider reset, keyboard/layout, cancellation and page exit; no network requests");
+            GetViewport().GuiEmbedSubwindows=true;
+            _actions["settings"].EmitSignal(Button.SignalName.Pressed);await Frame();var window=_settingsWindow!;
+            Check(window.Fields.Count>=30&&window.Categories.GetTabCount()==7,"Settings categories missing");
+            for(int tab=0;tab<7;tab++)
+            {
+                window.Categories.CurrentTab=tab;await Frame();
+                Check(window.Categories.Size.X<=window.Size.X&&window.Categories.Size.Y<window.Size.Y,"Settings overflow");
+                if(DisplayServer.GetName()!="headless")GetViewport().GetTexture().GetImage().SavePng("res://.local/settings-review-"+tab+".png");
+            }
+            window.Size=new(560,380);
+            for(int tab=0;tab<7;tab++)
+            {
+                window.Categories.CurrentTab=tab;await Frame();
+                var page=window.Categories.GetCurrentTabControl();
+                foreach(var field in window.Fields.Values.Where(f=>f.IsVisibleInTree()))
+                    Check(field.GetGlobalRect().End.X<=page.GetGlobalRect().End.X+1,"Small settings page clips field: "+field.AccessibilityName);
+                var shell=window.GetChildren().OfType<GameWindowFrame>().Single();
+                Check(shell.GetRect().Encloses(shell.Footer.GetGlobalRect()),"Small settings footer overflow");
+            }
+            window.Categories.CurrentTab=0;await Frame();
+            if(DisplayServer.GetName()!="headless")GetViewport().GetTexture().GetImage().SavePng("res://.local/settings-template-small.png");
+            window.Size=new(850,620);await Frame();
+            Check(window.Fields.Values.All(f=>f.AccessibilityName!=""),"Missing accessible labels");
+            Check(((LineEdit)window.Fields["key"]).Secret,"API key not masked");
+            ((LineEdit)window.Fields["url"]).Text="http://external.example";window.Save();Check(window.StatusText.Contains("HTTPS"),"Invalid endpoint saved");
+            ((LineEdit)window.Fields["url"]).Text="https://example.invalid/v1";((LineEdit)window.Fields["key"]).Text="offline-fixture";
+            ((SpinBox)window.Fields["autosave"]).Value=12;((SpinBox)window.Fields["camera"]).Value=1.5;((SpinBox)window.Fields["short"]).Value=8;window.Save();
+            Check(PreferencesRuntime.Current.AutosaveMinutes==12&&PreferencesRuntime.Current.CameraSpeed==1.5&&PreferencesRuntime.Current.Dialogue.ShortTermRounds==8,"Preferences not applied: "+window.StatusText);
+            Check(GamePreferences.Load(PreferencesRuntime.SettingsPath).AutosaveMinutes==12,"Preferences not persisted");
+            Check(!File.ReadAllText(PreferencesRuntime.LlmPath).Contains("offline-fixture")&&LlmRuntime.Configuration.ApiKey=="offline-fixture","Session-only key persistence failed");
+            ((SpinBox)window.Fields["details"]).Value=12;window.Save();Check(window.StatusText.Contains("详细"),"Invalid recall budget accepted");
+            window.Close();await Frame();ShowGameSettings();await Frame();window=_settingsWindow!;
+            Check(((SpinBox)window.Fields["autosave"]).Value==12&&((LineEdit)window.Fields["key"]).Text=="offline-fixture","Reopen lost settings");
+            ((SpinBox)window.Fields["scale"]).Value=1.1;window.Save();Check(window.IsDisplayPreview,"Display change did not require confirmation");
+            window.Close();await Frame();Check(Math.Abs(GetTree().Root.ContentScaleFactor-1)<.001&&PreferencesRuntime.Current.UiScale==1,"Closing preview did not restore display");
+            ShowGameSettings();await Frame();window=_settingsWindow!;
+            var provider=(OptionButton)window.Fields["provider"];provider.Select(1);provider.EmitSignal(OptionButton.SignalName.ItemSelected,1L);
+            Check(((LineEdit)window.Fields["key"]).Text=="","Provider switch retained key");
+            ((LineEdit)window.Fields["url"]).Text="http://127.0.0.1:1234/v1";((LineEdit)window.Fields["model"]).Text="fixture";window.Client=new WaitingLlmClient();
+            var pending=window.TestAsync();await Frame();window.Close();await pending;await Frame();Check(_settingsWindow is null,"Closing did not release settings window");
+            PreferencesRuntime.Save(new(),new());
+            GD.Print("LLM_SETTINGS_OK: all categories, accessible controls, validation, settings persistence, key masking/session-only/provider reset, cancellation on close; no external network");
             GetTree().Quit();
         }
         catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}
     }
-    private sealed class WaitingLlmClient : ILlmClient
+    private sealed class WaitingLlmClient:ILlmClient
     {
         public async Task<LlmReply> CompleteAsync(LlmConfiguration config,IReadOnlyList<LlmMessage> messages,CancellationToken cancellation)
         {await Task.Delay(Timeout.Infinite,cancellation);throw new InvalidOperationException("Expected cancellation");}

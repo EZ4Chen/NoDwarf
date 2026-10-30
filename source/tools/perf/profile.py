@@ -44,6 +44,17 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def build_fingerprint(entry):
+    # A stable entry DLL can reference a changed simulation core. Include its
+    # managed dependencies so captures cannot silently mix different builds.
+    entry = Path(entry)
+    if not entry.is_file():
+        raise FileNotFoundError(entry)
+    files = {p.name: sha(p) for p in sorted(entry.parent.glob('*.dll'))}
+    digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
+    return digest, files
+
+
 def stats(values):
     values = sorted(values)
     if not values:
@@ -161,18 +172,19 @@ def record(args):
     # Snapshot relevant sources including untracked C# files. Preserve an exact
     # working diff as context; git revision alone cannot describe a dirty build.
     sources = {}
-    for base in (PROJECT / 'Simulation', PROJECT / 'Scripts', ROOT / 'benchmarks'):
+    for base in (PROJECT / 'Simulation', PROJECT / 'Scripts', PROJECT / 'Services/Llm', PROJECT / 'MenuLogic', ROOT / 'benchmarks'):
         for path in sorted(base.glob('*.cs')):
             sources[str(path.relative_to(ROOT))] = sha(path)
     source_hash = hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
     diff = subprocess.check_output(['git', 'diff', '--', 'source', 'benchmarks'], cwd=ROOT)
     (folder / 'working.diff').write_bytes(diff)
     write(folder / 'sources.json', sources)
+    binary_hash, binary_files = build_fingerprint(dll)
     manifest = {'schema': 1, 'label': args.label, 'mode': args.mode, 'scenario': args.scenario,
                 'configuration': config, 'headless': args.headless if not simulation else True,
                 'quick': args.quick if not simulation else False, 'speed': args.speed if not simulation else 1,
                 'native': args.native, 'gpuTiming': args.gpu_timing, 'command': command, 'buildCommand': build,
-                'sourceHash': source_hash, 'binarySha256': sha(dll),
+                'sourceHash': source_hash, 'binarySha256': binary_hash, 'binaryFiles': binary_files,
                 'gitRevision': output(['git', 'rev-parse', 'HEAD'], cwd=ROOT),
                 'gitStatus': output(['git', 'status', '--short'], cwd=ROOT),
                 'platform': platform.platform(), 'machine': platform.machine(),

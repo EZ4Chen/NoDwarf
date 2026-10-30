@@ -11,8 +11,8 @@ public partial class Main
     private string _leftTool="",_leftHint="";
     private bool _leftMoved,_leftAdditive;
     private Panel? _marquee;
-    private static bool AreaTool(string tool)=>tool is "growingzone" or "unfarm" or "stockpile" or "unstockpile" or "foundation" or "chop";
-    private bool GestureTest=>OS.GetCmdlineUserArgs().Any(a=>a is "--object-commands-test" or "--dig-volume-test" or "--interaction-test" or "--box-selection-test" or "--construction-preview-test" or "--designation-test");
+    private static bool AreaTool(string tool)=>tool is "growingzone" or "unfarm" or "stockpile" or "unstockpile" or "foundation" or "chop" or "placeblock";
+    private bool GestureTest=>OS.GetCmdlineUserArgs().Any(a=>a is "--camera-cutaway-test" or "--object-commands-test" or "--dig-volume-test" or "--interaction-test" or "--box-selection-test" or "--construction-line-test" or "--construction-preview-test" or "--designation-test");
     private bool IsResidentSelected(int i)=>_selectedWorker>=0&&_selectedWorker<_world.Workers.Count&&
         (i==_selectedWorker||_residentSelectionWorld==_world&&_selectedResidents.Contains(_world.Workers[_selectedWorker].Id)&&_selectedResidents.Contains(_world.Workers[i].Id));
     private int[] SelectedResidents()=>Enumerable.Range(0,_world.Workers.Count).Where(IsResidentSelected).ToArray();
@@ -30,13 +30,13 @@ public partial class Main
     {
         if(_orbitHeld||_dragging)return;
         _leftStart=position;_leftMoved=false;_leftAdditive=additive;_leftTool=_tool;_leftWorld=_world;_leftHint=_hint.Text;
-        _leftCell=AreaTool(_tool)?PickForTool(position):null;_leftEnd=_leftCell;
+        _leftCell=AreaTool(_tool)||LineBuildTool(_tool)?PickForTool(position):null;_leftEnd=_leftCell;
     }
     private void CancelLeftSelection()
     {
         if(_leftStart is not null)_hint.Text=_leftHint;
         _leftStart=null;_leftCell=null;_leftEnd=null;_leftMoved=false;
-        _marquee?.Hide();_hoverCell=null;Clear(_hover);
+        _marquee?.Hide();_hoverCell=null;ClearHover();
     }
     private void DrawMarquee(Vector2 end)
     {
@@ -61,7 +61,7 @@ public partial class Main
             if(_leftMoved)
             {
                 if(_leftTool=="select")DrawMarquee(move.Position);
-                else if(_leftCell is Cell a)_leftEnd=PickForTool(move.Position)??PlanePick(move.Position,a.Level);
+                else if(_leftCell is Cell a)_leftEnd=LineBuildTool(_leftTool)?LineEndPick(move.Position,a):PickForTool(move.Position)??PlanePick(move.Position,a.Level);
                 _hoverCell=null;
             }
             GetViewport().SetInputAsHandled();return true;
@@ -70,7 +70,7 @@ public partial class Main
         {
             bool moved=_leftMoved||start.DistanceTo(release.Position)>6,additive=_leftAdditive;
             string tool=_leftTool,hint=_leftHint;var a=_leftCell;var b=_leftEnd;
-            if(moved&&a is Cell anchor)b=PickForTool(release.Position)??PlanePick(release.Position,anchor.Level);
+            if(moved&&a is Cell anchor)b=LineBuildTool(tool)?LineEndPick(release.Position,anchor):PickForTool(release.Position)??PlanePick(release.Position,anchor.Level);
             CancelLeftSelection();
             if(GetViewport().GuiGetHoveredControl() is null&&GetViewport().GetVisibleRect().HasPoint(release.Position))
             {
@@ -93,12 +93,15 @@ public partial class Main
                     }
                     else if(PickResident(release.Position) is int person)
                         SetResidentSelection(additive?(IsResidentSelected(person)?SelectedResidents().Where(i=>i!=person):SelectedResidents().Append(person)):new[]{person});
+                    else if(!additive&&SelectDroppedItem(release.Position)){}
                     else if(!additive)
                     {ClearResidentSelection();if(PickForTool(release.Position) is Cell cell)Act(cell);else RefreshUi();}
                 }
                 else if(moved&&a is Cell from&&b is Cell to)
                 {
-                    if(tool=="chop")CommitChopArea(from,to);
+                    if(LineBuildTool(tool))CommitBuildLine(from,to);
+                    else if(tool=="placeblock")CommitPlacementArea(from,to);
+                    else if(tool=="chop")CommitChopArea(from,to);
                     else
                     {
                         _farmStart=null;_stockpileStart=null;_foundationStart=null;
@@ -118,11 +121,12 @@ public partial class Main
         if(_leftWorld!=_world||(!GetWindow().HasFocus()&&!GestureTest)||DossierOpen||_consolePanel.Visible||_characterEditor.Visible||_titleDialog?.Visible==true||_removeGrowingDialog?.Visible==true||_resetDialog.Visible||_loadDialog?.Visible==true)
         {CancelLeftSelection();return false;}
         if(!_leftMoved)return false;
-        if(_leftTool=="select"){Clear(_hover);return true;}
+        if(_leftTool=="select"){ClearHover();return true;}
         if(_leftCell is Cell a&&_leftEnd is Cell b)
         {
             if(_hoverCell==b)return true;
-            _hoverCell=b;Clear(_hover);
+            _hoverCell=b;ClearHover();
+            if(LineBuildTool(_leftTool)){DrawBuildLine(a,b);return true;}
             float width=Math.Abs(a.X-b.X)+1,depth=Math.Abs(a.Z-b.Z)+1;
             var center=WorldPosition(a)+new Vector3((b.X-a.X)*.5f,.045f,(b.Z-a.Z)*.5f);
             int limit=_leftTool is "stockpile" or "unstockpile"?31:16;

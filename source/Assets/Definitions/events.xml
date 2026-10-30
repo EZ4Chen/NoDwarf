@@ -1,0 +1,7 @@
+<StoryEvents>
+  <Events>
+    <Event id="base:raid" name="袭击" tool="schedule_raid" handler="raid" description="安排有限规模的徒手袭击；每人占100威胁点，受宽限、恢复、冷却和当前战力限制。" minCount="1" maxCount="12" minDelay="2" maxDelay="24" />
+    <Event id="base:supplies" name="物资发现" tool="schedule_supplies" handler="supplies" description="在可行动居民所在安全位置发现目录允许的物资；按物品价值使用机会预算，并遵守冷却。" minCount="1" maxCount="100" minDelay="0.1" maxDelay="24" />
+    <Event id="base:weather" name="天气变化" tool="schedule_weather" handler="weather" description="短期天气变化；结束自动恢复自然天气。" minDelay="0.1" maxDelay="24" minDuration="1" maxDuration="12" />
+  </Events>
+</StoryEvents>

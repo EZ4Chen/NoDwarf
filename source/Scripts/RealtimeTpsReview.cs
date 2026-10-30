@@ -74,7 +74,7 @@ public partial class Main
         double ms = Stopwatch.GetElapsedTime(begin).TotalMilliseconds;
         review.Ticks++;
         if (review.Measuring) review.TickMs.Add(ms);
-        if (review.Ticks % 30 == 0) review.Scenario.Sample();
+        if (review.Ticks % SimulationClock.BaseTicksPerSecond == 0) review.Scenario.Sample();
     }
 
     private void FinishTpsFrame(double syncMs, double uiMs, double processMs, double delta)
@@ -107,7 +107,7 @@ public partial class Main
         r.OutsideProcessMs.Add(Math.Max(0, r.FrameMs[^1] - processMs));
         r.ClockInputSeconds += delta;
         // Clock.PendingSeconds excludes wall time spent after Advance in this frame.
-        double lag = Math.Max(0, elapsed * r.Speed - r.TickMs.Count / 30d);
+        double lag = Math.Max(0, elapsed * r.Speed - r.TickMs.Count / (double)SimulationClock.BaseTicksPerSecond);
         r.PeakLag = Math.Max(r.PeakLag, lag);
         if (elapsed - r.LastWindow >= 1)
         {
@@ -120,7 +120,7 @@ public partial class Main
             if (!r.Quiet)
             {
                 long printStarted = Stopwatch.GetTimestamp();
-                GD.Print($"TPS_WINDOW: wall={elapsed:F1}s TPS={tps:F1}/{30 * r.Speed} FPS={fps:F1} lag={lag:F2}s active={_world.Workers.Count(w => w.Job is not null)} jobs={_world.Jobs.Count}");
+                GD.Print($"TPS_WINDOW: wall={elapsed:F1}s TPS={tps:F1}/{SimulationClock.BaseTicksPerSecond * r.Speed} FPS={fps:F1} lag={lag:F2}s active={_world.Workers.Count(w => w.Job is not null)} jobs={_world.Jobs.Count}");
                 r.PrintMs.Add(Stopwatch.GetElapsedTime(printStarted).TotalMilliseconds);
             }
             r.LastWindow = elapsed; r.LastTicks = r.Ticks; r.LastFrames = r.Frames;
@@ -132,11 +132,11 @@ public partial class Main
             p50 = Quantile(values, .5), p95 = Quantile(values, .95), p99 = Quantile(values, .99), max = values.Count == 0 ? 0 : values.Max() };
         var result = new
         {
-            mode = DisplayServer.GetName(), speed = r.Speed, targetTps = 30 * r.Speed,
+            mode = DisplayServer.GetName(), speed = r.Speed, targetTps = SimulationClock.BaseTicksPerSecond * r.Speed,
             mapSize = DemoWorld.Width, residents = _world.Workers.Count, currentEnvironment=r.CurrentEnvironment,
             canopy=r.Canopy,
             trees=_world.Trees.Count,visibleGrass=_terrainView.VisibleCoverInstances,weather=_world.Weather.Id,waterCells=_world.Fluids.Cells.Count,peakResidentMB=r.PeakResidentMB,managedMB=GC.GetTotalMemory(false)/1048576d,
-            wallSeconds = elapsed, gameSeconds = r.TickMs.Count / 30d,
+            wallSeconds = elapsed, gameSeconds = r.TickMs.Count / (double)SimulationClock.BaseTicksPerSecond,
             achievedTps = r.TickMs.Count / elapsed, observedFps = r.FrameMs.Count / elapsed,
             peakLagGameSeconds = r.PeakLag, endLagGameSeconds = lag,
             tickMilliseconds = Stats(r.TickMs), frameMilliseconds = Stats(r.FrameMs), syncMilliseconds = Stats(r.SyncMs),
@@ -147,7 +147,7 @@ public partial class Main
             profilingWholeRunIncludingWarmup = _world.Probe?.Report(),
             logicalProcessors = System.Environment.ProcessorCount,
             processCpuCoreEquivalent = (Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds - r.CpuSecondsAtStart) / elapsed,
-            ticksOver33ms = r.TickMs.Count(v => v > 1000d / 30), ticksOver11ms = r.TickMs.Count(v => v > 1000d / 90),
+            ticksOverBaseBudget = r.TickMs.Count(v => v > 1000d / SimulationClock.BaseTicksPerSecond), ticksOver3xBudget = r.TickMs.Count(v => v > 1000d / (3*SimulationClock.BaseTicksPerSecond)),
             oneSecondTps = Stats(r.WindowTps),
             allocationMB = (GC.GetTotalAllocatedBytes() - r.AllocatedAtStart) / 1048576d,
             collections = Enumerable.Range(0, 3).Select(g => GC.CollectionCount(g) - r.GcStart[g]).ToArray(),
@@ -161,7 +161,7 @@ public partial class Main
             : $"res://.local/frame-tps-{_frameDiagnostic.Name}.json");
         path=DiagnosticTrace.OutputPath(path);
         File.WriteAllText(path, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
-        GD.Print($"TPS_REVIEW_OK: {path}; TPS={r.TickMs.Count / elapsed:F2}/{30 * r.Speed}; FPS={r.FrameMs.Count / elapsed:F2}; tick p99={Quantile(r.TickMs, .99):F2}ms; frame p99={Quantile(r.FrameMs, .99):F2}ms");
+        GD.Print($"TPS_REVIEW_OK: {path}; TPS={r.TickMs.Count / elapsed:F2}/{SimulationClock.BaseTicksPerSecond * r.Speed}; FPS={r.FrameMs.Count / elapsed:F2}; tick p99={Quantile(r.TickMs, .99):F2}ms; frame p99={Quantile(r.FrameMs, .99):F2}ms");
         if(r.CurrentEnvironment&&DisplayServer.GetName()!="headless")GetViewport().GetTexture().GetImage().SavePng(DiagnosticTrace.OutputPath(ProjectSettings.GlobalizePath($"res://.local/environment-perf-{r.Speed}x{(r.Canopy?"-canopy":"")}.png")));
         SaveFrameDiagnostic();
         SetProcess(false);_clock.Paused=true;

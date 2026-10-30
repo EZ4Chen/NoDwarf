@@ -32,7 +32,7 @@ public partial class Main
             int selectedX=-1,selectedY=-1;atlas.Selected=(x,y)=>{selectedX=x;selectedY=y;};
             var rect=atlas.MapBounds;
             atlas._GuiInput(new InputEventMouseButton{Pressed=true,ButtonIndex=MouseButton.Left,Position=rect.End-new Vector2(1,1)});
-            Check(selectedX==71&&selectedY==43,"bottom right maps to last region");
+            Check(selectedX==settings.Width-1&&selectedY==settings.Height-1,"bottom right maps to last region");
             selectedX=-1;atlas._GuiInput(new InputEventMouseButton{Pressed=true,ButtonIndex=MouseButton.Left,Position=new Vector2(1,1)});
             Check(selectedX==-1,"letterbox click ignored");
             atlas._GuiInput(new InputEventKey{Pressed=true,Keycode=Key.Right});Check(selectedX==1&&selectedY==0,"keyboard region selection preserved");

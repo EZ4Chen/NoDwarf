@@ -134,7 +134,7 @@ public sealed class RealtimeStressScenario
 
     public void BeforeTick(long tick)
     {
-        if (tick > 0 && tick % 150 == 0)
+        if (tick > 0 && tick % (5*SimulationClock.BaseTicksPerSecond) == 0)
         {
             bool changed = World.Buildings.ContainsKey(_gate)
                 ? World.DeveloperErase(_gate) : World.DeveloperPlace(_gate, BuildKind.Wall);

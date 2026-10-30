@@ -1,0 +1,19 @@
+<Defs>
+  <Item id="copper:resource_template" abstract="true" name="铜材料" value="4" texture="nodwarf:iron_ore" color="bb875d" category="material" tags="metal copper" />
+  <Item id="copper:ore" parent="copper:resource_template" name="铜矿石" description="从铜矿脉采掘所得，用于熔炼铜锭。" />
+  <Block id="copper:rock_template" abstract="true" name="铜矿母版" shape="Solid" color="b87750" durability="120" tags="ore copper" />
+  <Block id="copper:ore_block" parent="copper:rock_template" name="铜矿脉" description="采掘获得铜矿石，可在炉中熔炼。">
+    <Drop item="copper:ore" count="2" />
+    <Ore veins="128" size="12" minDepth="1" maxDepth="6" hosts="nodwarf:deepslate nodwarf:stone nodwarf:soil nodwarf:granite nodwarf:limestone nodwarf:sandstone" />
+  </Block>
+  <Block id="copper:solid_block" name="铜块" shape="Solid" color="b87333" durability="150" tags="metal copper"><Drop item="copper:ingot" count="2" /></Block>
+  <Block id="copper:compact_block" name="致密铜块" shape="Solid" color="985a2b" durability="220" tags="metal copper"><Drop item="copper:ingot" count="4" /></Block>
+  <Block id="copper:furnace_block" name="铜炉方块" shape="Fixture" color="b87333" durability="180" />
+  <Block id="copper:chair_block" name="铜椅方块" shape="Fixture" color="c88a53" durability="160" />
+  <Building id="copper:chair" parent="nodwarf:chair" name="铜椅" block="copper:chair_block" tags="seat copper" description="居民可在餐桌旁使用的铜椅。">
+    <Cost item="copper:ingot" count="2" />
+  </Building>
+  <Building id="copper:furnace" parent="nodwarf:furnace" name="铜冶炼炉" block="copper:furnace_block" description="使用已有炉类生产能力的新设施。">
+    <Cost item="copper:ingot" count="2" /><Cost item="cobblestone" count="3" />
+  </Building>
+</Defs>

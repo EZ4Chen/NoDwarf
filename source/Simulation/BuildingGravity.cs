@@ -125,7 +125,7 @@ public sealed partial class DemoWorld
             if(riders.Any(w=>w.Tile==target+new Cell(0,0,1)||(b.Kind==BuildKind.Ladder&&w.Tile==target))||!BreakOnLanding(b,distance))continue;
             foreach(var job in Jobs.Where(j=>(j.Production||j.Refuel)&&j.Cell==target).ToArray())CancelJob(job);
             Buildings.Remove(target);FireFuel.Remove(target);_openFloodgates.Remove(target);
-            foreach(var (item,count) in BuildRecipe(b.Kind))debrisIds.Add(SpawnItem(item,count,target).Id);
+            foreach(var (item,count) in BuildingDefinition(b).Cost)debrisIds.Add(SpawnItem(item,count,target).Id);
             broken++;
         }
         if(VisualFalls.Count>=16)VisualFalls.Dequeue();

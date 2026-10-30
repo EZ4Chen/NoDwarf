@@ -7,12 +7,24 @@ public readonly record struct Cell(int X, int Z, int Level = 0)
 }
 public sealed record Building(Cell Cell, BuildKind Kind, int Facing = 0)
 {
-    public string BlockId => BlockCatalog.Id(Kind);
+    public string DefinitionId {get;init;}="";
+    [System.Text.Json.Serialization.JsonIgnore] public BuildingDefinition? Definition {get;init;}
+    [System.Text.Json.Serialization.JsonIgnore] public BlockDefinition? BlockDefinition {get;init;}
+    public string BlockId => Definition?.Block??(DefinitionId.Length==0?BlockCatalog.Id(Kind):DefinitionId);
 }
-public sealed record BlueprintPart(Cell Offset, BuildKind Kind, int Facing = 0);
+public sealed record BlueprintPart(Cell Offset, BuildKind Kind, int Facing = 0) { public string DefinitionId {get;init;}=""; }
 
 public sealed class DemoJob
 {
+    public ProcessingRecipe? RecipeSnapshot {get;set;}
+    public string? RecipeRevision {get;set;}
+    public string BuildDefinitionId {get;set;}="";
+    public string PlaceItem {get;set;}="";
+    public string PlaceBlock {get;set;}="";
+    public bool Placing=>PlaceItem.Length!=0;
+    public bool BuildingWork=>Build is not null||Placing;
+    [System.Text.Json.Serialization.JsonIgnore] public BuildKind WorkKind=>Build??BuildKind.Wall;
+    [System.Text.Json.Serialization.JsonIgnore] public BlockDefinition? ResolvedBuild {get;set;}
     public int Id { get; init; }
     public int Facing { get; init; }
     public int ProductionOrderId {get;set;}
@@ -41,17 +53,17 @@ public sealed class DemoJob
     public bool Sow {get;init;}
     public bool Harvest {get;init;}
     public bool Farming => Sow || Harvest;
-    public bool Forge => Build is null && !Dig && !Haul && !Smelt && !Cook && !Farming && !Refuel && !Forestry && !Processing;
+    public bool Forge => !Placing && Build is null && !Dig && !Haul && !Smelt && !Cook && !Farming && !Refuel && !Forestry && !Processing;
     public bool Production => Forge || Smelt || Cook || Processing;
-    public bool Construction => Build is not null || Dig;
+    public bool Construction => BuildingWork || Dig;
     public List<MaterialReservation> Materials {get;set;}=new();
     public int Worker { get; set; } = -1;
     public double Progress { get; set; }
     public const double BuildWorkRequired = 1.0;
     [System.Text.Json.Serialization.JsonIgnore]
-    public double BuildFraction => Build is null ? 0 : Math.Clamp(Progress / BuildWorkRequired, 0, 1);
+    public double BuildFraction => !BuildingWork ? 0 : Math.Clamp(Progress / BuildWorkRequired, 0, 1);
     [System.Text.Json.Serialization.JsonIgnore]
-    public double BuildDurability => Build is BuildKind kind ? BlockCatalog.Get(kind).Durability * BuildFraction : 0;
+    public double BuildDurability => BuildingWork ? (ResolvedBuild??BlockCatalog.Get(WorkKind)).Durability * BuildFraction : 0;
 }
 
 public sealed class DemoWorker
@@ -103,7 +115,7 @@ public sealed partial class DemoWorld
     public BuildingMap Buildings { get; }
     public WorldNavigation Navigation { get; }
     public PerformanceProbe? Probe { get; set; }
-    public List<DemoJob> Jobs { get; } = new();
+    public JobCollection Jobs { get; }
     public List<DemoWorker> Workers { get; } = new();
     public List<string> Events { get; } = new();
     public List<BlueprintPart> Blueprint { get; private set; } = new();
@@ -137,14 +149,16 @@ public sealed partial class DemoWorld
         Demo=new TwoStoreyDemo(Camp); Demo.Advance(this); return true;
     }
 
-    public DemoWorld(int seed = 74219, bool flat = false, string? region = null,WorldGenerationSettings? generation=null,int ecologyVersion=2,int climateVersion=1,bool generateFluids=true)
+    public DemoWorld(int seed = 74219, bool flat = false, string? region = null,WorldGenerationSettings? generation=null,bool generateFluids=true,ContentCatalog? content=null,bool generateContentTerrain=true)
     {
-        Terrain = new TerrainMap(seed, flat, region,generation,ecologyVersion);
-        if(climateVersion is not (0 or 1))throw new ArgumentException("不支持的天气版本。");
-        ClimateVersion=Terrain.Region is null?0:climateVersion;
+        Content=content??ContentRuntime.Current;
+        Jobs=new JobCollection(j=>{BindJobBuilding(j);BindJobRecipe(j);});
+        Terrain = new TerrainMap(seed, flat, region,generation);
+        Terrain.Definitions=Content;
+        if(generateContentTerrain)Terrain.GenerateDefinitionOres(Content);
         Navigation = new WorldNavigation(this);
-        Buildings = new BuildingMap(c=>{Navigation.Invalidate(c);InvalidateRooms(c);_blockDamage.Remove(c);FluidGeometryChanged(c);SupportChanged(c);});
-        Terrain.Changed += c=>{Navigation.Invalidate(c);InvalidateRooms(c);_blockDamage.Remove(c);FluidGeometryChanged(c);SupportChanged(c);};
+        Buildings = new BuildingMap(GeometryChanged,BindBuilding);
+        Terrain.Changed += GeometryChanged;
         InitializeFluids(generateFluids);
         Workers.Add(new DemoWorker { Id = "azhen", Name = "阿榛", X = 2, Z = 10 });
         Workers.Add(new DemoWorker { Id = "mila", Name = "米拉", X = 3, Z = 11 });
@@ -153,11 +167,12 @@ public sealed partial class DemoWorld
         {
             Workers[i].Appearance = CharacterAppearance.Randomize(new Random(unchecked(seed * 397 + i * 7919)));
             Workers[i].Person = ResidentProfile.Create(i);
+            Workers[i].Person.BindSpeciesCatalog(Content.Creatures);
         }
         if (!flat)
             for (int i = 0; i < Workers.Count; i++)
             { Workers[i].X = Camp.X + i; Workers[i].Z = Camp.Z + 7; Workers[i].Level = Terrain[Camp.X + i, Camp.Z + 7].Level; }
-        SeedTrees(); SeedItems(); SeedResidentItems(); SpawnItem("sapling",12,Camp+new Cell(5,8));
+        SeedTrees(); if(!flat&&generateContentTerrain)SeedWildPlants(); SeedItems(); SeedResidentItems(); SpawnItem("sapling",12,Camp+new Cell(5,8));
         Log($"三位居民抵达。地图 {Width}×{Depth}，种子 {seed}。");
     }
 
@@ -179,15 +194,17 @@ public sealed partial class DemoWorld
     private bool Occupied(Cell c) => !Inside(c) || NaturalSolid(c) || NaturalRamp(c) || Buildings.ContainsKey(c) ||
         (Terrain[c.X, c.Z].Tree && c.Level >= Terrain[c.X, c.Z].Level && c.Level < Terrain[c.X, c.Z].Level + TreeHeight(Surface(c.X,c.Z))) ||
         (Buildings.TryGetValue(c + new Cell(0, 0, -1), out var under) && TallFixture(under.Kind));
-    private bool PlannedSolid(Cell c) => Jobs.Any(j => j.Cell == c && j.Build is BuildKind k && BlockCatalog.IsWall(k));
-    private bool Supported(Cell c, bool plans = false) => Solid(c + new Cell(0, 0, -1)) ||
-        (plans && PlannedSolid(c + new Cell(0, 0, -1))) ||
-        Directions.Any(d => Solid(c + d) || (plans && PlannedSolid(c + d)));
-    public bool CanPlace(Cell c) => Inside(c) && c.Level > TerrainMap.MinLevel && c.Level <= TerrainMap.MaxLevel && !Occupied(c) && Fluids.Amount(c)==0 &&
-        !Jobs.Any(j => j.Construction && (j.Cell == c || (j.Build is BuildKind plannedKind && TallFixture(plannedKind) && j.Cell + new Cell(0, 0, 1) == c))) && Supported(c, true);
-    public bool CanPlace(Cell c, BuildKind kind, int facing = 0)
+    private bool PlannedSolid(Cell c) => Jobs.Any(j => j.Cell == c && j.BuildingWork && BlockCatalog.IsWall(j.WorkKind));
+    private bool Supported(Cell c, bool plans = false,IReadOnlySet<Cell>? previewSolids=null) => Solid(c + new Cell(0, 0, -1)) ||
+        (plans && (PlannedSolid(c + new Cell(0, 0, -1))||previewSolids?.Contains(c+new Cell(0,0,-1))==true)) ||
+        Directions.Any(d => Solid(c + d) || (plans && (PlannedSolid(c + d)||previewSolids?.Contains(c+d)==true)));
+    public bool CanPlace(Cell c) => CanPlaceSite(c,null);
+    private bool CanPlaceSite(Cell c,IReadOnlySet<Cell>? previewSolids) => Inside(c) && c.Level > TerrainMap.MinLevel && c.Level <= TerrainMap.MaxLevel && !Occupied(c) && Fluids.Amount(c)==0 &&
+        !Jobs.Any(j => j.Construction && (j.Cell == c || (j.Build is BuildKind plannedKind && TallFixture(plannedKind) && j.Cell + new Cell(0, 0, 1) == c))) && Supported(c, true,previewSolids);
+    public bool CanPlace(Cell c, BuildKind kind, int facing = 0,IReadOnlySet<Cell>? previewSolids=null)
     {
-        if (!CanPlace(c)) return false;
+        // Preview support is only for solid line planning, never physical movement or completed work.
+        if (!CanPlaceSite(c,BlockCatalog.IsWall(kind)?previewSolids:null)) return false;
         if(kind==BuildKind.Ladder)return Solid(c+StairDirection(facing))||PlannedSolid(c+StairDirection(facing));
         if(BlockCatalog.IsStairs(kind)&&Enumerable.Range(1,2).Any(h=>Occupied(c+new Cell(0,0,h))))return false;
         if (!BlockCatalog.IsWall(kind) && !Solid(c + new Cell(0, 0, -1)) && !PlannedSolid(c + new Cell(0, 0, -1))) return false;
@@ -262,18 +279,9 @@ public sealed partial class DemoWorld
     }
 
     public bool QueueBuild(Cell cell, BuildKind kind, bool announce = true, int facing = 0)
-    {
-        if (!CanPlace(cell, kind, facing)) { if (announce) Log("此处无法施工。需要空位与支撑；设备须有地板，门上方须留空。"); return false; }
-        var job=new DemoJob { Id = ++_nextJob, Cell = cell, Build = kind, Facing = facing };
-        if(!Reserve(job,BuildRecipe(kind))){if(announce)Log("可用材料不足。");return false;}
-        Jobs.Add(job);
-        Revision++;
-        if (announce) Log($"已规划{NameOf(kind)}，居民会自行施工。");
-        return true;
-    }
-
-    private void Refund(BuildKind kind,Cell cell)
-    {foreach(var p in BuildRecipe(kind))SpawnItem(p.Key,p.Value,cell);SettleItems();}
+        =>QueueBuild(cell,BlockCatalog.Id(kind),announce,facing);
+    private void Refund(Building building,Cell cell)
+    {foreach(var p in BuildingDefinition(building).Cost)SpawnItem(p.Key,p.Value,cell);SettleItems();}
 
     public void Erase(Cell c)
     {
@@ -293,7 +301,7 @@ public sealed partial class DemoWorld
         if(Buildings.ContainsKey(c)&&RemovalEndangersResident(c)){Log("先移开受支撑建筑上的居民再拆除。");return;}
         if (!Buildings.Remove(c, out var building)) return;
         _blockDamage.Remove(c);
-        Refund(building.Kind,c); // Demo deliberately uses full refunds.
+        Refund(building,c); // Demo deliberately uses full refunds.
         Revision++;
         ValidateWorkshop();
         Log($"已拆除{NameOf(building.Kind)}，材料退回。");
@@ -302,10 +310,10 @@ public sealed partial class DemoWorld
     public bool QueueSword()
     {
         if (!WorkshopReady) { Log("工坊尚未就绪：" + WorkshopIssue); return false; }
-        if (ProductionCatalog.Get("sword").Inputs.Any(p=>Available(p.Key)<p.Value)) { Log("锻造需要 2 铁锭和 1 煤炭。"); return false; }
+        if (Content.Recipe("sword").Inputs.Any(p=>Available(p.Key)<p.Value)) { Log("锻造需要 2 铁锭和 1 煤炭。"); return false; }
         if (Jobs.Count(j => j.Forge) >= 3) { Log("锻造队列已满，先等当前订单完成。"); return false; }
         var job=new DemoJob { Id = ++_nextJob, Cell = _forgeAnvil!.Value };
-        if(!Reserve(job,ProductionCatalog.Get("sword").Inputs))return false;
+        if(!Reserve(job,Content.Recipe("sword").Inputs))return false;
         job.ProductionOrderId=AddProductionOrder("sword",station:job.Cell).Id;Jobs.Add(job);Revision++;
         Log("铁剑订单已下达，原料已预留。");
         return true;
@@ -326,16 +334,15 @@ public sealed partial class DemoWorld
     public bool QueueBlueprint(Cell origin, IReadOnlyList<BlueprintPart> parts)
     {
         if (parts.Count == 0) { Log("先保存一份蓝图。"); return false; }
-        if (parts.Any(p => !CanPlace(origin + p.Offset, p.Kind, p.Facing)))
+        if(parts.Any(p=>p is null||p.DefinitionId is null||BlueprintDefinition(p).Handler!=p.Kind))throw new InvalidDataException("蓝图建筑定义无效");
+        if (parts.Select(p=>p.Offset).Distinct().Count()!=parts.Count||parts.Any(p => !CanPlace(origin + p.Offset, p.Kind, p.Facing)))
         { Log("蓝图需要同高空地，不能跨坡、穿树或覆盖已有建筑。"); return false; }
-        int stone = parts.Sum(p => BlockCatalog.Get(p.Kind).Cost.Stone);
-        int wood = parts.Sum(p => BlockCatalog.Get(p.Kind).Cost.Wood);
-        int iron = parts.Sum(p => BlockCatalog.Get(p.Kind).Cost.Iron);
-        if (Stone < stone || Wood < wood || Iron < iron) { Log("蓝图所需材料不足。"); return false; }
+        var costs=parts.SelectMany(p=>BlueprintDefinition(p).Cost).GroupBy(p=>p.Key).ToDictionary(g=>g.Key,g=>g.Sum(p=>(long)p.Value));
+        if(costs.Any(p=>Available(p.Key)<p.Value)){Log("蓝图所需材料不足。");return false;}
         int group = ++_nextConstructionGroup;
         foreach (var part in parts)
         {
-            QueueBuild(origin + part.Offset, part.Kind, false, part.Facing);
+            if(!QueueBuild(origin + part.Offset, BlueprintDefinition(part).Id, false, part.Facing))return false;
             Jobs[^1].ConstructionGroup = group;
         }
         Log($"已规划 {parts.Count} 个构件，三位居民开始合作施工。");
@@ -348,7 +355,7 @@ public sealed partial class DemoWorld
         if (Buildings.Keys.Select(c => c.Level).Distinct().Count() > 1)
         { Log("此版蓝图仅支持同一高度，请先保留单层布局。"); return; }
         int minX = Buildings.Keys.Min(c => c.X), minZ = Buildings.Keys.Min(c => c.Z);
-        Blueprint = Buildings.Values.Select(b => new BlueprintPart(new Cell(b.Cell.X - minX, b.Cell.Z - minZ), b.Kind, b.Facing)).ToList();
+        Blueprint = Buildings.Values.Select(b => new BlueprintPart(new Cell(b.Cell.X - minX, b.Cell.Z - minZ), b.Kind, b.Facing){DefinitionId=b.DefinitionId}).ToList();
         Log($"已保存当前全部建筑为蓝图，共 {Blueprint.Count} 个构件（本次游玩内有效）。");
     }
 
@@ -356,14 +363,16 @@ public sealed partial class DemoWorld
     {
         using var timing = Probe?.Measure("simulation.total") ?? default;
         if(!double.IsFinite(dt)||dt<=0)return;
-        _orderedJobs = null;
+        if(_domainEvents is not null)foreach(var command in _domainEvents.TakeCommands())ActResident(command);
         _supportSafety.Clear();
         _simulationTime += dt;
         AdvanceStoryEvents();
         foreach(var actor in Actors)actor.Combat.Cooldown=Math.Max(0,actor.Combat.Cooldown-dt);
+        FlushBlockChanges();
         AdvanceSupport();
         Fluids.Advance(dt);
         RefreshWaterSafety();
+        _creatures?.Advance(_simulationTime);
         UpdateHomes(dt);UpdateRoomTemperatures();UpdateTrees(dt);
         UpdateFarming(dt);UpdateProductionOrders(dt);
         _residentElapsed += dt;
@@ -437,18 +446,21 @@ public sealed partial class DemoWorld
                 worker.Status = job.Forge ? "前往铁砧" : "走向施工位置";
                 continue;
             }
+            if(job.Placing&&!PlacementSiteOpen(job)){CancelJob(job);continue;}
             if(AdvanceDelivery(worker,job))continue;
-            if (job.Build is not null && (Fluids.Amount(job.Cell)>0 || !Supported(job.Cell) || (job.Build==BuildKind.Ladder&&!Solid(job.Cell+StairDirection(job.Facing))) || Actors.Any(other => IntersectsWorker(job.Cell, job.Build!.Value, other))))
+            if(job.Placing&&!PlacementReady(job)){worker.Status="等待放置位置与支撑";continue;}
+            if (job.BuildingWork && (Fluids.Amount(job.Cell)>0 || !Supported(job.Cell) || (job.Build==BuildKind.Ladder&&!Solid(job.Cell+StairDirection(job.Facing))) || Actors.Any(other => IntersectsWorker(job.Cell, job.WorkKind, other))))
             { worker.Status = "等待施工位置腾空"; continue; }
             if (!Walkable(worker.Tile)) { Release(job); continue; }
             if(job.Dig && !DigSafe(job)) { Release(job); worker.Status="等待挖掘空间安全"; continue; }
-            worker.Status = job.Processing ? "加工物资" : job.Refuel ? "添柴" : job.Chop ? "伐木" : job.PlantTree ? "种树" : job.Sow ? "播种" : job.Harvest ? "收获" : job.Demolish ? "拆除方块" : job.Dig ? "挖掘岩土" : job.Cook ? "烹制口粮" : job.Smelt ? "熔炼粗铁" : job.Forge ? "锻造铁剑" : $"建造{NameOf(job.Build!.Value)}";
+            worker.Status = job.Processing ? "加工物资" : job.Refuel ? "添柴" : job.Chop ? "伐木" : job.PlantTree ? "种树" : job.Sow ? "播种" : job.Harvest ? "收获" : job.Demolish ? "拆除方块" : job.Dig ? "挖掘岩土" : job.Cook ? "烹制口粮" : job.Smelt ? "熔炼粗铁" : job.Forge ? "锻造铁剑" : $"建造{BuildName(job)}";
             double work=dt * worker.Person.WorkRate(JobSkill(job)) * (1+GearWorkBonus(worker,job));
             job.Progress += work;
-            if(job.Chop ? DamageBlock(job.Cell,work*20) : job.Dig ? MineStep(job,work) : job.Progress >= (job.Chop ? TreeHeight(job.Cell)*.8 : job.PlantTree?3 : job.Farming ? 2.0 : job.Production ? ProductionCatalog.Get(ProductionCatalog.RecipeOf(job)).Work : DemoJob.BuildWorkRequired))Complete(job,worker);
+            if(job.Chop ? DamageBlock(job.Cell,work*20) : job.Dig ? MineStep(job,work) : job.Progress >= (job.Chop ? TreeHeight(job.Cell)*.8 : job.PlantTree?3 : job.Farming ? 2.0 : job.Production ? JobRecipe(job).Work : DemoJob.BuildWorkRequired))Complete(job,worker);
         }
         AdvanceMelee(dt);
         UpdateBattleOutcome();
+        _domainEvents?.Dispatch();
     }
 
     private static bool SameConstructionSite(DemoJob equipment, DemoJob shell)
@@ -480,11 +492,12 @@ public sealed partial class DemoWorld
             if (job.Worker >= 0 || !BillAllowsWorker(job,worker) || !CheckDigWater(job)) continue;
             int rank=ResidentWork.Rank(worker.Person,ResidentWork.JobType(job));
             if(rank==int.MaxValue||rank>bestRank)continue;
+            if(job.Placing&&(!PlacementSiteOpen(job)||!PlacementSupported(job.Cell,Content.Placement(job.PlaceItem,job.PlaceBlock),false)))continue;
             if (job.Build is BuildKind.Furnace or BuildKind.Anvil && PendingConstructionShell(job)) continue;
             if(job.Forestry&&!ForestryReady(job))continue;
             if(job.Farming&&!FarmReady(job))continue;
             if (job.Production && (!ProductionReady(job)||!BillAllowsWorker(job,worker))) continue;
-            if (job.Build is not null && (Fluids.Amount(job.Cell)>0 || !Supported(job.Cell))) continue;
+            if (job.BuildingWork && (Fluids.Amount(job.Cell)>0 || !Supported(job.Cell))) continue;
             if(job.Build==BuildKind.Ladder&&!Solid(job.Cell+StairDirection(job.Facing)))continue;
             if(job.Dig && !DigSafe(job, _residentFootCells)) continue;
             if (occupiedJobs.Contains(job.Cell)) continue;
@@ -577,6 +590,7 @@ public sealed partial class DemoWorld
             }
             yield break;
         }
+        if(job.Placing)foreach(var d in Directions)yield return job.Cell+d+new Cell(0,0,1);
         if(job.Build==BuildKind.Ladder){yield return job.Cell;yield return job.Cell+new Cell(0,0,1);foreach(var d in Directions)yield return job.Cell+d+new Cell(0,0,1); }
         // A resident on the upper landing can install a stair into the excavated cell below.
         if(job.Build is BuildKind stairKind && BlockCatalog.IsStairs(stairKind))
@@ -622,23 +636,25 @@ public sealed partial class DemoWorld
         else if(job.Processing)CompleteProcessing(job,worker);
         else if(job.Cook)
         {
-            ConsumeMaterials(job);var recipe=ProductionCatalog.Get("cook");SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);Log($"{worker.Name}做好了 2 份口粮。");
+            ConsumeMaterials(job);var recipe=JobRecipe(job);SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);Log($"{worker.Name}做好了 2 份口粮。");
         }
         else if(job.Smelt)
         {
-            ConsumeMaterials(job);var recipe=ProductionCatalog.Get("smelt");SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);
+            ConsumeMaterials(job);var recipe=JobRecipe(job);SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);
             Log($"{worker.Name}熔炼出了 2 铁锭。");
         }
         else if (job.Forge)
         {
-            ConsumeMaterials(job);var recipe=ProductionCatalog.Get("sword");SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);
+            ConsumeMaterials(job);var recipe=JobRecipe(job);SpawnItem(recipe.Output,recipe.Count,worker.Tile,destinationZone:Bill(job)?.DestinationZone??0);
             Log($"{worker.Name}完成了一把铁剑！这间工坊开始运转了。");
         }
         else
         {
+            if(job.Placing&&!PlacementReady(job))return;
             ConsumeMaterials(job);
-            DisplaceItems(job.Cell,worker.Tile,TallFixture(job.Build!.Value)?2:1);
-            Buildings[job.Cell] = new Building(job.Cell, job.Build!.Value, job.Facing);
+            DisplaceItems(job.Cell,worker.Tile,TallFixture(job.WorkKind)?2:1);
+            if(job.Placing)Terrain.Place(job.Cell,job.PlaceBlock,Content);
+            else Buildings[job.Cell] = new Building(job.Cell, job.Build!.Value, job.Facing){DefinitionId=job.BuildDefinitionId};
             Revision++;
         }
         AwardWork(worker,JobSkill(job),job.Dig?20*job.DigHeight:job.Smelt?80:job.Forge?100:20);

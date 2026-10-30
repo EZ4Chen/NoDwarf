@@ -1,4 +1,8 @@
 using NoDwarf.Simulation;
+if(args.Contains("--plant-updates-test")){PlantUpdateChecks.Run();CropClimateChecks.Run();FarmingChecks.Run();CropProductionChecks.Run();TreeShapeChecks.Run();BuildingGravityChecks.Run();FluidChecks.Run();return;}
+if(args.Contains("--tick-rate-regression")){TickRateChecks.Run();CalendarChecks.Run();ResidentChecks.Run();ResidentHealthChecks.Run();HealthConditionChecks.Run();ResidentLivingChecks.Run();MedicalRescueChecks.Run();CombatChecks.Run();FluidChecks.Run();return;}
+if(args.Contains("--creature-resident-regression")){CreatureChecks.Run();ResidentChecks.Run();ResidentHealthChecks.Run();HealthConditionChecks.Run();ResidentLivingChecks.Run();MedicalRescueChecks.Run();CombatChecks.Run();MeleeChecks.Run();return;}
+if(args.Contains("--creature-framework-test")){CreatureChecks.Run();return;}
 
 if(args.Contains("--water-regression")){NavigationChecks.Run();Console.WriteLine("WATER_NAVIGATION_REGRESSION_OK");WorldGenerationChecks.Run();ResidentLivingChecks.Run();MedicalRescueChecks.Run();LifeExpansionChecks.Run();return;}
 if(args.Contains("--water-safety-checks")){WaterSafetyChecks.Run();FluidChecks.Run();return;}

@@ -64,10 +64,8 @@ public static class LogisticsChecks
         string saveRoot=Path.Combine(Path.GetTempPath(),"nodwarf-save-check-"+Guid.NewGuid());
         try
         {
-            Directory.CreateDirectory(saveRoot);string legacy=Path.Combine(saveRoot,"old.json"),current=Path.Combine(saveRoot,"saves","colony.json");
-            File.WriteAllText(legacy,"old");Check(SaveFiles.ReadPath(current,legacy)==legacy,"Legacy save remains readable");
-            SaveFiles.Write(current,"new",legacy);
-            Check(File.ReadAllText(legacy)=="old"&&File.ReadAllText(current+".bak")=="old"&&SaveFiles.ReadPath(current,legacy)==current,"Migration retains legacy and previous backup");
+            Directory.CreateDirectory(saveRoot);string current=Path.Combine(saveRoot,"saves","colony.json");
+            SaveFiles.Write(current,"new");Check(File.ReadAllText(current)=="new","Current save written");
             SaveFiles.Write(current,"newer");Check(File.ReadAllText(current+".bak")=="new"&&!File.Exists(current+".tmp"),"Replacement retains latest backup and no temporary file");
         }
         finally{Directory.Delete(saveRoot,true);}

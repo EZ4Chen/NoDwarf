@@ -41,7 +41,11 @@ public partial class Main
         _fastSpeed=Speed("fastest","三倍速度（3×）",()=>SetTimeSpeed(3));
         _layerStatus=Text("",12,Muted);viewColumn.AddChild(_layerStatus);
         var display=new HBoxContainer();viewColumn.AddChild(display);
-        _cutButton=Button(display,"精确",ToggleWalls);_cutButton.TooltipText="H 循环：全貌 / 本层完整墙 / 自动切墙 / 精确施工";
+        var walls=new MenuButton{Text="精确施工",CustomMinimumSize=new(118,30)};display.AddChild(walls);_cutButton=walls;
+        UiAccess.Name(walls,"墙壁显示方式");walls.TooltipText="选择墙壁显示方式 [H 循环切换]";
+        foreach(var (name,id) in new[]{("全貌",0),("本层完整墙",3),("墙壁剖切",1),("精确施工",2)})walls.GetPopup().AddRadioCheckItem(name,id);
+        walls.AboutToPopup+=()=>{int mode=!_cutaway?0:_interiorView?1:_floorWalls?3:2;var popup=walls.GetPopup();for(int i=0;i<popup.ItemCount;i++)popup.SetItemChecked(i,popup.GetItemId(i)==mode);};
+        walls.GetPopup().IdPressed+=id=>SetViewMode((int)id);
         Button(display,"地图概览",()=>_mapPanel.Visible=!_mapPanel.Visible);
     }
     private void SetTimeSpeed(int speed){_clock.SetSpeed(speed);_clock.Paused=false;RefreshUi();}

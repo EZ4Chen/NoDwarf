@@ -12,7 +12,6 @@ public static class FlatPawnAppearanceChecks
         var restored=AppearanceStorage.Deserialize(AppearanceStorage.Serialize([new DemoWorker{Id="palette",Name="配色测试",Appearance=custom}]))["palette"];
         Check(restored==custom&&restored.HairColor=="#aabbcc"&&restored.BeardColor=="#34abcd","Independent palette archive roundtrip");
         Check((a with{HairColor="#abc",Skin="invalid",BeardColor="#ffffff00"}).Normalize() is {HairColor:"chestnut",Skin:"warm",BeardColor:"silver"},"Invalid palette validation");
-        Check(System.Text.Json.JsonSerializer.Deserialize<CharacterAppearance>("{}")!.Normalize().BeardColor=="silver","Legacy missing beard color");
         Image Preview(CharacterAppearance appearance,int d=0)=>DirectionalDwarfView.Preview(appearance,[],d).GetImage();
         var light=Preview(a);var dark=Preview(a with{Skin="deep"});
         Check(light.GetPixel(100,185)!=dark.GetPixel(100,185),"Body skin unchanged");
@@ -34,6 +33,6 @@ public static class FlatPawnAppearanceChecks
                 Check(right.GetData().SequenceEqual(left.GetData()),"Left/right hairstyle mirroring: "+style);
             }
         }
-        GD.Print("FLAT_APPEARANCE_OK: custom RGB archive, legacy fallback, independent hair/beard/skin, underwear preservation, three skulls, eight hair choices and mirroring");
+        GD.Print("FLAT_APPEARANCE_OK: custom RGB archive, independent hair/beard/skin, underwear preservation, three skulls, eight hair choices and mirroring");
     }
 }

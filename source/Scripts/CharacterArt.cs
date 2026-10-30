@@ -21,7 +21,7 @@ public static class CharacterArt
         string skin = a.Skin switch { "porcelain" => "f5d9bd", "tan" => "ce986c", "brown" => "a36c49", "deep" => "704a37", _ => "efc39d" };
         string hair = a.HairColor switch { "black" => "302d30", "gold" => "cfaa61", "auburn" => "a45437", "silver" => "9b9d99", "white" => "e4dfd0", _ => "694b38" };
         string cloth = a.Cloth switch { "ochre" => "bd995a", "blue" => "728f9f", "plum" => "98758e", "rust" => "b57556", "cream" => "ded5bd", _ => "9aa991" };
-        int left = a.Body == "slim" ? 26 : a.Body == "broad" ? 18 : 23;
+        int left = a.Body == "thin" ? 26 : a.Body == "hulk" ? 18 : 23;
         int right = 80 - left;
         string face = a.Face switch
         {

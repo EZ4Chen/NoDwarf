@@ -80,13 +80,13 @@ public partial class Main
             _frameDiagnostic.ResumeSimulation=args.Contains("--diag-fixed-workload");
             _frameDiagnostic.Name += _frameDiagnostic.ResumeSimulation?"-fixed-workload":"-static";
             // Identical simulation state in every render-only A/B run.
-            for (int i = 0; i < 150; i++)
+            for (int i = 0; i < 5*SimulationClock.BaseTicksPerSecond; i++)
             {
                 _tpsReview!.Scenario.BeforeTick(i);
-                _world.Update(1d / 30);
+                _world.Update(SimulationClock.TickSeconds);
             }
             _clock.Paused = true;
-            if(_frameDiagnostic.ResumeSimulation)_tpsReview!.Ticks=150;
+            if(_frameDiagnostic.ResumeSimulation)_tpsReview!.Ticks=5*SimulationClock.BaseTicksPerSecond;
         }
         if (args.Contains("--diag-render-warmup"))
         {

@@ -39,10 +39,11 @@ public static class ProductionBillChecks
         Until(shipping,()=>shipping.Items.Any(i=>i.Item=="cloth"&&i.Cell==destination));
         Check(shipping.Total("cloth")==2,"Physical delivery must not duplicate products");
         var loaded=DemoWorld.LoadJson(order.SaveJson());Check(loaded.ProductionOrders[0].Id==high.Id&&!loaded.ProductionOrders[0].Enabled&&loaded.Jobs.Single(j=>j.Production).ProductionOrderId==low.Id,"Queue/mode/pause/link save round trip");
-        var legacy=JsonNode.Parse(count.SaveJson())!;foreach(var node in legacy["ProductionOrders"]!.AsArray()){node!.AsObject().Remove("Id");node.AsObject().Remove("Mode");node["Target"]=5;}var migrated=DemoWorld.LoadJson(legacy.ToJsonString());Check(migrated.ProductionOrders.All(o=>o.Id>0&&o.Mode=="maintain"),"Legacy target saves migrate");
-        var xml=XDocument.Parse("<ProductionDefinitions><Items><Item id='a' name='A' texture='x' color='ffffff'/></Items><Recipes><Recipe id='custom' name='Custom' station='Loom' output='a' count='2' work='7'><Ingredient item='a' count='1'/></Recipe></Recipes><Modes><Mode id='custom_repeat' label='重复' behavior='forever' defaultCount='1'/></Modes></ProductionDefinitions>");
+        var xml=XDocument.Parse("<ProductionDefinitions><Items><Item id='a' name='A' texture='x' color='ffffff' value='1'/></Items><Recipes><Recipe id='custom' name='Custom' station='Loom' output='a' count='2' work='7'><Ingredient item='a' count='1'/></Recipe></Recipes><Modes><Mode id='custom_repeat' label='重复' behavior='forever' defaultCount='1'/></Modes></ProductionDefinitions>");
         var defs=ProductionDefinitions.Parse(xml);Check(defs.Item2[0].Work==7&&defs.Item3[0].Behavior=="forever","XML recipes/items/mode definitions parse without C# changes");
+        var missingValue=new XDocument(xml);missingValue.Root!.Element("Items")!.Element("Item")!.Attribute("value")!.Remove();
+        try{ProductionDefinitions.Parse(missingValue);throw new Exception("Missing item value accepted");}catch(InvalidDataException){}
         xml.Root!.Element("Recipes")!.Element("Recipe")!.SetAttributeValue("output","missing");try{ProductionDefinitions.Parse(xml);throw new Exception("Unknown XML reference accepted");}catch(InvalidDataException){}
-        Console.WriteLine("PRODUCTION_BILLS_OK: count/forever, pause/delete/reorder, materials/source/radius/durability, worker/skill, output policy, save migration, XML validation");
+        Console.WriteLine("PRODUCTION_BILLS_OK: count/forever, pause/delete/reorder, materials/source/radius/durability, worker/skill, output policy, save roundtrip, XML validation");
     }
 }

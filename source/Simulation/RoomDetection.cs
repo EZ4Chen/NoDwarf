@@ -27,8 +27,15 @@ public sealed partial class DemoWorld
             changed.Z>=h.Region.MinZ-2&&changed.Z<=h.Region.MaxZ+2))_roomHeatLinksDirty=true;
     }
 
+    private void InvalidateRoomBatch(IReadOnlyCollection<Cell> changed)
+    {
+        bool Near(Cell c,RoomRegion r,int margin)=>c.Level>=r.Level-1&&c.X>=r.MinX-margin&&c.X<=r.MaxX+margin&&c.Z>=r.MinZ-margin&&c.Z<=r.MaxZ+margin;
+        int removed=_roomRegions.RemoveAll(r=>changed.Any(c=>Near(c,r,1)));
+        if(removed>0||_roomHeat.Any(h=>changed.Any(c=>Near(c,h.Region,2))))_roomHeatLinksDirty=true;
+    }
     private RoomRegion FindRoomRegion(Cell start)
     {
+        FlushBlockChanges();
         foreach (var cached in _roomRegions)
             if (cached.Cells.Contains(start)) { Probe?.Count("rooms.cache-hits"); return cached; }
         var region = new RoomRegion { Level = start.Level, MinX = start.X, MaxX = start.X, MinZ = start.Z, MaxZ = start.Z };

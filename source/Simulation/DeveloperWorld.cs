@@ -19,6 +19,7 @@ public sealed partial class DemoWorld
     }
     public bool DeveloperDig(Cell c,bool stairs=false,int facing=0,int height=1)
     {
+        using var blockBatch=BatchBlockChanges();
         _supportSafety.Clear();
         if(Trees.ContainsKey(c))return DamageBlock(c,double.MaxValue);
         if(!CanDig(c,stairs,height)) {Log("立即挖掘失败：没有可挖岩土或与现有物件重叠。");return false;}
@@ -63,11 +64,12 @@ public sealed partial class DemoWorld
     }
     public int DeveloperFinishPlans()
     {
+        using var blockBatch=BatchBlockChanges();
         int completed=0;
         while(completed<512)
         {
             Demo?.Advance(this);Underground?.Advance(this);
-            var job=Jobs.FirstOrDefault(j=>j.Construction && (j.Build!=BuildKind.Ladder||Solid(j.Cell+StairDirection(j.Facing))) && (j.Dig?DigSafe(j):Fluids.Amount(j.Cell)==0&&Supported(j.Cell)&&!Actors.Any(w=>IntersectsWorker(j.Cell,j.Build!.Value,w))));
+            var job=Jobs.FirstOrDefault(j=>j.Construction && (!j.Placing||PlacementReady(j)) && (j.Build!=BuildKind.Ladder||Solid(j.Cell+StairDirection(j.Facing))) && (j.Dig?DigSafe(j):Fluids.Amount(j.Cell)==0&&Supported(j.Cell)&&!Actors.Any(w=>IntersectsWorker(j.Cell,j.WorkKind,w))));
             if(job is null)break;
             Complete(job,new DemoWorker{Name="开发者"});completed++;
         }

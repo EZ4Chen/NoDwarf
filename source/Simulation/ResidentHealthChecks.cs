@@ -40,14 +40,11 @@ public static class ResidentHealthChecks
         var loaded=DemoWorld.LoadJson(w.SaveJson());var saved=loaded.Workers[0].Person;
         Check(saved.Diseases.Single().Progress==125&&saved.Diseases[0].Immunity==85&&saved.Malnutrition==50&&saved.Injuries.Single().PermanentSeverity==residual,"all progress and sequela persist");
         ResidentHealth.Step(saved,0);Check(saved.Diseases[0].Progress==125,"paused does not advance");
-        var legacy=JsonNode.Parse(w.SaveJson())!;legacy["Version"]=18;
-        foreach(var r in legacy["Workers"]!.AsArray()) {var person=r!["Person"]!.AsObject();person.Remove("Diseases");person.Remove("Malnutrition");foreach(var i in person["Injuries"]!.AsArray()){i!.AsObject().Remove("PermanentSeverity");i.AsObject().Remove("UntreatedSeconds");i.AsObject().Remove("InfectionSeeded");}}
-        loaded=DemoWorld.LoadJson(legacy.ToJsonString());Check(loaded.Workers[0].Person.Diseases.Count==0&&loaded.Workers[0].Person.Malnutrition==0&&loaded.Workers[0].Person.Injuries[0].PermanentSeverity==0,"legacy injuries not retroactively made permanent");
         var invalid=JsonNode.Parse(w.SaveJson())!;invalid["Workers"]![0]!["Person"]!["Diseases"]![0]!["Immunity"]=101;
         bool rejected=false;try{DemoWorld.LoadJson(invalid.ToJsonString());}catch(InvalidDataException){rejected=true;}Check(rejected,"invalid health rejected");
         // Real world cadence, not only isolated state updates.
         w=CombatChecks.Fixture();resident=w.Workers[0];w.InfectResident(resident.Id,"fever");double before=resident.Person.Diseases[0].Progress;
         for(int i=0;i<120;i++)w.Update(1d/30);Check(resident.Person.Diseases[0].Progress>before,"world health update connected");
-        Console.WriteLine("RESIDENT_HEALTH_OK: disease stages/immunity/recovery, nutrition, bleeding, infection, sequelae, tick crossing, archive migration and world integration");
+        Console.WriteLine("RESIDENT_HEALTH_OK: disease stages/immunity/recovery, nutrition, bleeding, infection, sequelae, tick crossing, archive roundtrip and world integration");
     }
 }

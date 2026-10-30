@@ -49,7 +49,7 @@ public partial class Main
                 if(!VisibleAt(b.Cell)||!VisibleAt(target))continue;
                 Node3D moving;
                 if(_buildingVisuals.Remove(b.Cell,out var old))moving=old.Root;
-                else {moving=new Node3D();root.AddChild(moving);DrawBuilding(moving,b.Cell,b.Kind,facing:b.Facing,fullHeight:true);}
+                else {moving=new Node3D();root.AddChild(moving);DrawBuilding(moving,b.Cell,b.Kind,facing:b.Facing,fullHeight:true,definitionId:b.DefinitionId);}
 
                 // Reuse existing meshes/materials; one parent transform moves the group.
                 if(moving.GetParent()!=root)moving.Reparent(root);

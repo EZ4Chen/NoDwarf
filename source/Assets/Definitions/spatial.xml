@@ -1,0 +1,190 @@
+<SpatialDefinitions>
+  <Blocks>
+    <Block id="nodwarf:air" name="空气" shape="Empty" color="929084" durability="0" />
+    <Block id="nodwarf:grass" name="草地" shape="Solid" color="6f7c50" durability="60">
+      <Drop item="soil" count="1" />
+    </Block>
+    <Block id="nodwarf:soil" name="土壤" shape="Solid" color="8a7356" durability="60">
+      <Drop item="soil" count="1" />
+    </Block>
+    <Block id="nodwarf:sand" name="沙子" shape="Solid" color="c2ae7d" durability="40">
+      <Drop item="sand" count="1" />
+    </Block>
+    <Block id="nodwarf:stone" name="岩石" shape="Solid" color="85877b" durability="100">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:soil_ramp" name="土壤斜坡" shape="Ramp" color="8a7356" durability="60">
+      <Drop item="soil" count="1" />
+    </Block>
+    <Block id="nodwarf:sand_ramp" name="沙子斜坡" shape="Ramp" color="c2ae7d" durability="40">
+      <Drop item="sand" count="1" />
+    </Block>
+    <Block id="nodwarf:stone_ramp" name="岩石斜坡" shape="Ramp" color="85877b" durability="100">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:iron_ore" name="铁矿" shape="Solid" color="a08064" durability="120">
+      <Drop item="raw_iron" count="1" />
+    </Block>
+    <Block id="nodwarf:coal_ore" name="煤矿" shape="Solid" color="555d56" durability="100">
+      <Drop item="coal" count="1" />
+    </Block>
+    <Block id="nodwarf:bedrock" name="基岩" shape="Solid" color="404047" durability="0" indestructible="true" />
+    <Block id="nodwarf:deepslate" name="深板岩" shape="Solid" color="4e505a" durability="160">
+      <Drop item="deep_rubble" count="1" />
+    </Block>
+    <Block id="nodwarf:deepslate_iron_ore" name="深层铁矿" shape="Solid" color="756961" durability="180">
+      <Drop item="raw_iron" count="1" />
+    </Block>
+    <Block id="nodwarf:deepslate_coal_ore" name="深层煤矿" shape="Solid" color="35373d" durability="160">
+      <Drop item="coal" count="1" />
+    </Block>
+    <Block id="nodwarf:tree_oak_log" name="橡树树干" shape="Vegetation" color="987b54" durability="100" />
+    <Block id="nodwarf:tree_oak_leaves" name="橡树树叶" shape="Vegetation" color="789659" durability="100" />
+    <Block id="nodwarf:tree_birch_log" name="桦树树干" shape="Vegetation" color="987b54" durability="100" />
+    <Block id="nodwarf:tree_birch_leaves" name="桦树树叶" shape="Vegetation" color="789659" durability="100" />
+    <Block id="nodwarf:tree_spruce_log" name="松树树干" shape="Vegetation" color="987b54" durability="100" />
+    <Block id="nodwarf:tree_spruce_leaves" name="松树树叶" shape="Vegetation" color="789659" durability="100" />
+    <Block id="nodwarf:humus" name="腐殖土" shape="Solid" color="65523c" durability="60">
+      <Drop item="soil" count="1" />
+    </Block>
+    <Block id="nodwarf:dry_grass" name="干草地" shape="Solid" color="b4a363" durability="60">
+      <Drop item="soil" count="1" />
+    </Block>
+    <Block id="nodwarf:gravel" name="砾石" shape="Solid" color="96938d" durability="40">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:granite" name="花岗岩" shape="Solid" color="ab8a7d" durability="140">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:limestone" name="石灰岩" shape="Solid" color="c5bca5" durability="100">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:sandstone" name="砂岩" shape="Solid" color="c3ad7c" durability="80">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:humus_ramp" name="腐殖土斜坡" shape="Ramp" color="65523c" durability="60">
+      <Drop item="soil" count="1" />
+    </Block>
+    <Block id="nodwarf:dry_grass_ramp" name="干草地斜坡" shape="Ramp" color="b4a363" durability="60">
+      <Drop item="soil" count="1" />
+    </Block>
+    <Block id="nodwarf:gravel_ramp" name="砾石斜坡" shape="Ramp" color="96938d" durability="40">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:granite_ramp" name="花岗岩斜坡" shape="Ramp" color="ab8a7d" durability="140">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:limestone_ramp" name="石灰岩斜坡" shape="Ramp" color="c5bca5" durability="100">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:sandstone_ramp" name="砂岩斜坡" shape="Ramp" color="c3ad7c" durability="80">
+      <Drop item="cobblestone" count="1" />
+    </Block>
+    <Block id="nodwarf:tree_acacia_log" name="树干" shape="Vegetation" color="789659" durability="100" />
+    <Block id="nodwarf:tree_acacia_leaves" name="树叶" shape="Vegetation" color="789659" durability="100" />
+    <Block id="nodwarf:tree_jungle_log" name="树干" shape="Vegetation" color="789659" durability="100" />
+    <Block id="nodwarf:tree_jungle_leaves" name="树叶" shape="Vegetation" color="789659" durability="100" />
+    <Block id="nodwarf:cover_grass" name="草丛" shape="Vegetation" color="8c9d55" durability="100" />
+    <Block id="nodwarf:cover_fern" name="蕨类" shape="Vegetation" color="8c9d55" durability="100" />
+    <Block id="nodwarf:cover_dead_bush" name="枯灌木" shape="Vegetation" color="8c9d55" durability="100" />
+    <Block id="nodwarf:tree" name="树木" shape="Vegetation" color="42563a" durability="80" />
+    <Block id="nodwarf:stone_wall" name="石墙" shape="Solid" color="c4bda5" durability="150" />
+    <Block id="nodwarf:log" name="原木" shape="Solid" color="795337" durability="80" />
+    <Block id="nodwarf:planks" name="木板" shape="Solid" color="b68b55" durability="60" />
+    <Block id="nodwarf:cobblestone" name="圆石" shape="Solid" color="7b807c" durability="100" />
+    <Block id="nodwarf:stone_bricks" name="石砖" shape="Solid" color="aba99d" durability="150" />
+    <Block id="nodwarf:ladder" name="木梯" shape="Fixture" color="b68b55" durability="60" />
+    <Block id="nodwarf:log_stairs" name="原木楼梯" shape="Stairs" color="795337" durability="80" />
+    <Block id="nodwarf:plank_stairs" name="木板楼梯" shape="Stairs" color="b68b55" durability="60" />
+    <Block id="nodwarf:cobblestone_stairs" name="圆石楼梯" shape="Stairs" color="7b807c" durability="100" />
+    <Block id="nodwarf:stone_brick_stairs" name="石砖楼梯" shape="Stairs" color="aba99d" durability="150" />
+    <Block id="nodwarf:floodgate" name="闸门" shape="Fixture" color="637f87" durability="100" />
+    <Block id="nodwarf:water" name="水" shape="Empty" color="3d92bb" durability="100" />
+    <Block id="nodwarf:wood_door" name="木门" shape="Fixture" color="a37a50" durability="60" />
+    <Block id="nodwarf:table" name="餐桌" shape="Fixture" color="aa8b62" durability="100" />
+    <Block id="nodwarf:chair" name="木椅" shape="Fixture" color="aa8b62" durability="100" />
+    <Block id="nodwarf:game_table" name="棋桌" shape="Fixture" color="8b7955" durability="100" />
+    <Block id="nodwarf:workbench" name="加工台" shape="Fixture" color="aa8b62" durability="100" />
+    <Block id="nodwarf:mill" name="石磨" shape="Fixture" color="898b80" durability="100" />
+    <Block id="nodwarf:loom" name="织机" shape="Fixture" color="b18e60" durability="100" />
+    <Block id="nodwarf:stove" name="炊炉" shape="Fixture" color="888278" durability="100" />
+    <Block id="nodwarf:bed" name="床" shape="Fixture" color="ae6e64" durability="100" />
+    <Block id="nodwarf:campfire" name="篝火" shape="Fixture" color="b27542" durability="100" />
+    <Block id="nodwarf:furnace" name="高炉" shape="Fixture" color="7c7465" durability="100" />
+    <Block id="nodwarf:anvil" name="铁砧" shape="Fixture" color="54646a" durability="200" />
+  </Blocks>
+  <Buildings>
+    <Building id="nodwarf:ladder" name="木梯" block="nodwarf:ladder" handler="Ladder">
+      <Cost item="wood" count="1" />
+    </Building>
+    <Building id="nodwarf:floodgate" name="闸门" block="nodwarf:floodgate" handler="Floodgate">
+      <Cost item="cobblestone" count="3" />
+    </Building>
+    <Building id="nodwarf:stone_wall" name="石墙" block="nodwarf:stone_wall" handler="Wall">
+      <Cost item="cobblestone" count="2" />
+    </Building>
+    <Building id="nodwarf:wood_door" name="木门" block="nodwarf:wood_door" handler="Door">
+      <Cost item="wood" count="2" />
+    </Building>
+    <Building id="nodwarf:table" name="餐桌" block="nodwarf:table" handler="Table">
+      <Cost item="wood" count="4" />
+    </Building>
+    <Building id="nodwarf:chair" name="木椅" block="nodwarf:chair" handler="Chair">
+      <Cost item="wood" count="2" />
+    </Building>
+    <Building id="nodwarf:game_table" name="棋桌" block="nodwarf:game_table" handler="GameTable">
+      <Cost item="wood" count="4" />
+      <Cost item="cobblestone" count="1" />
+    </Building>
+    <Building id="nodwarf:workbench" name="加工台" block="nodwarf:workbench" handler="Workbench">
+      <Cost item="wood" count="6" />
+    </Building>
+    <Building id="nodwarf:mill" name="石磨" block="nodwarf:mill" handler="Mill">
+      <Cost item="cobblestone" count="6" />
+      <Cost item="wood" count="2" />
+    </Building>
+    <Building id="nodwarf:loom" name="织机" block="nodwarf:loom" handler="Loom">
+      <Cost item="wood" count="6" />
+    </Building>
+    <Building id="nodwarf:stove" name="炊炉" block="nodwarf:stove" handler="Stove">
+      <Cost item="cobblestone" count="4" />
+    </Building>
+    <Building id="nodwarf:bed" name="床" block="nodwarf:bed" handler="Bed">
+      <Cost item="wood" count="4" />
+    </Building>
+    <Building id="nodwarf:campfire" name="篝火" block="nodwarf:campfire" handler="Campfire">
+      <Cost item="cobblestone" count="2" />
+      <Cost item="wood" count="2" />
+    </Building>
+    <Building id="nodwarf:furnace" name="高炉" block="nodwarf:furnace" handler="Furnace">
+      <Cost item="cobblestone" count="5" />
+    </Building>
+    <Building id="nodwarf:anvil" name="铁砧" block="nodwarf:anvil" handler="Anvil">
+      <Cost item="iron" count="1" />
+    </Building>
+    <Building id="nodwarf:log" name="原木" block="nodwarf:log" handler="Log">
+      <Cost item="wood" count="2" />
+    </Building>
+    <Building id="nodwarf:planks" name="木板" block="nodwarf:planks" handler="Planks">
+      <Cost item="wood" count="2" />
+    </Building>
+    <Building id="nodwarf:cobblestone" name="圆石" block="nodwarf:cobblestone" handler="Cobblestone">
+      <Cost item="cobblestone" count="2" />
+    </Building>
+    <Building id="nodwarf:stone_bricks" name="石砖" block="nodwarf:stone_bricks" handler="StoneBricks">
+      <Cost item="cobblestone" count="2" />
+    </Building>
+    <Building id="nodwarf:log_stairs" name="原木楼梯" block="nodwarf:log_stairs" handler="LogStairs">
+      <Cost item="wood" count="3" />
+    </Building>
+    <Building id="nodwarf:plank_stairs" name="木板楼梯" block="nodwarf:plank_stairs" handler="PlankStairs">
+      <Cost item="wood" count="3" />
+    </Building>
+    <Building id="nodwarf:cobblestone_stairs" name="圆石楼梯" block="nodwarf:cobblestone_stairs" handler="CobbleStairs">
+      <Cost item="cobblestone" count="3" />
+    </Building>
+    <Building id="nodwarf:stone_brick_stairs" name="石砖楼梯" block="nodwarf:stone_brick_stairs" handler="BrickStairs">
+      <Cost item="cobblestone" count="3" />
+    </Building>
+  </Buildings>
+</SpatialDefinitions>

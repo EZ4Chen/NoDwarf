@@ -70,10 +70,10 @@ public partial class Main
         try
         {
             _clock.Paused=true;var source=new DemoWorld();source.DeveloperResidents(false);
-            var c=FarmingChecks.SurfacePlot(source);source.SetFarm(c,c,"grain");source.Farms[c].Prepared=true;source.Farms[c].Planted=true;source.Farms[c].Growth=30;
+            var c=FarmingChecks.SurfacePlot(source);source.SetFarm(c,c,"grain");source.SpawnPlant(c,"grain",30,true);
             var cave=c+new Cell(0,0,-12);
             for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)for(int y=0;y<2;y++)source.Terrain.Excavate(cave+new Cell(x,z,y));
-            source.SetFarm(cave,cave,"mushroom");source.Farms[cave].Prepared=true;source.Farms[cave].Planted=true;source.Farms[cave].Growth=40;
+            source.SetFarm(cave,cave,"mushroom");source.SpawnPlant(cave,"mushroom",40,true);
             foreach(var (name,time,underground) in new[]{("day",100d,false),("night",300d,false),("winter",90*600d+100,false),("cave-winter",90*600d+100,true)})
             {
                 _world=CropClimateChecks.AtTime(source,time);_overview.World=_world;_terrainRevision=-1;

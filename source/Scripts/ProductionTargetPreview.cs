@@ -35,7 +35,16 @@ public partial class Main
         var previousFocus=_focus;GetViewport().PushInput(new InputEventKey{PhysicalKeycode=Key.W,Keycode=Key.W,Pressed=true},true);await Frame();GetViewport().PushInput(new InputEventKey{PhysicalKeycode=Key.W,Keycode=Key.W,Pressed=false},true);
         Check(_focus==previousFocus,"Bill details must prevent background camera movement");
         Check(_billDetails!.GetGlobalRect().Encloses(_billDetails.FindChildren("*","HSlider",true,false).OfType<HSlider>().Single().GetGlobalRect()),"Details overflow");
-        await Snap("production-bill-details");CloseBillDetails();
+        await Snap("production-bill-details");
+        _billDetails.Size=new(640,440);await Frame();
+        var detailFrame=(GameWindowFrame)_billDetails;
+        Check(detailFrame.Size.X<=640&&detailFrame.Size.Y<=440,"Small details must fit requested bounds");
+        Check(detailFrame.GetGlobalRect().Encloses(detailFrame.Footer.GetGlobalRect()),"Small details footer overflow");
+        Check(detailFrame.FindChildren("*","GridContainer",true,false).OfType<GridContainer>().Single().Columns==1,"Small details should stack sections");
+        await Snap("production-template-small");
+        GetViewport().PushInput(new InputEventKey{Keycode=Key.Escape,Pressed=true},true);await Frame();
+        Check(_billDetails is null&&_inspector.Visible,"Esc must close only the topmost production window");
+
         _world=DemoWorld.LoadJson(_world.SaveJson());_overview.World=_world;RefreshUi();await Frame();
         Check(_world.ProductionOrders[0].WorkerId!=""&&_world.ProductionOrders[0].Radius==20&&_world.ProductionOrders[1].Mode=="forever","Bill constraints/order must survive reload");
         var remove=_world.ProductionOrders.Last();ConfirmBillDelete(remove);await Frame();

@@ -6,7 +6,7 @@ namespace NoDwarf;
 public partial class Main
 {
     private readonly Dictionary<Cell, (Building Data, Node3D Root, int Faces, float Height, bool GateOpen)> _buildingVisuals = new();
-    private readonly Dictionary<int, (Cell Cell, BuildKind? Build, bool Dig, int Height, int Facing, Node3D Root)> _planVisuals = new();
+    private readonly Dictionary<int, (Cell Cell, BuildKind? Build, bool Dig, int Height, int Facing, BlockFaces Faces, float Top, int OutlineMask, Node3D Root)> _planVisuals = new();
     private int _faceTerrainRevision=-1;
 
     private void SyncStructuresAndPlans()
@@ -65,7 +65,7 @@ public partial class Main
                 }
                 var root = new Node3D(); _structures.AddChild(root);
                 root.SetMeta("gate_open",gateOpen);
-                AddBuildingVisual(root, building.Cell, building.Kind, facing: building.Facing);
+                AddBuildingVisual(root, building.Cell, building.Kind, facing: building.Facing,definitionId:building.DefinitionId);
                 _buildingVisuals[building.Cell] = (building, root, faces, height, gateOpen);
                 _world.Probe?.Count("view.buildings-created");
             }
@@ -73,23 +73,28 @@ public partial class Main
         using (var timing = _world.Probe?.Measure("view.sync-plans") ?? default)
         {
             var plans = _world.Jobs.Where(j => j.Construction).ToDictionary(j => j.Id);
+            var solidPlans=SolidPlanCells();
             bool PlanVisible(DemoJob job)=>job.Dig&&CurrentView.Level is not null ? job.Cell.Level==ActiveLevel : VisibleAt(job.Cell);
+            var digGroups=plans.Values.Where(j=>j.Dig&&PlanVisible(j)).ToDictionary(j=>j.Cell,j=>j.DigRegion.Length==0?"job:"+j.Id:"region:"+j.DigRegion);
             foreach (int id in _planVisuals.Keys.ToArray())
                 if (!plans.TryGetValue(id, out var job) || !PlanVisible(job))
                 { RemoveVisual(_planVisuals[id].Root); _planVisuals.Remove(id); RemoveConstructionVisual(id); }
             foreach (var job in plans.Values)
             {
                 if (!PlanVisible(job)) continue;
+                var faces=job.BuildingWork&&_world.BuildBlock(job).Shape==BlockShape.Solid?BlockExposure.PlanFaces(_world,view,job.Cell,solidPlans):BlockFaces.All;
+                float top=view.CellTop(job.Cell);
+                int outlineMask=job.Dig?CellBoundary.Mask(job.Cell,n=>digGroups.TryGetValue(n,out var group)&&group==digGroups[job.Cell]&&view.CellTop(n)==top):15;
                 if (_planVisuals.TryGetValue(job.Id, out var old))
                 {
-                    if (old.Cell == job.Cell && old.Build == job.Build && old.Dig == job.Dig && old.Height == job.DigHeight && old.Facing == job.Facing&&(!job.Dig||_visualView.CellTop(job.Cell)==view.CellTop(job.Cell))) continue;
+                    if (old.Cell == job.Cell && old.Build == job.Build && old.Dig == job.Dig && old.Height == job.DigHeight && old.Facing == job.Facing&&old.Faces==faces&&old.Top==top&&old.OutlineMask==outlineMask) continue;
                     RemoveVisual(old.Root);
                     RemoveConstructionVisual(job.Id);
                 }
                 var root = new Node3D(); _ghosts.AddChild(root);
-                if (job.Dig) DrawDig(root, job.Cell, job.DigHeight == 3, job.Facing);
-                else AddConstructionVisual(root, job);
-                _planVisuals[job.Id] = (job.Cell, job.Build, job.Dig, job.DigHeight, job.Facing, root);
+                if (job.Dig) DrawDig(root, job.Cell, job.DigHeight == 3, job.Facing,outlineMask);
+                else AddConstructionVisual(root, job,faces);
+                _planVisuals[job.Id] = (job.Cell, job.Build, job.Dig, job.DigHeight, job.Facing, faces, top, outlineMask, root);
                 _world.Probe?.Count("view.plans-created");
             }
         }

@@ -34,8 +34,6 @@ public static class EquipmentDimensionsChecks
         for(int i=0;i<120;i++)w.Update(1d/30);
         Check(w.Inventory(actor).Any(i=>i.Properties==attributes)&&w.Items.Any(i=>i.Owner==""&&i.Properties==attributes),"split preserves attributes");
         w=DemoWorld.LoadJson(w.SaveJson());Check(w.Items.Where(i=>i.Properties==attributes).Sum(i=>i.Count)==20,"property save roundtrip");
-        var old=JsonNode.Parse(w.SaveJson())!;old["Version"]=16;foreach(var i in old["Items"]!.AsArray())i!.AsObject().Remove("Properties");
-        Check(DemoWorld.LoadJson(old.ToJsonString()).Items.All(i=>i.Properties==new ItemProperties()),"old save defaults");
         var malformed=JsonNode.Parse(w.SaveJson())!;malformed["Items"]![0]!["Properties"]!["Durability"]=101;
         bool rejected=false;try{DemoWorld.LoadJson(malformed.ToJsonString());}catch(InvalidDataException){rejected=true;}Check(rejected,"invalid durability rejected");
         w=CombatChecks.Fixture();actor=w.Workers[0];actor.Person.WorkPriorities["hauling"]=1;

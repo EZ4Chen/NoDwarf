@@ -12,7 +12,8 @@ public sealed partial class DemoWorld
         var cells=Enumerable.Range(0,height).Select(y=>c+new Cell(0,0,y)).ToArray();
         if(cells.Any(p=>!Inside(p)))return false;
         if(!cells.Any(p=>NaturalSolid(p)||NaturalRamp(p))) return false;
-        if(cells.Any(p=>Buildings.ContainsKey(p)||Jobs.Any(j=>j.Construction&&j.Cell.X==p.X&&j.Cell.Z==p.Z&&p.Level>=j.Cell.Level&&p.Level<j.Cell.Level+(j.Dig?j.DigHeight: TallFixture(j.Build!.Value)?2:1)))) return false;
+        if(cells.Any(p=>(NaturalSolid(p)||NaturalRamp(p))&&!double.IsFinite(Content.Block(Terrain.BlockAt(p)).Durability)))return false;
+        if(cells.Any(p=>Buildings.ContainsKey(p)||Jobs.Any(j=>j.Construction&&j.Cell.X==p.X&&j.Cell.Z==p.Z&&p.Level>=j.Cell.Level&&p.Level<j.Cell.Level+(j.Dig?j.DigHeight: TallFixture(j.WorkKind)?2:1)))) return false;
         if(Terrain[c.X,c.Z].Tree && cells.Any(p=>p.Level>=Terrain[c.X,c.Z].Level-1))return false;
         return true;
     }

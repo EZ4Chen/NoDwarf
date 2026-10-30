@@ -211,8 +211,10 @@ public partial class Main
         var bar=new ProgressBar{Value=value,MaxValue=max,ShowPercentage=false,CustomMinimumSize=new(0,height),SizeFlagsHorizontal=Control.SizeFlags.ExpandFill,MouseFilter=Control.MouseFilterEnum.Ignore};
         bar.AddThemeStyleboxOverride("background",RStyle("171d1f","171d1f",0,0));var fill=new StyleBoxFlat{BgColor=color};bar.AddThemeStyleboxOverride("fill",fill);parent.AddChild(bar);return bar;
     }
-    private static string GearDescription(string item)
+    private string GearDescription(string item)
     {
+        var definition=_world.Content.Item(item);
+        if(definition.Edible is {} food)return $"可食用 · 饱腹 +{food.Nutrition:0.#} · 心情 {food.Mood:+0;-0;0} · 单件 {definition.Weight:0.##} kg";
         var g=ResidentGear.Get(item);if(g is null)return "";
         return $"重量 {g.Weight:F1} kg"+(g.Protection>0?$" · 防护 {g.Protection}%":"")+
             (g.Skill!=""?$" · {g.WorkUse switch{"forestry"=>"伐木","earth"=>"挖掘土砂","sowing"=>"播种 / 种树",_=>ResidentCatalog.Skill(g.Skill).Name}}效率 +{g.Bonus:P0}":"")+(g.TwoHanded?" · 占用双手":"");

@@ -6,7 +6,7 @@ public static class GroundCover
     public static string? At(DemoWorld world,Cell c)
     {
         var t=world.Terrain;var profile=t.Region;
-        if(profile is null||!profile.Modern||!t.Contains(c)||t.Ramp(c)||t[c.X,c.Z].Tree||
+        if(profile is null||!t.Contains(c)||t.Ramp(c)||t[c.X,c.Z].Tree||
             !t.Solid(c+new Cell(0,0,-1))||world.Buildings.ContainsKey(c)||world.Farms.ContainsKey(c)||world.Stockpiles.Contains(c))return null;
         if(t.Hash(c.X+1703,c.Z+971)>=profile.CoverDensity)return null;
         var ground=t[c.X,c.Z].Kind;

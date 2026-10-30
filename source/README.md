@@ -1,5 +1,245 @@
 # NoDwarf 源码
 
+## 居民对话、分层记忆与设置（存档 34）
+
+主菜单和营地菜单的「设置」使用同一个窗口，包含画面、游戏、操作、声音、AI 服务、AI 玩法、对话与记忆。设置保存在用户目录 `settings/game.json`；服务与密钥沿用 `settings/llm-v1.json`。密钥默认仅本次启动有效，勾选保存时明确提示未加密。画面提供全屏、垂直同步、帧率、MSAA、阴影和界面缩放，显示模式／缩放变更须在 15 秒内确认，否则恢复。游戏提供自动保存、失焦暂停、袭击暂停、新营地暂停和速度；操作提供移动和旋转灵敏度，声音控制主总线。当前没有独立音乐或环境音轨。
+
+「AI 玩法」可控制当前营地的居民决策和叙事者，同时作为新营地默认值；读档保留存档内开关。对话与记忆参数是本机全局设置，对当前及之后读取的营地生效。所有 AI 功能共用接口和请求额度，默认不启用对话，不会因为打开设置而发送模型请求。
+
+启用居民对话后，附近空闲居民可自然交谈，成功的社交活动也会排入交谈候选。每次完整交谈包含两人轮流四句，每句单独请求，只提供当前说话者自己的背景、事实记忆和可检索对话，以及双方已经说出的内容。响应在模拟线程检查参与者、距离和时效后采纳；死亡、失能、隔离、战斗控制或分离会取消未完成交谈。完成的对话显示气泡并进入营地菜单的「对话与记忆账本」，支持按居民和文本筛选。对话不直接修改资源或好感，原有社交结算仍由模拟负责。
+
+分层方式参考本机 `RimTalk-MemoryDigest`（OCEAN）的说明与汉化配置：近期保留原话，较早对话单独请求 AI 提炼，再按参与者与时间窗口检索。默认保留 6 轮短期原话和 80 轮旧对话，每次检索最多 6 轮，其中最多 2 轮原话，回溯 168 游戏小时，摘要上限 160 字。旧对话成功提炼后释放原话，保留记录 ID、参与者、时间、地点与摘要；提炼关闭或失败时保留受总量上限约束的原文，以明确标记的摘录检索。超出保留上限会移除最旧记录。对话与摘要标记为人物发言而非世界事实，不替代事实记忆。相关对话也进入居民决策上下文。
+
+一次交谈最多使用 4 次请求，旧对话提炼另用 1 次；失败不自动付费重试，可在账本手动重试。暂停可收取响应但不采纳、不发送新请求；关闭、换世界和配置变化取消在途工作。对话、摘要、待采纳响应随档保存，已完成记录不重放，请求中读档改为等待手动重试。存档格式更新为 34，不迁移旧存档，需要重新开局。
+
+离线验证入口：`./tools/check.sh --only dialogue,llm,storyteller,personality,save,settings-ui,dialogue-ui`。界面检查使用替身客户端和独立配置，不调用外部模型。真实语言质量和付费供应商联调需另行试玩。
+
+## 快速迭代期的存档策略（2026-10-30）
+
+只维护当前世界格式、会话格式和模块格式；旧版本直接拒绝，不提供自动升级、迁移注册器或历史 XML 基线。当前格式正常保存／读取，仍校验内容引用、物资、人物与任务。世界格式为 34，独立外观档案为 2；地图、生态与天气只运行当前算法，主菜单只扫描当前存档目录，物品定义必须填写估值。基础地形、地区地图和平坦测试图是当前生成模式，不按旧版本选择算法。玩法定义改变后需要新建游戏；原存档文件不删除、不改写。下方历史开发记录中的旧档兼容说明已作废。
+
+## 基础模拟频率 60 TPS（2026-10-30）
+
+1× / 2× / 3× 目标为 60 / 120 / 180 TPS，每 tick 推进 1/60 模拟秒。游戏时间、日历与工作时长保持原节奏；FPS 独立。会话存档必须记录当前 TickRate（60 Hz），不提供旧频率换算。性能测试采用 60 Hz 和相应预算；下文旧性能记录保留原测试频率，不代表当前成绩。
+
+回归入口：`bash -c 'source source/tools/env.sh; dotnet run --project ../benchmarks/NavigationBench.csproj -- --tick-rate-regression'`。
+
+## 通用方块放置（存档 33）
+
+石砖、圆石、木板等实心建筑支持按住左键拖成一行：自动按较长的横／纵向对齐，锁定起点高度，松开后安排施工；右键或 Esc 取消当前拖动。预览显示格数与可规划数量，材料按起点向终点逐格预留，跳过冲突或缺料的位置。Mod 的实心建筑自动获得同样能力；家具与楼梯仍为单格。
+
+整栋蓝图与鼠标临时预览同样隐藏虚影之间的内部面，退出预览自动恢复相邻施工单。储存区、采掘区按同一区域与高度保留外围／孔洞边界，不同区域保持分界；采掘镐头与方向标记保留。楼梯和家具的轴对齐盒状部件只裁掉实际遮挡部分，保留露出台阶、贴图与选取范围。水贴墙不变；虚影不影响实体表面，局部实体接触不会误删整个虚影面。
+
+同层相邻实心施工虚影的底部蓝框合并为区域外轮廓，去掉内部共享边；选中其中一格时仍显示完整单格高亮，取消选择后恢复合并轮廓。
+
+施工虚影只绘制外露面，隐藏相邻实心施工单、地形和已建方块之间的共享面；取消或完成施工、切层后刷新。虚影使用仅供鼠标选取的区域，没有物理阻挡，不改变寻路、不提供站立支撑；施工完成才成为真实方块。仍可点击查看进度、取消施工。回归入口：`--construction-line-test`。
+
+建筑规划 → 结构 → **放置方块** 打开统一选择器，支持名称／ID／标签搜索及原版／Mod 来源筛选。每项显示方块、每格材料和当前可用数量；材料不足时禁用。选中后左键单格或同层拖框（最多 16×16）安排居民搬料施工，右键／Esc 退出。点击掉落物品会选中具体物品堆；底部“地上物品”可切换同格物品。有放置能力才显示“放置”，单结果直接进入预览，多结果打开同一个选择器。
+
+物品种类可声明多个 `Place`，没有逐材料特判或逐方块菜单代码：
+
+```xml
+<Defs>
+  <Item id="my:fill" name="填料" value="1" texture="nodwarf:sand" color="b99570">
+    <Place block="my:loose" count="1" support="below" />
+    <Place block="my:packed" count="2" support="below" />
+  </Item>
+  <Block id="my:loose" name="松散填料" shape="Solid" color="b99570" durability="40">
+    <Drop item="my:fill" count="1" />
+  </Block>
+  <Block id="my:packed" name="压实填料" shape="Solid" color="987757" durability="80">
+    <Drop item="my:fill" count="2" />
+  </Block>
+</Defs>
+```
+
+上例放入 ID 为 `my` 的包的扫描目录即可。Place 随物品模板继承，子项按组替换；最多 32 个结果，block 不重复且必须引用已注册、可破坏的 Solid，count 为 1—10000 整数（默认 1）。support 默认为 below（下方实体或计划支撑），adjacent 允许下方或侧面支撑；施工完成时必须已经存在真实支撑。未知字段、无效引用、空气／斜坡／设施／基岩目标拒绝加载。Drop 仅控制采掘产物，不会自动赋予反向放置能力；Mod 应自行保持材料收支符合玩法设计。
+
+`world.Content.Placements` 汇总能力，`world.Content.Placement(itemId, blockId)` 校验具体关系，`world.QueuePlaceBlock(cell, itemId, blockId, preferredStack)` 创建任务；preferredStack 缺省 0 自动选料，物品快捷入口优先预留所选堆。搬运沿用材料系统，可因来源不可达改选同类可用材料；这不是“安装有独立品质的那一件家具”。原版配置沙子→沙子、土壤→土壤、圆石→砾石、深板岩碎石→深板岩；铜矿包配置铜锭→铜块／致密铜块，铜矿石不还原成矿脉。
+
+完成时写入真实地形，不生成建筑实例；触发寻路、房间、流体几何、局部网格与小地图更新（小地图沿用 5 秒合并刷新）。再次开采走原掉落定义。位置有实体、树木、农田、取水点、冲突施工或积水时不能规划；居民占位／支撑未完成时等待。存档保存回填覆盖及来源／目标 ID，校验成本与能力，取消任务归还已经搬运的物资。最多保存 200000 个放置方块，规划时也计入预算。
+
+当前存档版本为 34；按项目快速迭代策略，仅支持当前格式及匹配的内容指纹，旧格式、缺包及玩法定义改变会明确拒绝，原档不会改写。首批覆盖单格实心方块；家具打包／品质保留、任意形状、新贴图模型和沙子坠落不在本批。放置方块沿用现有地形支撑语义，不模拟松散材料坍塌。
+
+验收：`placement` 检查原版／真实扫描 Mod、继承、多结果、搬料中读档、回填再挖、取消返料、材料守恒和非法记录；`--placement-test` 需以 `NODWARF_CONTENT_ROOT=../examples/content`（建议绝对路径）启动，验证菜单、物品实际选取、施工图形、地表以上网格及小地图。
+
+## 种类定义与 Mod 目录扫描（存档 32）
+
+注册对象是一种物品／方块／建筑，运行时实例仅引用其稳定 ID。原版空间定义见 [spatial.xml](Assets/Definitions/spatial.xml)，完整铜矿包见 [示例目录](../examples/content/copper/)。示例需要显式启用，启动方式见下文 `NODWARF_CONTENT_ROOT`；不改原版库存或默认启用列表。
+
+包仍使用 `pack.xml`，启用包列表仍在 `content.xml`。推荐用目录扫描，旧逐文件 Definitions 声明继续有效：
+
+```xml
+<Pack id="copper" version="1.1" api="1">
+  <Depends id="base" minVersion="1.0" />
+  <Scan path="Defs" />
+</Pack>
+```
+
+在 `Defs/` 中任意组织 `.xml` 文件与子目录。扫描识别 Defs、ProductionDefinitions、SpatialDefinitions、Creatures、StoryEvents、Patches 根节点；最多 64 个文件、16 层目录，不跟随符号链接。包依赖先加载，文件路径按 Ordinal 排序。扫描收集完成后解析同类型模板，每包先注册定义再按顺序应用显式补丁、验证引用、冻结目录。继承在补丁前展开，补丁只修改指定的已展开定义；不要假定修改父项的补丁会继续传播到子项。
+
+```xml
+<Defs>
+  <Item id="my:metal_base" abstract="true" name="金属材料"
+        value="4" texture="nodwarf:iron_ore" color="bb875d"
+        category="material" tags="metal" />
+  <Item id="my:ore" parent="my:metal_base" name="新矿石" />
+  <Block id="my:ore_block" name="新矿脉" shape="Solid"
+         color="bb875d" durability="120">
+    <Drop item="my:ore" count="2" />
+    <Ore veins="32" size="8" minDepth="1" maxDepth="6"
+         hosts="nodwarf:stone nodwarf:deepslate" />
+  </Block>
+  <Building id="my:chair" parent="nodwarf:chair" name="矿石座椅">
+    <Cost item="my:ore" count="2" />
+  </Building>
+</Defs>
+```
+
+上例的包 ID 应为 `my`。`id`、`name` 为身份与名称；可选 `description`、`parent`、`categories`、`tags` 在 Item／Block／Building 中共用。categories／tags 是空格分隔的稳定标签列表，当前不自动生成分类树。Item 原有单一 category 和 Edible 用途保持兼容；只有标签不会获得食用、生产等能力。
+
+`abstract="true"` 的模板不进入运行目录；parent 可以引用同类型原版或依赖包定义。省略属性继承，显式属性覆盖；子节点按节点名整组替换，例如出现任意 Cost 就替换全部父 Cost。当前没有“空子组清除”语法，删除用途应另建独立模板。循环、超 32 层继承、重复 ID、缺少引用及不支持的字段会拒绝加载。
+
+方块支持 `shape`、六位十六进制 `color`、`durability`、`indestructible`，Drop 列出注册物品和整数数量。Ore 仅用于 Solid：veins 1—1024，size 1—128，深度 1—128；所有定义合计生成尝试不超过 200000 格。深度用于矿团起点，矿团随后随机游走；仅替换 hosts 中的天然母岩，遇到空气／洞穴／基岩不生成。种子和定义 ID 决定矿团，生成结果写入存档。载入旧世界不会补生成新矿。
+
+Building 用 `block` 引用方块、`handler` 引用现有 BuildKind 行为（例如 Chair、Furnace），并通过 Cost 引用任意物品。形状必须满足处理器契约；目前沿用其原有单格占地、高度和功能。新增建筑身份不需扩充 BuildKind。配方 station 仍表示工位能力，新 Furnace 建筑自动支持 Furnace 配方。新设施会出现在建造菜单和居民／叙事者观察中，界面沿用处理器模型并按定义着色。自定义贴图／模型包、材料属性修正和任意新行为尚未实现。
+
+运行时查 `world.Content.Item(id)`／`Block(id)`／`Building(id)`，共用 `IContentDefinition` 与 Info；Entries 枚举三类种类定义。旧 BlockCatalog 与枚举工具仅是原版兼容入口，新增内容必须查询所属世界目录。建造使用 `world.QueueBuild(cell, "my:chair")`。施工、蓝图、耐久、掉落、拆除返料和估值均保留种类 ID。
+
+存档 32 增加地形定义覆盖、建筑／任务／蓝图 ID 和空间修订指纹。等价 v31 档仅在空间基线未改动、其他定义指纹吻合时升级；缺包或玩法变化仍按原有明确迁移协议处理，不静默丢弃内容。
+
+验收入口 `spatial`：通过临时目录实际扫描示例包，检查新增嵌套 XML 无需改清单、模板及引用错误、目录隔离、矿脉生成→居民采掘→冶炼→铜椅／铜炉建造→实际使用→存读档→返料。AI 观察验证全程离线。
+
+## 物品用途与事件目录（存档 31）
+
+分类负责筛选，能力决定可以做什么。新普通物品默认 `category="misc"`、重量 1、不腐败、不能食用、不能被叙事者投放。`storySupply="true"` 是叙事补给许可，需要正的基础价值；它不代表食用许可。重量仍优先采用现有装备定义，装备专用能力尚未迁入本协议。
+
+```xml
+<Item id="my_pack:bread" name="面包" value="8" category="food"
+      weight="0.3" shelfLife="600" storySupply="true"
+      texture="nodwarf:planks" color="d7ab67">
+  <Edible nutrition="30" mood="6" diningBonus="2" feedingMood="5" />
+</Item>
+```
+
+`shelfLife` 以模拟秒为单位，0 表示不自动腐败；首次生成时记录绝对失效时间，读档不重新延长。`nutrition` 必填，范围 0.1—100；心情参数为整数，`mood`、`feedingMood` 范围 -20—20，`diningBonus` 为 0—10。省略心情参数时分别默认为 4、4、2。居民自动选取可用食物，随身食物优先吃即将到期的；进食和送达时复核失效时间，按实际物品扣除一次。分类即使叫 food，没有 Edible 也不能吃。保鲜属性也可用于尚不可直接食用的原料。
+
+内容包清单增加 `<Definitions domain="events" file="events.xml" />`。事件可引用已实现的 `supplies`、`raid`、`weather` 处理器。例如：
+
+```xml
+<StoryEvents><Events>
+  <Event id="my_pack:food_cache" name="食物发现" tool="discover_food_cache"
+         handler="supplies" description="发现少量可用食物，遵守公共补给预算和冷却。"
+         category="food" maxCount="5" minDelay="0.1" maxDelay="12" />
+</Events></StoryEvents>
+```
+
+补给选择器先筛 `storySupply=true`，再按可选 category 筛选；也可使用 `<Item ref="my_pack:bread" />` 明确指定集合。没有分类／引用时允许全部已授权物品。新增食物自动进入匹配事件和工具枚举。事件工具名称只能由 ASCII 字母、数字和下划线组成，不能重用 wait、finish、cancel_event 或其他事件工具名。`minCount`／`maxCount`、`minDelay`／`maxDelay` 来自同一份定义；天气另有 `minDuration`／`maxDuration`，时间统一为游戏小时。袭击最多 12 人且至少两小时预警，补给最多 100 件，天气持续 1—12 小时；定义只能在这些本地执行上限内配置。
+
+`StorytellerTools.CatalogFor(world.Content)` 生成当前世界工具，`StoryEventDefinition.Create/Validate` 复用其约束；AI 观察同时带物品用途、价值和内容指纹。命令排队、读档和发生前均验证定义，动态预算／落点／天气条件仍由本地执行器复核。同一处理器的变体共享冷却和预算，换事件名称不能绕过限制。大型工具目录或观察超过上下文预算时会明确报错，避免无限发送定义。
+
+示例见 [面包与铜物品](../examples/content/copper/Defs/production.xml) 和 [事件配置](../examples/content/copper/Defs/events.xml)。启用示例包后，既有补给工具可选择面包／铜锭，也会新增 discover_copper、discover_food。检查 `extensions` 会运行真实生产、吃饭、送饭与存读档，并让离线模型从实际提示中发现工具；不访问真实 AI 服务。
+
+原版 29／30 档可识别旧内容基线并升级到 31。自定义内容的营养、保鲜、补给许可及事件规则改变会影响玩法指纹，需要显式迁移。新增药品、装备特效及全新事件机制仍需实现对应能力，本批没有将它们冒充为纯配置功能。
+
+## 内容包与存档兼容协议（2026-10-30，当前存档 34）
+
+默认只使用核心程序集内嵌的 `production.xml`、`creatures.xml`、`events.xml`，从其他目录启动也可运行。编辑核心 XML 后需要重新构建；不再按进程工作目录偷偷选择另一份配置。外部内容在进程启动前设置绝对路径 `NODWARF_CONTENT_ROOT`，根目录有 `content.xml`，其 Pack 列表指向各包目录的 `pack.xml`。目录只在启动时发布一次；切换内容组合需重启。
+
+```sh
+# 在仓库根目录启动示例内容；不需要改核心代码
+export NODWARF_CONTENT_ROOT="$(pwd)/examples/content"
+./source/tools/run.sh
+# 关闭示例：unset NODWARF_CONTENT_ROOT，然后重启
+```
+
+示例清单见 [content.xml](../examples/content/content.xml)、[pack.xml](../examples/content/copper/pack.xml)。包支持 `id`、`version`（.NET 点分版本）、`api="1"`；Depends 指定 `id`、`minVersion`，可选 `maxVersionExclusive`（不含上界）和 `optional="true"`。缺失可选依赖可以继续，但其版本范围仍必须合法；已安装时必须满足范围。加载时依赖先于使用方，其他包保持 `content.xml` 中的声明顺序；逐文件声明按清单顺序，Scan 目录按路径排序。定义领域 `production`、`creatures`、`events`、`spatial`，以及公共 `defs`；新增 ID 要以 `包ID:` 开头，原版旧 ID 保持不变。物品必填 `value`；可食用用途见上文，装备效果等新机制仍需代码处理器。
+
+`Definitions domain="patches"` 文件使用以下操作，全部在发布前校验。Set 的 expect 是当前值，第二个包若不声明正确前值会收到冲突诊断。Append 支持配方 Ingredient、身体 Part、物种 Capability 和事件 Item。Disable 的目标必须存在；核心生产／事件／空间定义及仍被引用的定义不能删除。
+
+```xml
+<Patches>
+  <Set domain="production" section="Items" id="copper:ingot"
+       field="value" expect="10" value="12" />
+  <Append domain="production" section="Recipes" id="copper:smelt">
+    <Ingredient item="wood" count="1" />
+  </Append>
+</Patches>
+```
+
+`ContentCatalog.Sources` 和 `Patches` 可查询来源、字段与前后值。XML 禁止 DTD，文件路径限制在包目录，包内符号链接和未知嵌套字段会被拒绝；不加载 XML 中指定的任意 C# 类型。当前仅支持已注册 `core:idle`／`core:wander` 行为的纯数据包；其他代码行为可由宿主显式注册后交给 `ContentCatalog.Load` 校验，尚无 DLL／Lua 自动插件装载器。
+
+宿主可通过 `ContentCatalog.Load`／`LoadDirectory` 先构建完整不可变目录，再传给 `new DemoWorld(content: catalog)` 或 `DemoWorld.LoadJson(..., content: catalog)`。生产、工作分类、物品估值、堆场、物种和事件读取各自世界的目录，不依赖另一个世界的配置。`ContentCatalogStore.TryLoadDirectory` 仅在全部校验成功后原子发布候选目录，失败保留上一份；已经运行的世界仍持有原目录。这是会话创建接口，尚未接入游戏内热更新按钮。
+
+`Revision` 标识完整目录；`GameplayHash` 和逐项 `Definitions` 排除名称、贴图、颜色和 View，并规范数值／布尔值、属性与定义顺序。表现变化不改变玩法指纹。存档保存包版本、顺序和定义修订；读档核对当前目录的逐项修订，不能只修改顶层指纹绕过校验。
+
+居民任务：`StartResidentTask(new(actorId,"base:feeding",targetId,origin))` 进入统一入口。`ResidentTaskRegistry.Register` 接受开始、有效性、阶段推进和清理处理器；返回 Running／Completed／Failed。阶段、编号与进度存在 ResidentActivity，完成／取消记录在 TaskReceipts。外部扩展应在模块恢复时注册处理器，再由载入流程恢复活动引用。开始处理器负责建立新活动并释放旧工作；引擎分配任务编号及统一完成清理。现有玩家命令、规则和人格送饭都复用此路径。
+
+事件：`DomainEvents.Subscribe("包:监听者", fact => commands)` 接收已提交的送饭／医疗事实。回调只处理自己的状态或返回 `ResidentCommand`，不能递归提交事实；返回命令最多 16 条、总待执行最多 64 条，在下一 tick 走 `ActResident` 的动态校验。监听者 ID 是持久接收身份；新增监听者从当前水位开始，不自动重放旧历史。异常写入 Errors，继续其他监听者，采用至多一次派发而非重试部分成功操作。日志可见范围不等于居民知识；默认只给参与双方写记忆。
+
+模块：`WorldModuleRegistry.Standard().Register(...)` 注册当前 `WorldModule` 的保存／恢复。新世界通过 `world.Modules.Register` 注册；读档通过 `LoadJson(..., modules: registry)` 提供同样模块，版本必须完全一致。恢复时物品与人物已建立，活动引用随后验证；扩展恢复函数只能恢复状态，不能结算任务。缺包、缺模块、旧格式或玩法定义不一致会拒绝加载，原文件不改写。
+
+每个在制生产任务保存创建时的配方快照和修订，材料、产量、工位、工时均按该快照完成。当前版本读档检查快照和物资一致性，不补齐旧格式缺失字段。Mod 新配方仍支持工作资格分配和当前版本存读档。
+
+原 `Assets/Compatibility` 历史基线和内容／模块迁移接口已移除。定义目录只维护当前配置，不再为每次迭代复制历史 XML。
+
+```sh
+./source/tools/check.sh --only content,extensions
+# 示例包集成检查：先构建 tools/checks/extensions/ExtensionChecks.csproj，
+# 再在任意目录执行生成的 ExtensionChecks.dll --sample <examples/content 的绝对路径>
+```
+
+`content` 已加入 quick／regression：真实 v26 样本由固定历史提交的原写档器生成，包含正在搬运的棉花；来源、校验和与生成代码位于 `tools/checks/content/Fixtures`。另有 v28／29／30 格式边界夹具、配方修订、损坏记录、Mod ID 迁移、双世界隔离、目录发布失败、依赖排序和非法 XML／路径检查。这不等于已测试所有历史玩家存档；Windows 符号链接用例需要相应权限，控制台检查在 Windows 跳过该项。
+
+
+## 后台存读档与装备索引（2026-10-30）
+
+F5 在模拟线程的安全点取得独立快照，后台进行一次 JSON 编码、刷盘与替换；连续保存会合并后续请求。保存完成提示和“保存并退出／返回”都以磁盘提交结果为准，失败不退出。F9 在后台验证和准备世界，过期结果不能覆盖新营地，切换时取消旧 AI 请求。当前会话使用结构化 `WorldState`；按开发期规则不读取旧格式，也不回退其他营地路径。
+
+读档同时后台准备森林绘制批次和小地图像素。主线程只创建引擎资源；森林按 `performance/threads/forest_upload_budget_ms` 的预算分帧上传，默认 3 ms，实际单个上传单元不能被中途抢占。计算部分不访问场景节点；待上传结果随世界／树木重建被替换，切层期间新增批次遵循当前可见高度。普通游戏内树木重建仍走原同步准备路径，本批只将读档准备移到后台。
+
+`ItemCollection` 收口库存成员变更，监听物品种类、所有者和装备槽位，维护 `EquipmentVersion` 与已穿戴集合。装备视图不再依赖世界总版本扫描仓库；外观单独检查。扩展代码通过集合和物品属性修改即可触发失效，不需手动通知界面。
+
+检查入口：`./tools/check.sh --only save,session-async,equipment,pawn-cache,map`。`save` 比较旧编码算法与新快照路径（这只是性能基线，不是旧档读取支持）；`session-async` 验证连续保存、保存中退出、读档失败／过期、森林上传预算和像素／矩阵数据；其余检查换装、资源生命周期及小地图差量更新。性能数据与范围见开发版本计划。
+
+## 缓存与统一检查入口（2026-10-30）
+
+游戏、导航基准和离线检查通过 `ProjectReference` 共用 `Core/NoDwarf.Core.csproj`，原版生产、生物与战斗定义由核心程序集嵌入，避免各项目漏配资源。模拟检查暂仍在核心中，重检查与发布包的进一步分离属于后续整理。
+
+人物合成贴图采用按字节估算的 LRU 缓存；当前视图持有的身体／手部纹理不会被淘汰，离开场景后释放持有。`project.godot` 的 `performance/cache/pawn_body_mib` 默认 128、`pawn_hands_mib` 默认 8、`pawn_portraits_mib` 默认 128，可设 1—1024 MiB。预算指纹理像素及 mip 数据估算，不是驱动实际显存；正在显示的纹理可以超过预算，未使用的条目按最近使用顺序回收。方向首次出现时按需生成，之后复用，不在人物创建时集中预生成全部方向。
+
+头像和编辑预览共享有预算的缓存，不再达到 256 个组合就整体清空，也不在每次预览时复制和上传同一张图。UI 返回的纹理是共享资源，调用方不要修改或主动 Dispose；淘汰仅移除缓存引用，控件／调用方仍持有的 Godot 引用计数资源继续有效，因此活动 UI 的占用可高于缓存预算。身体和手部仍使用显式持有／释放。
+
+缓存键仅包含当前方向实际绘制的外观：头盔遮住的发型、背面的胡须、盔甲遮住的衣服、只在动作中显示的手持物不重复生成身体／头像；原始选择仍保存在人物上，脱下遮挡装备时正常恢复。左右方向共用侧面身体，左向预览单独缓存镜像。不可变外观的解析结果用弱引用关联复用，旧世界和编辑草稿可以回收；每帧未变的外观不重复 Normalize。节点移出树后修改外观不占用纹理，重新进入时恢复。
+
+任务排序只依赖 `JobCollection.Version`。增删、清空及索引替换均更新版本；排序用的任务 ID／类型字段仍为 `init`，若以后加入可变优先级，应通过集合变更入口同步更新版本。库存、任务所有权和安全判断继续实时检查。
+
+检查清单统一在 `../tools/checks/checks.json`；所有默认分组均离线，不读取或发送真实模型密钥：
+
+```sh
+./tools/check.sh --group quick           # 内容兼容、扩展、核心、LLM 替身、叙事者、人格、菜单
+./tools/check.sh                         # 无窗口完整回归，含导入与游戏编译
+./tools/check.sh --only pawn-cache       # 100 人外观缓存及实际纹理持有检查
+./tools/check.sh --only sprite,smoke     # 指定检查
+./tools/check.sh --group regression --list
+```
+
+Windows 使用 `tools/windows.ps1 -Godot <路径> -Mode check -CheckGroup quick`，默认组为 `regression`。发布脚本复用同一清单的 `export` 组，检查实际导出可执行文件。控制台检查统一从仓库外临时目录启动；结果保存在 `.local/checks/`，非零退出、缺少完成标记或异常日志会使检查失败。`console` 检查刻意制造错误，由自身断言负责核对。`--skip-build` 仅用于确认构建已更新后的重复检查，不应作为提交前默认入口。
+
+缓存检查报告合成耗时、分配量、命中和估算内存，不能替代实际 GPU／FPS 测量。真实模型检查仍须使用原来的显式 `--live` 入口，不纳入默认测试。
+
+## 相机拖动与墙壁剖切（2026-10-30）
+
+中键平移按实际视口射线与水平面的交点计算，不再依赖固定窗口高度。右键旋转开始时锁定画面中心可见地形，整个手势保持同一个旋转中心；远景降低旋转灵敏度。相机继续采用正交投影，俯仰仍会自然改变地面的投影比例。
+
+在 **视图 → 墙壁显示方式 → 墙壁剖切** 中启用前墙降低、后墙保留。高俯视角仍保留低墙基，避免前墙因遮挡射线缩短而升起；H 仍循环切换显示模式。切墙仅改变显示和对应拾取，不挖除地形，不修改房间或耐久。已有后台计算和缓存继续使用。
+
+`--camera-cutaway-test` 检查两种窗口尺寸、三个缩放距离、三个俯仰角的拖动跟手、旋转中心稳定，以及前后墙交换、家具保留和退出剖切后的恢复。
+
+## 生物框架（2026-10-30，存档 28）
+
+物种、身体模板、移动参数、行为与外观引用由 XML 定义；实例支持有界轮询、基础游荡、部位伤害及存读档。矮人已接入共享物种与能力定义，居民/敌人身份独立；统一查询与伤害入口复用原始位置和健康数据。尚未添加正式动物、动物渲染与生态刷新。配置入口为 `Assets/Definitions/creatures.xml`；示例、接口和测试见 [生物系统框架](../docs/生物系统框架.md)。
+
 ## 居民人格、记忆与 AI 决策（2026-10-29，存档 26）
 
 游戏内打开 **地图菜单 → 居民人格与决策**。本地照料规则已在同等紧急程度下考虑好感和曾受照料的经历；无需联网。启用居民 AI 前，在主菜单“设置 → AI 服务”配置模型。开关默认关闭，与叙事者独立；共用配置和会话请求额度，默认全体每 2 游戏小时最多请求一次，可调 1–24 小时。启用会向该服务发送当前居民背景、附近关系、筛选后的亲历记忆及可用选项，可能计费。
@@ -760,7 +1000,7 @@ bash tools/check.sh
 
 树木仍不能砍伐，直接影响树根的挖掘会拒绝；可以挖掘更深的地下岩层。多层蓝图本轮不扩展。
 
-FPS 与实际／目标 TPS 独立显示。基础 30 TPS 是 Demo 临时参数，不是最终指标或大规模性能证明。
+FPS 与实际／目标 TPS 独立显示。基础目标现为 60 TPS；目标频率不是大规模性能证明。
 
 ### Demo 的边界
 
@@ -869,7 +1109,7 @@ Textures/3D Models/Sounds from PureBDcraft ResourcePack by https://bdcraft.net
 
 编辑时自动暂停，关闭后恢复原暂停状态；体型只改变外观，不改变 1.1 米身高、移动或施工规则。初始外观由地图种子与居民编号生成，已保存外观优先。生成新地图与重启游戏沿用已保存居民外观，按稳定居民 ID 匹配。
 
-角色外观独立保存为 Godot 用户目录的 `characters-v1.json`（macOS 通常在 `~/Library/Application Support/Godot/app_userdata/NoDwarf/`）。使用版本化 JSON、稳定字符串选项 ID 和临时文件替换；未知选项回退默认，损坏或未来版本档案显示错误并保留本次默认角色。保存失败会保留旧外观并允许重试。此文件只保存居民外观，**营地、施工、位置和订单仍不保存**。
+角色外观独立保存为 Godot 用户目录的 `characters.json`（macOS 通常在 `~/Library/Application Support/Godot/app_userdata/NoDwarf/`）。使用版本化 JSON、稳定字符串选项 ID 和临时文件替换；未知选项回退默认，损坏或未来版本档案显示错误并保留本次默认角色。保存失败会保留旧外观并允许重试。此文件只保存居民外观，**营地、施工、位置和订单仍不保存**。
 
 实现位于 `Simulation/CharacterAppearance.cs`（数据、随机与档案）、`Scripts/CharacterArt.cs`（原创 SVG 组合图形）和 `Scripts/CharacterEditor.cs`（预览与编辑）。场景与头像共用同一渲染结果，保留 `Assets/resident.svg` 为原始美术参考。运行时不依赖第三方人物素材。
 
@@ -1299,7 +1539,7 @@ Tab 用于切换控件焦点，不再作为生产面板快捷键。按钮与输�
 
 替换入口为 `Assets/Textures/equipment.json`：`Icon` 指定图标资源，`Region` 指定图集裁剪，`Tint` 为可选染色，`Clothing`／`Head` 为当前 80×104 纸片人坐标下的 SVG 覆盖层；`HeldRect` 为扩展到 112×104 画布后的手持贴图位置与尺寸。修改资源后重启可生效，不改物品 ID、装备属性或存档。导出预设已有 JSON 资源包含规则。
 
-合成贴图按外貌／装备组合缓存，最多缓存 256 组；普通静止帧不重复合成。`bash tools/run.sh -- --equipment-test` 验证全部装备图标、换装／卸装、列表顺序无关缓存、存读档与世界／头像同步，并输出 `.local/equipment-paperdoll.png`、`.local/equipment-lineup.png` 和 `.local/equipment-0.5.png`。
+当前 2D 人物按可见外观／方向缓存身体和头像，使用字节预算 LRU，已取消旧的 256 组整体清空规则。`bash tools/check.sh --only pawn-cache,sprite` 无窗口验证容量压力、换装／卸装、镜像、缓存复用、资源生命周期及实际人物动作；当前协议和内存配置见本文开头的缓存说明。
 
 ## 0.5 战斗收尾与指令标记（2026-10-28）
 
@@ -1462,7 +1702,7 @@ Tab 用于切换控件焦点，不再作为生产面板快捷键。按钮与输�
 
 详情窗采用参考截图的三栏：说明／实际材料需求，制造方式／数量／成品去向／指定工作者／技能范围，材料允许清单／耐久范围／来源储存区／搜寻半径。修改立即生效并重新检查原料预约。取料限制同时用于初次预约、不可达材料重新选择及实际拾取；不存在的指定储存区不会偷偷回退为全地图。来源半径从设施计算三轴曼哈顿距离，0 表示无限制。成品在工作者脚下真实生成，再由搬运工作送入指定或最合适的储存区；“放在地上”不自动搬运。指定居民离开时等待，不能换给其他居民。
 
-**数据入口：`Assets/Definitions/production.xml`**。Items 定义物品 ID／名称／贴图／颜色；Recipes 定义设施、原料、产物、每批数量和工作量；Modes 定义名称、默认数量和行为绑定。修改后重启读取，无需重新编译。导出包无外部 XML 时使用内嵌默认文件。新增配方可使用已有设施和物品，新增制造方式 ID 可绑定 count／maintain／forever 三个已实现行为；增加全新行为仍需模拟代码。当前原料是明确的物品 ID，取消允许某个必需原料会阻止生产，不会凭空换成另一种材料。XML 校验重复 ID、非法数量、未知物品及行为；不允许 DTD／外部实体。改变现有配方的原料数量可能使旧存档中的在制任务不兼容，扩展时优先新增 ID。
+**数据入口：`Assets/Definitions/production.xml`**。Items 定义物品 ID／名称／贴图／颜色；Recipes 定义设施、原料、产物、每批数量和工作量；Modes 定义名称、默认数量和行为绑定。核心定义编译进共享程序集，修改后重新构建；外部 Mod 通过显式内容根目录加载，修改后重启。加载及兼容协议以本文开头的当前说明为准。新增配方可使用已有设施和物品，新增制造方式 ID 可绑定 count／maintain／forever 三个已实现行为；增加全新行为仍需模拟代码。当前原料是明确的物品 ID，取消允许某个必需原料会阻止生产，不会凭空换成另一种材料。XML 校验重复 ID、非法数量、未知物品及行为；不允许 DTD／外部实体。现有配方的玩法变化需要重新开局；在制任务保存配方快照，当前版本读档保持任务状态。扩展仍优先新增稳定 ID。
 
 清单 ID、顺序、方式、暂停、来源、工作者与所有筛选进入存档。旧的库存目标按 maintain 迁移，旧单批生产任务挂接相应清单。粘贴板只在本次会话保留。保留本游戏物品图标；原模组的研究队列、轮盘、装备拖放和比较卡尚未移植。
 

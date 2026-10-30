@@ -14,9 +14,10 @@ public static class ResidentWork
     public static string[] FreeDay()=>Enumerable.Repeat("anything",24).ToArray();
     public static string[] DayShift()=>Enumerable.Range(0,24).Select(h=>h<6||h>=22?"sleep":h>=8&&h<18?"work":h>=18&&h<20?"recreation":"anything").ToArray();
     public static string ModeName(string mode)=>mode switch{"sleep"=>"休息","work"=>"工作","recreation"=>"娱乐",_=>"无固定"};
-    public static string JobType(DemoJob job)=>job.Processing?(ProcessingCatalog.Find(job.Recipe)?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",BuildKind.Furnace=>"smelting",_=>"crafting"}):job.Haul||job.Refuel?"hauling":job.Farming||job.PlantTree?"growing":job.Chop?"forestry":job.Demolish||job.Build is not null?"construction":job.Dig?"mining":job.Cook?"cooking":job.Smelt?"smelting":"smithing";
+    public static string JobType(DemoJob job)=>job.Processing?((job.RecipeSnapshot??ProcessingCatalog.Find(job.Recipe))?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",BuildKind.Furnace=>"smelting",_=>"crafting"}):job.Haul||job.Refuel?"hauling":job.Farming||job.PlantTree?"growing":job.Chop?"forestry":job.Demolish||job.BuildingWork?"construction":job.Dig?"mining":job.Cook?"cooking":job.Smelt?"smelting":"smithing";
     public static int Rank(ResidentProfile p,string type)
     {
+        if(!p.Can("work")||type=="research"&&!p.Can("research")||type is "doctor" or "care"&&!p.Can("care"))return int.MaxValue;
         int index=-1;
         for(int i=0;i<Types.Length;i++)if(Types[i].Id==type){index=i;break;}
         if(index<0||!Types[index].Available)return int.MaxValue;

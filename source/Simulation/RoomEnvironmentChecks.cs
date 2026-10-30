@@ -66,11 +66,9 @@ public static class RoomEnvironmentChecks
         Check(w.RoomAt(otherCell).Enclosed,"Closed floodgate seals a room");w.ToggleFloodgate(gate);
         Check(!w.RoomAt(otherCell).Enclosed,"Opening a floodgate invalidates the room");w.ToggleFloodgate(gate);
         Check(w.RoomAt(otherCell).Enclosed,"Closing floodgate restores enclosure");
-        var legacy=JsonNode.Parse(loaded.SaveJson())!;legacy["Version"]=12;legacy.AsObject().Remove("RoomClimates");
-        Check(DemoWorld.LoadJson(legacy.ToJsonString()).RoomAt(c).Enclosed,"Old saves reconstruct room geometry");
         var invalid=JsonNode.Parse(loaded.SaveJson())!;invalid["RoomClimates"]![0]!["Temperature"]=999;
         bool rejected=false;try{DemoWorld.LoadJson(invalid.ToJsonString());}catch(InvalidDataException){rejected=true;}
         Check(rejected,"Invalid room temperature is rejected");
-        Console.WriteLine("ROOM_ENVIRONMENT_OK: roofs, doorways, wall gaps, quality, independent temperatures, heating/cooling, split/merge, save migration");
+        Console.WriteLine("ROOM_ENVIRONMENT_OK: roofs, doorways, wall gaps, quality, independent temperatures, heating/cooling, split/merge, save roundtrip");
     }
 }

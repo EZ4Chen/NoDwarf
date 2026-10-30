@@ -1,0 +1,8 @@
+<StoryEvents>
+  <Events>
+    <Event id="copper:cache" name="铜锭发现" tool="discover_copper" handler="supplies" description="发现少量铜锭；遵守公共物资预算和补给冷却。" maxCount="5" minDelay="0.1" maxDelay="12">
+      <Item ref="copper:ingot" />
+    </Event>
+    <Event id="copper:food" name="食物发现" tool="discover_food" handler="supplies" description="发现允许投放的食物；与所有物资发现共享冷却和预算。" category="food" maxCount="5" minDelay="0.1" maxDelay="12" />
+  </Events>
+</StoryEvents>

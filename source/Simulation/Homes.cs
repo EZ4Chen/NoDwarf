@@ -24,7 +24,7 @@ public sealed partial class DemoWorld
         {
             if(FireFuel.GetValueOrDefault(b.Cell)>30||Jobs.Any(j=>j.Refuel&&j.Cell==b.Cell))continue;
             var j=new DemoJob{Id=_nextJob+1,Cell=b.Cell,Refuel=true};
-            if(!Reserve(j,new(){{"wood",1}}))continue;
+            if(!Reserve(j,new Dictionary<string,int>{{"wood",1}}))continue;
             _nextJob++;Jobs.Add(j);Revision++;
         }
     }

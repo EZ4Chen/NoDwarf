@@ -49,7 +49,6 @@ public static class FluidChecks
         world.Fluids.Add(c,800);Check(!world.Walkable(c),"Deep water blocks walking");
         world.ToggleFloodgate(c);var saved=DemoWorld.LoadJson(world.SaveJson());Check(saved.Fluids.Amount(c)==800&&!saved.GateOpen(c)&&saved.Fluids.Conserved,"World archive preserves wet closed gate");
         world.Fluids.Add(c+new Cell(1,0),300);Check(!world.CanPlace(c+new Cell(1,0))&&!world.CanDeveloperPlace(c+new Cell(1,0),BuildKind.Wall),"Building cannot erase water");
-        var old=System.Text.Json.Nodes.JsonNode.Parse(world.SaveJson())!;old["Version"]=11;old.AsObject().Remove("Fluids");Check(DemoWorld.LoadJson(old.ToJsonString()).Fluids.Mass==0,"Legacy save does not generate underground water");
         var bad=System.Text.Json.Nodes.JsonNode.Parse(saved.SaveJson())!;bad["Fluids"]!["Cells"]![0]!["Amount"]=-1;
         try{DemoWorld.LoadJson(bad.ToJsonString());throw new Exception("Invalid fluid archive accepted");}catch(InvalidDataException){}
         var mine=new DemoWorld();mine.DeveloperResidents(false);var rock=mine.Camp+new Cell(10,10,-5);var opening=rock+new Cell(1,0);
@@ -63,6 +62,6 @@ public static class FluidChecks
         Check(limited.AtLimit&&limited.Add(limitCells[^1],1)==0&&limited.Conserved,"Cell limit retains volume instead of deleting water");
         limited.Drain(limitCells[0]);Check(limited.Add(limitCells[^1],1)==1&&limited.Conserved,"Freed capacity becomes usable again");
         var a=new DemoWorld(region:"temperate");var b=new DemoWorld(region:"temperate");Check(a.Fluids.Sources.Count>0&&a.Fluids.Sources.Select(s=>s.Cell).SequenceEqual(b.Fluids.Sources.Select(s=>s.Cell)),"Aquifers seeded reproducibly");
-        Console.WriteLine("FLUID_OK: conservation, sleep/wake, gravity, U-tube, gates, pressure, recharge, heat, navigation, deterministic saves and migration");
+        Console.WriteLine("FLUID_OK: conservation, sleep/wake, gravity, U-tube, gates, pressure, recharge, heat, navigation, deterministic saves");
     }
 }

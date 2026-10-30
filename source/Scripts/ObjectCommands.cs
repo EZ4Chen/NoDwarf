@@ -5,7 +5,7 @@ public partial class Main
 {
     private HFlowContainer _objectCommands=null!;
     private Label _selectionTitle=null!;
-    private Button _productionBillAction=null!;
+    private Button _productionBillAction=null!,_harvestPlantAction=null!,_cancelHarvestPlantAction=null!;
     private Button _mineSelectionAction=null!,_chopSelectionAction=null!,_cancelChopAction=null!,_locateSelectionAction=null!;
     private void BuildObjectCommands(Control root)
     {
@@ -18,6 +18,8 @@ public partial class Main
             StyleObjectCommand(button,icon);
             button.TooltipText=help;UiAccess.Name(button,name,help);return button;
         }
+        _harvestPlantAction=Command("收获","wheat",()=>{if(_selectedCell is Cell c)_world.QueuePlantHarvest(c);SyncWorld();RefreshUi();},"采收成熟植物，产出作物和种子；收获后移除植株。");
+        _cancelHarvestPlantAction=Command("取消收获","cancel",()=>{if(_selectedCell is Cell c)foreach(var j in _world.Jobs.At(c).Where(j=>j.Harvest).ToArray())_world.CancelJob(j);RefreshUi();},"取消尚未完成的收获任务，保留植物。");
         _productionBillAction=Command("清单","workbench",()=>OpenProductionBills(_selectedCell),"查看该设施的制作清单、原料和工作者设置。");
         _mineSelectionAction=Command("开采","dig",()=>OrderSelectedObject("dig"),"安排居民开采这个方块；完成后移除岩土并掉落材料，开始前可取消。");
         _demolishAction=Command("拆除","erase",()=>OrderSelectedObject("erase"),"安排居民拆除选中的建筑并回收材料；开始前可取消。");
@@ -32,6 +34,7 @@ public partial class Main
         foreach(var (button,icon) in new[]{(_medicalBedAction,"bed"),(_waterPointAction,"water_bucket"),(_storageAction,"stockpile")})
         {button.Reparent(_objectCommands);StyleObjectCommand(button,icon);}
         _selectionPanel.VisibilityChanged+=()=>{if(!_selectionPanel.Visible)_objectCommands.Hide();};
+        BuildItemPlacementCommands();
         _objectCommands.Hide();
     }
     private static void StyleObjectCommand(Button button,string icon)
@@ -56,7 +59,10 @@ public partial class Main
     {
         foreach(var button in new[]{_medicalBedAction,_waterPointAction,_gateAction})UiAccess.Name(button,button.Text,button.TooltipText);
         _locateSelectionAction.Visible=_selectedWorker>=0;
-        _productionBillAction.Visible=_selectedCell is Cell station&&_world.Buildings.TryGetValue(station,out var bench)&&ProductionCatalog.All.Any(r=>r.Station==bench.Kind);
+        _productionBillAction.Visible=_selectedCell is Cell station&&_world.Buildings.TryGetValue(station,out var bench)&&_world.Content.Recipes.Any(r=>r.Station==bench.Kind);
+        _harvestPlantAction.Hide();_cancelHarvestPlantAction.Hide();
+        if(_selectedWorker<0&&_selectedCell is Cell pc&&CurrentView.Known(_world,pc)&&_world.Plants.TryGetValue(pc,out var plant))
+        {bool pending=_world.Jobs.At(pc).Any(j=>j.Harvest);_harvestPlantAction.Visible=!pending&&plant.Growth>=DemoWorld.GrowTime(plant.Crop);_cancelHarvestPlantAction.Visible=pending;}
         _mineSelectionAction.Hide();_demolishAction.Hide();_chopSelectionAction.Hide();_cancelChopAction.Hide();
         if(_selectedWorker<0&&_selectedCell is Cell cell&&CurrentView.Known(_world,cell)&&SelectedGrowingZone is null&&SelectedDigRegion is null)
         {
@@ -76,6 +82,7 @@ public partial class Main
             var lines=_selection.Text.Split('\n',2);_selectionTitle.Text=lines[0];
             _selection.Text=lines.Length>1?lines[1]:"";
         }
+        RefreshItemPlacementCommands();
         _selection.Visible=_selection.Text.Length>0;
         float width=objectSelected?320:400;
         _selectionPanel.CustomMinimumSize=new(width,objectSelected?180:0);

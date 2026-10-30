@@ -11,7 +11,7 @@ public sealed partial class DemoWorld
     public StoryState Story { get; private set; } = new();
     private double _storyHealthCheck;
     public string StoryVitalState() => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-        string.Join('|', Workers.Select(w => $"{w.Id}:{w.Person.Dead}:{w.Person.Incapacitated}")) + "/" +
+        Content.GameplayHash+"/"+string.Join('|', Workers.Select(w => $"{w.Id}:{w.Person.Dead}:{w.Person.Incapacitated}")) + "/" +
         string.Join('|', Enemies.Select(w => $"{w.Id}:{w.Person.Dead}:{w.Person.Incapacitated}")))));
     public double StoryThreatBudget(ColonyValue? value = null)
     {
@@ -59,11 +59,14 @@ public sealed partial class DemoWorld
     }
     public ResidentResult ScheduleStoryEvent(StoryEvent e)
     {
+        if(e is null)throw new InvalidDataException("叙事事件为空");
+        if(e.DefinitionId=="")e.DefinitionId="base:"+e.Kind;
         ValidateStoryEvent(e);
         if (!Story.Enabled) return new(false, "叙事者已关闭。");
         if (Story.Pending.Any(x => x.Id == e.Id) || Story.History.Any(x => x.EventId == e.Id)) return new(false, "事件 ID 已使用。");
         if (Story.Pending.Count >= 8) return new(false, "待发生事件已满。");
-        if (e.Due < SimulationTime + .1 * StoryHour || e.Due > SimulationTime + 24 * StoryHour) return new(false, "事件需要安排在 0.1—24 游戏小时后。");
+        var definition=Content.StoryEvents[e.DefinitionId];
+        if(e.Due<SimulationTime+definition.MinDelay*StoryHour||e.Due>SimulationTime+definition.MaxDelay*StoryHour)return new(false,"事件时间超出定义允许范围。");
         var value = Values(true);
         string issue = StoryEventIssue(e, value, false);
         if (issue != "") return new(false, issue);
@@ -71,9 +74,10 @@ public sealed partial class DemoWorld
         if (e.Kind == "raid") Story.RaidAfter = e.Due + 2 * GameCalendar.SecondsPerDay;
         if (e.Kind == "supplies") Story.SuppliesAfter = e.Due + 6 * StoryHour;
         if (e.Kind == "weather") Story.WeatherAfter = e.Due + e.Duration + 6 * StoryHour;
-        Log($"叙事者安排了{StoryEventName(e.Kind)}：约 {(e.Due - SimulationTime) / StoryHour:0.#} 游戏小时后。{e.Reason}");
+        Log($"叙事者安排了{StoryEventLabel(e)}：约 {(e.Due - SimulationTime) / StoryHour:0.#} 游戏小时后。{e.Reason}");
         Revision++; return new(true, "事件已排队，发生前会再次检查条件。");
     }
+    public string StoryEventLabel(StoryEvent e)=>Content.StoryEvents.TryGetValue(e.DefinitionId,out var def)?def.Name:StoryEventName(e.Kind);
     public static string StoryEventName(string kind) => kind switch { "raid" => "袭击", "supplies" => "物资发现", "weather" => "天气变化", "decision" => "叙事决定", "loss" => "居民损失", _ => kind };
     private string StoryEventIssue(StoryEvent e, ColonyValue value, bool executing)
     {
@@ -88,7 +92,7 @@ public sealed partial class DemoWorld
         if (e.Kind == "supplies")
         {
             if (Story.Pending.Any(x => x != e && x.Kind == "supplies") || !executing && e.Due < Story.SuppliesAfter) return "补给仍在冷却期或已有补给排队。";
-            if (e.Count * ValueCatalog.Base(e.Item) > StoryGiftBudget(value)) return "补给超过当前机会预算。";
+            if (e.Count * ValueCatalog.Base(e.Item,Content) > StoryGiftBudget(value)) return "补给超过当前机会预算。";
             if (value.Capable == 0) return "没有可接收补给的居民。";
         }
         if (e.Kind == "weather")
@@ -125,6 +129,7 @@ public sealed partial class DemoWorld
         for (int i = Story.Pending.Count - 1; i >= 0; i--)
         {
             var e = Story.Pending[i]; if (e.Due > SimulationTime) continue;
+            ValidateStoryEvent(e);
             string issue = StoryEventIssue(e, Values(true), true);
             if (issue == "" && e.Kind == "raid")
             { var result = StartRaid(e.Count); if (!result.Ok) issue = result.Message; }
@@ -138,21 +143,17 @@ public sealed partial class DemoWorld
             { Story.ActiveWeather = e.Weather; Story.WeatherUntil = SimulationTime + e.Duration; }
             Story.Pending.RemoveAt(i);
             StoryRecord(e, issue == "" ? "executed" : "cancelled", issue == "" ? e.Reason : issue);
-            Log(issue == "" ? $"叙事事件发生：{StoryEventName(e.Kind)}。{e.Reason}" : $"叙事事件取消：{StoryEventName(e.Kind)}。{issue}");
+            Log(issue == "" ? $"叙事事件发生：{StoryEventLabel(e)}。{e.Reason}" : $"叙事事件取消：{StoryEventLabel(e)}。{issue}");
             _valueCache = null; Revision++;
         }
     }
     private static bool StoryText(string? s, int limit) => s is not null && s.Length <= limit;
     private static bool StoryTime(double time) => double.IsFinite(time) && time >= 0 && time <= 1e12;
-    private static void ValidateStoryEvent(StoryEvent e)
+    private void ValidateStoryEvent(StoryEvent e)
     {
-        if (e is null || !StoryText(e.Id, 100) || e.Id.Length == 0 || !StoryText(e.Reason, 240) ||
-            !StoryTime(e.Due) || !StoryTime(e.Duration) || e.Kind is not ("raid" or "supplies" or "weather") ||
-            !StoryText(e.Item, 40) || !StoryText(e.Weather, 20)) throw new InvalidDataException("叙事事件无效。");
-        if (e.Kind == "raid" && (e.Count is < 1 or > MaxStoryRaid || e.Item != "" || e.Weather != "" || e.Duration != 0) ||
-            e.Kind == "supplies" && (e.Count is < 1 or > 100 || e.Item is not ("meal" or "wood" or "bandage" or "grain_seed") || e.Weather != "" || e.Duration != 0) ||
-            e.Kind == "weather" && (e.Count != 0 || e.Item != "" || e.Weather is not ("clear" or "cloudy" or "rain" or "fog") || e.Duration < StoryHour || e.Duration > 12 * StoryHour))
-            throw new InvalidDataException("叙事事件参数越界。");
+        if(e is null||!StoryText(e.Id,100)||e.Id.Length==0||!StoryText(e.Reason,240)||!StoryTime(e.Due)||!StoryTime(e.Duration)||
+           !StoryText(e.Item,256)||!StoryText(e.Weather,20)||e.DefinitionId is null||!Content.StoryEvents.TryGetValue(e.DefinitionId,out var definition))throw new InvalidDataException("叙事事件无效或缺少定义。");
+        definition.Validate(e);
     }
     private void RestoreStory(StoryState? state)
     {

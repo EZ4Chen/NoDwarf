@@ -51,18 +51,19 @@ public partial class Main
         {
             if(input is InputEventMouseMotion motion)
             {
+                if(!_orbitMoved&&motion.Position.DistanceTo(_orbitOrigin)>5)AnchorCameraOrbit();
                 _orbitMoved|=motion.Position.DistanceTo(_orbitOrigin)>5;
                 if(_orbitMoved)
                 {
                     var delta=motion.Position-_orbitLast;
-                    _cameraYaw=Mathf.PosMod(_cameraYaw-delta.X*.006f,Mathf.Tau);
+                    _cameraYaw=Mathf.PosMod(_cameraYaw-delta.X*OrbitSensitivity,Mathf.Tau);
                     if(delta.Y!=0)
                     {
-                        _orbitPitch=Mathf.Clamp(_cameraPitch+delta.Y*.006f,MinCameraPitch,MaxCameraPitch);
+                        _orbitPitch=Mathf.Clamp(_cameraPitch+delta.Y*OrbitSensitivity,MinCameraPitch,MaxCameraPitch);
                         _topDown=false;_angleButton.Text="俯视";
                         if(LocalWallCutaway)_revision=-1;
                     }
-                    _digStart=null;_digEnd=null;PositionCamera();_hoverCell=null;Clear(_hover);
+                    _digStart=null;_digEnd=null;PositionCamera();_hoverCell=null;ClearHover();
                 }
                 _orbitLast=motion.Position;GetViewport().SetInputAsHandled();return true;
             }
@@ -85,10 +86,10 @@ public partial class Main
                 if(GetViewport().GuiGetHoveredControl() is not null)return false;
                 var end=_digEnd??start;_digStart=null;_digEnd=null;
                 CommitDigDrag(start,end);
-                Clear(_hover);_hoverCell=null;GetViewport().SetInputAsHandled();return true;
+                ClearHover();_hoverCell=null;GetViewport().SetInputAsHandled();return true;
             }
             if(input is InputEventKey{Pressed:true,Keycode:Key.Escape} || input is InputEventMouseButton{ButtonIndex:MouseButton.Right,Pressed:true})
-            { _digStart=null;_digEnd=null;_hoverCell=null;Clear(_hover);GetViewport().SetInputAsHandled();return true; }
+            { _digStart=null;_digEnd=null;_hoverCell=null;ClearHover();GetViewport().SetInputAsHandled();return true; }
         }
         return false;
     }
@@ -101,6 +102,7 @@ public partial class Main
         int count=0,skipped=0;bool stairs=_tool=="digstairs";
         long volume=(long)(Math.Abs(start.X-end.X)+1)*(Math.Abs(start.Z-end.Z)+1)*(Math.Abs(start.Level-end.Level)+1);
         if(volume>4096){_world.Log("挖掘选区超过 4096 格，请分批规划。");RefreshUi();return;}
+        using var blockBatch=_world.BatchBlockChanges();
         for(int x=Math.Min(start.X,end.X);x<=Math.Max(start.X,end.X);x++)
         for(int z=Math.Min(start.Z,end.Z);z<=Math.Max(start.Z,end.Z);z++)
         for(int y=Math.Max(start.Level,end.Level);y>=Math.Min(start.Level,end.Level);y-=stairs?3:1)
@@ -121,7 +123,7 @@ public partial class Main
     }
     private void CommitCancelDig(Cell start,Cell end)
     {
-        // Intersect task volume too: legacy three-metre excavations can start below the selection.
+        // Intersect task volume too: multi-level excavations can start below the selection.
         var jobs=_world.Jobs.Where(j=>j.Dig&&!j.Demolish&&j.Cell.X>=Math.Min(start.X,end.X)&&j.Cell.X<=Math.Max(start.X,end.X)
             &&j.Cell.Z>=Math.Min(start.Z,end.Z)&&j.Cell.Z<=Math.Max(start.Z,end.Z)
             &&j.Cell.Level<=Math.Max(start.Level,end.Level)&&j.Cell.Level+j.DigHeight-1>=Math.Min(start.Level,end.Level)).ToArray();
@@ -132,7 +134,7 @@ public partial class Main
     private void DrawDigDrag(Cell start,Cell end)
     {
         if(_hoverCell==end)return;_hoverCell=end;
-        Clear(_hover);
+        ClearHover();
         float w=Math.Abs(start.X-end.X)+1,d=Math.Abs(start.Z-end.Z)+1,h=Math.Abs(start.Level-end.Level)+(_tool=="digstairs"?3:1);
         var center=WorldPosition(new Cell(0,0,Math.Min(start.Level,end.Level)))+new Vector3((start.X+end.X)*.5f,h/2,(start.Z+end.Z)*.5f);
         bool oversized=_tool!="canceldig"&&(long)w*(long)d*(long)h>4096;

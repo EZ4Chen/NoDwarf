@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PlantGrowth>
+  <!-- Effective growth seconds, seeds and yields remain in CropCatalog. No historical-format migration. -->
+  <Crop wildChance="0.12" id="grain" minTemperature="4" idealLow="12" idealHigh="24" maxTemperature="32" minLight="0.51" optimalLight="1" fertilitySensitivity="1" minFertility="0.5" restStart="19" restEnd="6" dark="false" />
+  <Crop wildChance="0.08" id="potato" minTemperature="2" idealLow="10" idealHigh="22" maxTemperature="30" minLight="0.51" optimalLight="1" fertilitySensitivity="0.4" minFertility="0.5" restStart="19" restEnd="6" dark="false" />
+  <Crop wildChance="0.04" id="cotton" minTemperature="10" idealLow="18" idealHigh="30" maxTemperature="38" minLight="0.51" optimalLight="1" fertilitySensitivity="1" minFertility="0.5" restStart="19" restEnd="6" dark="false" />
+  <Crop wildChance="0" id="mushroom" minTemperature="4" idealLow="12" idealHigh="20" maxTemperature="28" minLight="0" optimalLight="0.2" fertilitySensitivity="0" minFertility="0" restStart="-1" restEnd="-1" dark="true" />
+  <Soil block="nodwarf:soil" fertility="1" />
+  <Soil block="nodwarf:grass" fertility="1" />
+  <Soil block="nodwarf:humus" fertility="1.4" />
+  <Soil block="nodwarf:dry_grass" fertility="0.7" />
+  <Soil block="nodwarf:sand" fertility="0.1" />
+</PlantGrowth>

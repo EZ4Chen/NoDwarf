@@ -16,7 +16,7 @@ public partial class Main
                 foreach(bool down in new[]{true,false})GetViewport().PushInput(new InputEventMouseButton{Position=p,GlobalPosition=p,ButtonIndex=MouseButton.Left,Pressed=down},true);
                 await Frame();
             }
-            var clock=new SimulationClock();clock.SetSpeed(2);Check(clock.Advance(1)==60,"2x tick rate");
+            var clock=new SimulationClock();clock.SetSpeed(2);Check(clock.Advance(1)==2*SimulationClock.BaseTicksPerSecond,"2x tick rate");
             var restored=new SimulationClock();restored.Restore(clock.Tick,clock.Speed,true,clock.PendingSeconds);
             Check(restored.Speed==2&&restored.Advance(1)==0,"2x clock restore/pause");
             _clock.Paused=true;_world=new DemoWorld(region:"temperate");_world.Update(100);_overview.World=_world;

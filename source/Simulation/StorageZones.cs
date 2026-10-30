@@ -3,7 +3,7 @@ public sealed class StorageZone
 {
     public int Id {get;set;}
     public int Priority {get;set;}=3;
-    public HashSet<string> Allowed {get;set;}=new(ItemCatalog.All.Select(i=>i.Id));
+    public HashSet<string> Allowed {get;set;}=new();
     public HashSet<Cell> Cells {get;set;}=new();
 }
 public sealed partial class DemoWorld
@@ -24,12 +24,12 @@ public sealed partial class DemoWorld
         var selected=cells.ToHashSet();if(selected.Count==0)return;
         foreach(var zone in StorageZones)zone.Cells.ExceptWith(selected);
         StorageZones.RemoveAll(z=>z.Cells.Count==0);
-        StorageZones.Add(new(){Id=StorageZones.Select(z=>z.Id).DefaultIfEmpty().Max()+1,Cells=selected});
+        StorageZones.Add(new(){Id=StorageZones.Select(z=>z.Id).DefaultIfEmpty().Max()+1,Cells=selected,Allowed=new(Content.Items.Select(i=>i.Id))});
     }
     public bool ConfigureStorage(int id,int priority,IEnumerable<string> items)
     {
         var zone=StorageZones.FirstOrDefault(z=>z.Id==id);if(zone is null||priority is <1 or >5)return false;
-        var allowed=items.ToHashSet();if(allowed.Any(i=>!ItemCatalog.All.Any(d=>d.Id==i)))return false;
+        var allowed=items.ToHashSet();if(allowed.Any(i=>!Content.ItemsById.ContainsKey(i)))return false;
         zone.Priority=priority;zone.Allowed=allowed;
         foreach(var job in Jobs.Where(j=>j.Haul&&zone.Cells.Contains(j.Cell)&&j.Materials.Any(r=>!allowed.Contains(r.Item))).ToArray())CancelJob(job);
         Revision++;return true;

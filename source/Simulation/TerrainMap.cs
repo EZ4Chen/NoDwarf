@@ -23,18 +23,20 @@ public sealed partial class TerrainMap
     public int Revision { get; private set; }
     public event Action<Cell>? Changed;
     public IReadOnlyCollection<Cell> Excavated => _excavated;
-    public bool Solid(Cell c) => DemoWorld.Inside(c) && c.Level < this[c.X,c.Z].Level && !_excavated.Contains(c) && !_caverns.Contains(c);
+    public bool Solid(Cell c) => DemoWorld.Inside(c) && (_placedBlocks.ContainsKey(c) || c.Level < this[c.X,c.Z].Level && !_excavated.Contains(c) && !_caverns.Contains(c));
     public bool Ramp(Cell c) => Contains(c) && this[c.X,c.Z].Ramp && !_excavated.Contains(c);
     public string BlockAt(Cell c)
     {
         if(!InBounds(c))return "nodwarf:air";
+        if(_placedBlocks.TryGetValue(c,out var placed))return placed;
         if(Ramp(c))return this[c.X,c.Z].BlockId;
         if(!Solid(c))return "nodwarf:air";
         if(c.Level==MinLevel)return "nodwarf:bedrock";
+        if(_definitionBlocks.TryGetValue(c,out var custom))return custom;
         if(_ores.TryGetValue(c,out var ore))return OreId(c,ore);
         if(IsDeep(c))return "nodwarf:deepslate";
         var ground=this[c.X,c.Z];
-        if(Generation is {Revision:2} geology)
+        if(Generation is {} geology)
         {
             int below=ground.Level-c.Level;
             if(below==1)return BlockCatalog.Id(ground.Kind);
@@ -59,7 +61,7 @@ public sealed partial class TerrainMap
     public static string OreId(Cell c,GroundKind ore) => IsDeep(c)
         ? (ore==GroundKind.Iron ? "nodwarf:deepslate_iron_ore" : "nodwarf:deepslate_coal_ore") : BlockCatalog.Id(ore);
     public bool Excavate(Cell c)
-    { if(c.Level<=MinLevel || (!Solid(c)&&!Ramp(c))) return false; _excavated.Add(c);_changes.Add(c);Revision++;DiscoverCaverns(c);Changed?.Invoke(c);return true; }
+    { if(c.Level<=MinLevel || (!Solid(c)&&!Ramp(c))) return false; if(!_placedBlocks.Remove(c))_excavated.Add(c);_changes.Add(c);Revision++;DiscoverCaverns(c);Changed?.Invoke(c);return true; }
     public void SetTree(Cell c,bool exists)
     {
         if(!Contains(c))throw new ArgumentOutOfRangeException(nameof(c));
@@ -69,12 +71,14 @@ public sealed partial class TerrainMap
     }
     public const float LayerHeight = WorldScale.BlockMeters;
     private readonly Ground[,] _surface = new Ground[Size, Size];
+    internal ContentCatalog? Definitions {get;set;}
     public int Seed { get; }
     public bool Flat { get; }
     public RegionProfile? Region {get;}
     public WorldGenerationSettings? Generation {get;}
-    public int EcologyVersion {get;}
-    public int GeneratorVersion => Generation is not null?(Generation.Revision==2?4:3):Region is null ? 1 : 2;
+    public const int CurrentEcologyVersion=2,CurrentGeneratorVersion=4;
+    public int EcologyVersion=>CurrentEcologyVersion;
+    public int GeneratorVersion=>CurrentGeneratorVersion;
     public Ground this[int x, int z] => _surface[x, z];
     public Cell At(int x, int z) => new(x, z, _surface[x, z].Level);
     // Captured by the simulation owner, then read only by mesh workers. Ore layout
@@ -82,18 +86,18 @@ public sealed partial class TerrainMap
     internal TerrainMap CaptureMeshSnapshot() => new(this);
     private TerrainMap(TerrainMap source)
     {
-        Seed=source.Seed;Flat=source.Flat;Region=source.Region;Generation=source.Generation;
-        EcologyVersion=source.EcologyVersion;Revision=source.Revision;
+        Definitions=source.Definitions;Seed=source.Seed;Flat=source.Flat;Region=source.Region;Generation=source.Generation;
+        Revision=source.Revision;
         Array.Copy(source._surface,_surface,source._surface.Length);
         _ores=source._ores;_caverns=source._caverns;_waterColumns=source._waterColumns;_riverBoundaries=source._riverBoundaries;
+        foreach(var p in source._placedBlocks)_placedBlocks.Add(p.Key,p.Value);
+        foreach(var p in source._definitionBlocks)_definitionBlocks.Add(p.Key,p.Value);
         _excavated.UnionWith(source._excavated);_knownCaverns.UnionWith(source._knownCaverns);
     }
-    public TerrainMap(int seed, bool flat = false, string? region = null,WorldGenerationSettings? generation=null,int ecologyVersion=2)
+    public TerrainMap(int seed, bool flat = false, string? region = null,WorldGenerationSettings? generation=null)
     {
         Seed = seed; Flat = flat;
-        EcologyVersion=region is null?1:generation?.EcologyVersion??ecologyVersion;
-        if(EcologyVersion is not (1 or 2))throw new ArgumentException("不支持的生态生成版本。");
-        Region=region is null?null:RegionProfile.Get(region,EcologyVersion);
+        Region=region is null?null:RegionProfile.Get(region);
         Generation=generation;
         if(generation is not null)
         {
@@ -124,8 +128,7 @@ public sealed partial class TerrainMap
                     "savanna" or "arid" or "rainforest" or "tundra"=>66+(int)Math.Round(broad*10+detail*2),
                     "desert"=>65+(int)Math.Round(broad*10+Math.Pow(detail,2)*7),
                     _=>74+(int)Math.Round(Math.Pow(broad,.65)*43+detail*5)};
-                if(Generation is not null)level=Math.Clamp(level+Region.CampHeight-RegionProfile.Get(Region.Id,EcologyVersion).CampHeight,60,112);
-                if(Generation is {Revision:2} modern)
+                if(Generation is {} modern)
                 {
                     double scale=Math.Pow(1.5,modern.FeatureScale);
                     double relief=(Noise(x/(45*scale)+13,z/(45*scale)+29)-.5)*(10+modern.Ruggedness*3);
@@ -150,7 +153,7 @@ public sealed partial class TerrainMap
             _surface[x, z] = new Ground(level, flat ? GroundKind.Grass : kind, Tree: tree);
         }
         if (flat) return;
-        if(Generation is {Revision:2})GenerateModernTerrain();
+        if(Generation is {})GenerateModernTerrain();
         GenerateVeins();
         // A subset of terrace edges become explicit ramps. Other edges remain cliffs.
         var landings = new HashSet<(int, int)>();
@@ -184,7 +187,7 @@ public sealed partial class TerrainMap
         var random = new Random(unchecked(Seed * 397 ^ 0x51a7));
         var directions = new[] { new Cell(1,0),new Cell(-1,0),new Cell(0,1),new Cell(0,-1),new Cell(0,0,1),new Cell(0,0,-1) };
         int count = Size * Size / 90;
-        if(Generation is {Revision:2} g)count=count*(g.Minerals==0?1:g.Minerals==1?3:6)/3;
+        if(Generation is {} g)count=count*(g.Minerals==0?1:g.Minerals==1?3:6)/3;
         for(int vein=0;vein<count;vein++)
         {
             int x=random.Next(3,Size-3),z=random.Next(3,Size-3);

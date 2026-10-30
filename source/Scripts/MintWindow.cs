@@ -45,9 +45,9 @@ public partial class Main
     private void MintStatRows(string id)
     {
         foreach(var child in _mintStats.GetChildren()){_mintStats.RemoveChild(child);child.QueueFree();}
-        if(!Enum.TryParse<BuildKind>(id,out var kind))return;
-        var def=BlockCatalog.Get(kind);
-        foreach(var (label,value) in new[]{("耐久",def.Durability.ToString()),("材料",DemoWorld.CostOf(kind)),("方块 ID",def.Id)})
+        if(!TryBuildTool(id,out var kind))return;
+        var definition=ToolDefinition(id)!;var def=_world.Content.Block(definition.Block);
+        foreach(var (label,value) in new[]{("耐久",def.Durability.ToString()),("材料",_world.BuildCostText(definition)),("方块 ID",def.Id)})
         {
             var row=new HBoxContainer();_mintStats.AddChild(row);var key=Text(label,14,Muted);key.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;row.AddChild(key);row.AddChild(Text(value,14,Ink));
         }

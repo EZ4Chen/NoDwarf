@@ -18,15 +18,15 @@ public sealed partial class DemoWorld
         if(!seed||Terrain.Flat||Terrain.Region is null)return;
         foreach(var c in Terrain.InitialSurfaceWater)Fluids.Add(c,1000,Math.Clamp(Terrain.Region.Mean,1,30));
         var random=new Random(unchecked(Terrain.Seed^0x51f01d));
-        int aquifers=Terrain.Generation is {Revision:2} g?g.Aquifers*16:16;
+        int aquifers=Terrain.Generation is {} g?g.Aquifers*16:16;
         for(int i=0;i<aquifers;i++)
         {
             int x=16+random.Next(Width-32),z=16+random.Next(Depth-32);
             if(Math.Abs(x-Camp.X)<18&&Math.Abs(z-Camp.Z)<18)continue;
             int y=Math.Max(2,Terrain[x,z].Level-12-random.Next(24));
             if(!Terrain.Solid(new(x,z,y)))continue;
-            int capacity=(12000+random.Next(24000))*(Terrain.Generation is {Revision:2,Aquifers:2}?2:1);
-            Fluids.AddSource(new Aquifer{Cell=new(x,z,y),Capacity=capacity,Stored=capacity,Head=Math.Min(TerrainMap.MaxLevel,Terrain[x,z].Level-3),Rate=500,Recharge=Terrain.Generation is {Revision:2} modern?(modern.Site.Rainfall>.65?10:0):Terrain.Region.Humidity>.65?10:0,Temperature=12},true);
+            int capacity=(12000+random.Next(24000))*(Terrain.Generation is {Aquifers:2}?2:1);
+            Fluids.AddSource(new Aquifer{Cell=new(x,z,y),Capacity=capacity,Stored=capacity,Head=Math.Min(TerrainMap.MaxLevel,Terrain[x,z].Level-3),Rate=500,Recharge=Terrain.Generation is {} modern?(modern.Site.Rainfall>.65?10:0):Terrain.Region.Humidity>.65?10:0,Temperature=12},true);
         }
     }
     private void FluidGeometryChanged(Cell c)

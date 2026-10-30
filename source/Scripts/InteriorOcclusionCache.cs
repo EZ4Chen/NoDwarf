@@ -34,7 +34,10 @@ public partial class Main
     private TerrainMap? _interiorTerrainSource,_interiorTerrainSnapshot;
     private int _interiorTerrainRevision=-1;
     private long _interiorGeneration;
-    private InteriorCutKey InteriorKey(int floor,int height)=>new(floor,height,new InteriorFootprint(CameraBack,(height-1+.5f)/Mathf.Tan(_cameraPitch)),MiningCutaway&&!_interiorView);
+    // Keep the near facade down even at steep pitch. A pure obstruction ray gets
+    // shorter than one tile there and makes walls rise while inspecting a room.
+    private InteriorCutKey InteriorKey(int floor,int height)=>new(floor,height,new InteriorFootprint(CameraBack,
+        Math.Max(_interiorView?1.5f:0,(height-1+.5f)/Mathf.Tan(_cameraPitch))),MiningCutaway&&!_interiorView);
     private InteriorOcclusionInput CaptureInteriorInput()
     {
         if(_interiorSnapshot is not null)return _interiorSnapshot;

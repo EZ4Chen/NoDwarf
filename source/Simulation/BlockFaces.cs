@@ -25,12 +25,20 @@ public static class BlockExposure
         }
         return faces;
     }
+    private static float OpaqueTop(DemoWorld world,WorldView view,Cell cell)
+    {
+        if(!view.InSlice(cell))return float.NegativeInfinity;
+        bool solid=world.Terrain.Solid(cell)&&!world.Terrain.Ramp(cell);
+        if(world.Buildings.TryGetValue(cell,out var b)&&BlockCatalog.IsWall(b.Kind)&&view.Visible(world,cell))solid=true;
+        return solid?Math.Min(cell.Level+1,view.CellTop(cell)):float.NegativeInfinity;
+    }
     public static BlockFaces BuildingFaces(DemoWorld world,WorldView view,Cell cell)
+        =>Faces(cell,Math.Min(cell.Level+1,view.CellTop(cell)),neighbor=>OpaqueTop(world,view,neighbor));
+
+    // Plans only hide other plan faces. They never change solid geometry or hide a real block's face.
+    public static BlockFaces PlanFaces(DemoWorld world,WorldView view,Cell cell,IReadOnlySet<Cell> solidPlans)
         =>Faces(cell,Math.Min(cell.Level+1,view.CellTop(cell)),neighbor=>
-        {
-            if(!view.InSlice(neighbor))return float.NegativeInfinity;
-            bool solid=world.Terrain.Solid(neighbor)&&!world.Terrain.Ramp(neighbor);
-            if(world.Buildings.TryGetValue(neighbor,out var b)&&BlockCatalog.IsWall(b.Kind)&&view.Visible(world,neighbor))solid=true;
-            return solid?Math.Min(neighbor.Level+1,view.CellTop(neighbor)):float.NegativeInfinity;
-        });
+            solidPlans.Contains(neighbor)&&view.Visible(world,neighbor)
+                ?Math.Max(OpaqueTop(world,view,neighbor),Math.Min(neighbor.Level+1,view.CellTop(neighbor)))
+                :OpaqueTop(world,view,neighbor));
 }

@@ -32,12 +32,4 @@ public static partial class HealthCare
         }
         return "";
     }
-    public static void Migrate(ResidentProfile p)
-    {
-        // Formerly treated wounds keep a normal-quality initial dressing; no new supplies consumed.
-        if(p.Injuries is null)return;
-        foreach(var i in p.Injuries)
-            if(i is not null&&i.Treated&&i.Kind!="missing"&&i.Severity>i.PermanentSeverity)
-                i.Treatment=new(){Quality=.5,Remaining=HealthConditions.Find(i.Kind)?.TreatmentDuration??0};
-    }
 }

@@ -17,7 +17,7 @@ public partial class Main
             _world=CombatChecks.Fixture();_overview.World=_world;_clock.Paused=true;_creative=false;_foundation=null;_cutaway=false;_interiorView=false;
             for(int i=0;i<_world.Workers.Count;i++)
             {
-                var actor=_world.Workers[i];actor.X=60+i*2;actor.Z=60;actor.Appearance=actor.Appearance with{BodySex=i==1?"female":"male",Body=i==0?"broad":i==1?"regular":"round",Face=i==1?"round":"square",Hair=i==1?"braid":"sweep",Beard=i==0?"full":"none",Outfit="tunic"};
+                var actor=_world.Workers[i];actor.X=60+i*2;actor.Z=60;actor.Appearance=actor.Appearance with{BodySex=i==1?"female":"male",Body=i==0?"hulk":i==1?"female":"fat",Face=i==1?"round":"square",Hair=i==1?"braid":"sweep",Beard=i==0?"full":"none",Outfit="tunic"};
                 foreach(var name in (i==2?Array.Empty<string>():new[]{"shirt","trousers","boots"}.Concat(i==0?new[]{"sword","shield"}:new[]{"pickaxe"})))
                 {
                     var item=_world.SpawnItem(name,1,actor.Tile);item.Owner=actor.Id;
@@ -26,7 +26,6 @@ public partial class Main
             }
             _world=DemoWorld.LoadJson(_world.SaveJson());_overview.World=_world;
             Check(_world.Workers[1].Appearance.BodySex=="female","Female save roundtrip");
-            Check(System.Text.Json.JsonSerializer.Deserialize<CharacterAppearance>("{}")!.BodySex=="male","Old appearance compatibility");
             _focus=WorldPosition(new(62,60));_camera.Size=7;PositionCamera();CreatePeople();SyncWorld();_terrainView.FlushMeshes();AnimatePeople();
             foreach(var node in _people)
             {
@@ -81,10 +80,6 @@ public partial class Main
                 Check(new Vector2(main.Position.X,main.Position.Y).DistanceTo(new(lower.GetParent<Node3D>().Position.X,lower.GetParent<Node3D>().Position.Y))<.0001f,"Lower pick grip moved");
             }
             sprite.SetEquipment(_world.Inventory(guard));
-            Check(new CharacterAppearance{Body="slim"}.Normalize().Body=="thin","Legacy thin body migration");
-            Check(new CharacterAppearance{Body="broad"}.Normalize().Body=="hulk","Legacy broad body migration");
-            Check(new CharacterAppearance{Body="round"}.Normalize().Body=="fat","Legacy round body migration");
-            Check(new CharacterAppearance{Body="regular",BodySex="female"}.Normalize().Body=="female","Legacy female body migration");
             foreach(string body in CharacterAppearance.Bodies)
                 Check(System.Text.Json.JsonSerializer.Deserialize<CharacterAppearance>(System.Text.Json.JsonSerializer.Serialize(new CharacterAppearance{Body=body}))!.Normalize().Body==body,"Five-body roundtrip: "+body);
             guard.Combat.AttackWeapon="";AnimatePeople();_selectionPanel.Hide();_inspector.Hide();RefreshUi();
@@ -107,7 +102,14 @@ public partial class Main
             }
             _clock.Paused=true;
             Check(walked,$"Real walking/state: position {guard.X:F2},{guard.Z:F2}; state {guardView.CurrentState}; path {guard.Path.Count}");
-            GD.Print("SPRITE_INTEGRATION_OK: five body types, legacy migration, no 3D rigs/feet, equip/unequip, camera-relative directions, attack/pause, action-only hands, mining grips, actual movement");
+            Check(_world.StartTestRaid(1).Ok,"Cache cleanup raid fixture");
+            AnimateCombat();SyncEquipmentVisuals(true);string enemyId=_world.Enemies[0].Id;
+            Check(_equipmentKeys.ContainsKey(enemyId),"Enemy appearance was not tracked");
+            _world.Enemies.Clear();AnimateCombat();
+            Check(!_equipmentKeys.ContainsKey(enemyId),"Removed enemy retained its appearance record");
+            _world.DeveloperResidents(false);CreatePeople();
+            Check(_equipmentKeys.Count==0,"Removed residents retained appearance records");
+            GD.Print("SPRITE_INTEGRATION_OK: five body types, no 3D rigs/feet, equip/unequip, camera-relative directions, attack/pause, action-only hands, mining grips, actual movement");
             if(!OS.GetCmdlineUserArgs().Contains("--keep-dwarf-preview"))GetTree().Quit();
         }
         catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}

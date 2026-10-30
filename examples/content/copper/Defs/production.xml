@@ -1,0 +1,16 @@
+<ProductionDefinitions>
+  <Items>
+    <Item id="copper:ingot" category="material" storySupply="true" name="铜锭" value="10" texture="nodwarf:anvil" color="cc8c55"><Place block="copper:solid_block" count="2" /><Place block="copper:compact_block" count="4" /></Item>
+    <Item id="copper:bread" name="麦香面包" category="food" value="8" weight="0.3" shelfLife="600" storySupply="true" texture="nodwarf:planks" color="d7ab67">
+      <Edible nutrition="30" mood="6" diningBonus="2" feedingMood="5" />
+    </Item>
+  </Items>
+  <Recipes>
+    <Recipe id="copper:smelt" name="熔炼铜锭" station="Furnace" output="copper:ingot" count="1" work="5">
+      <Ingredient item="copper:ore" count="2" /><Ingredient item="coal" count="1" />
+    </Recipe>
+    <Recipe id="copper:bake" name="烘焙面包" station="Stove" output="copper:bread" count="2" work="4">
+      <Ingredient item="flour" count="2" /><Ingredient item="wood" count="1" />
+    </Recipe>
+  </Recipes>
+</ProductionDefinitions>

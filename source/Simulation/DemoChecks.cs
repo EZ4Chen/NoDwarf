@@ -32,10 +32,10 @@ public static class DemoChecks
         DeveloperChecks();
         CharacterChecks();
         var clock = new SimulationClock(); clock.Advance(1);
-        Check(clock.Tick == 30, "Clock normal speed");
-        clock.Paused = true; clock.Advance(1); Check(clock.Tick == 30, "Clock pause");
-        clock.Step(); Check(clock.Tick == 31, "Clock single step");
-        clock.Paused = false; clock.SetSpeed(3); clock.Advance(1); Check(clock.Tick == 121, "Clock acceleration");
+        Check(clock.Tick == SimulationClock.BaseTicksPerSecond, "Clock normal speed");
+        clock.Paused = true; clock.Advance(1); Check(clock.Tick == SimulationClock.BaseTicksPerSecond, "Clock pause");
+        clock.Step(); Check(clock.Tick == SimulationClock.BaseTicksPerSecond+1, "Clock single step");
+        clock.Paused = false; clock.SetSpeed(3); clock.Advance(1); Check(clock.Tick == 4*SimulationClock.BaseTicksPerSecond+1, "Clock acceleration");
 
         foreach (var kind in Enum.GetValues<GroundKind>())
             Check(BlockCatalog.Get(BlockCatalog.Id(kind)).Id == new Ground(0, kind).BlockId, "Terrain type has registered stable ID");
@@ -165,8 +165,8 @@ public static class DemoChecks
             try { AppearanceStorage.Load(path, restored.Workers); throw new InvalidOperationException("Corrupt archive accepted"); }
             catch (System.Text.Json.JsonException) { }
             Check(before.SequenceEqual(restored.Workers.Select(w=>w.Appearance)), "Corrupt archive never partially applies");
-            var migrated = AppearanceStorage.Deserialize("{\"Version\":1,\"Residents\":{\"azhen\":{\"Hair\":\"missing\",\"Skin\":null}}}");
-            Check(migrated["azhen"].Hair=="crop" && migrated["azhen"].Skin=="warm", "Unknown and missing IDs fall back safely");
+            var sanitized = AppearanceStorage.Deserialize("{\"Version\":2,\"Residents\":{\"azhen\":{\"Hair\":\"missing\",\"Skin\":null}}}");
+            Check(sanitized["azhen"].Hair=="crop" && sanitized["azhen"].Skin=="warm", "Unknown and missing IDs fall back safely");
             try { AppearanceStorage.Deserialize("{\"Version\":99}"); throw new InvalidOperationException("Future version accepted"); }
             catch (InvalidDataException) { }
         }

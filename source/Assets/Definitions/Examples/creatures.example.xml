@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Example only. Not loaded automatically. -->
+<Creatures version="1" populationLimit="256" updateBudget="32">
+  <Bodies>
+    <Body id="base:quadruped">
+      <Part id="head" health="20" vital="true" />
+      <Part id="torso" health="40" vital="true" />
+      <Part id="front_left" health="15" vital="false" />
+      <Part id="front_right" health="15" vital="false" />
+      <Part id="rear_left" health="15" vital="false" />
+      <Part id="rear_right" health="15" vital="false" />
+    </Body>
+  </Bodies>
+  <Movements>
+    <!-- Conservative single-cell ground movement, using the existing navigation rules. -->
+    <Movement id="base:ground" speed="1.2" stepUp="0" dropDown="1" ladders="false" maxWater="0.1" />
+  </Movements>
+  <Species>
+    <Species id="example:creature" name="示例生物" body="base:quadruped"
+             movement="base:ground" behavior="core:wander" thinkSeconds="2" limit="32">
+      <View kind="none" scale="1" />
+    </Species>
+  </Species>
+</Creatures>

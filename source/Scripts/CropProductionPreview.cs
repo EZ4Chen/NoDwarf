@@ -13,7 +13,7 @@ public partial class Main
             {
                 string crop=new[]{"grain","potato","cotton"}[i];var c=origin+new Cell(i,0);
                 if(!_world.SetFarm(c,c+new Cell(0,2),crop))throw new InvalidOperationException("Preview plot");
-                foreach(var p in _world.Farms.Values.Where(p=>p.Crop==crop)){p.Prepared=true;p.Planted=true;p.Growth=DemoWorld.GrowTime(crop)*(p.Cell.Z-origin.Z)/2;}
+                foreach(var p in _world.Farms.Values.Where(p=>p.Crop==crop)){_world.SpawnPlant(p.Cell,crop,DemoWorld.GrowTime(crop)*(p.Cell.Z-origin.Z)/2,true);}
             }
             var mill=origin+new Cell(-1,-1);var loom=origin+new Cell(3,-1);
             _world.Buildings[mill]=new(mill,BuildKind.Mill);_world.Buildings[loom]=new(loom,BuildKind.Loom);
@@ -33,7 +33,7 @@ public partial class Main
             }
             await Snap("crop-varieties");
             _growingCrop.EmitSignal(OptionButton.SignalName.ItemSelected,(long)Array.IndexOf(GrowingCrops,"pine_sapling"));
-            if(SelectedGrowingZone?.Crop!="pine_sapling"||_world.Farms[origin+new Cell(2,0)].Crop!="cotton")throw new InvalidOperationException("Changing target must retain existing cotton");
+            if(SelectedGrowingZone?.Crop!="pine_sapling"||_world.Plants[origin+new Cell(2,0)].Crop!="cotton")throw new InvalidOperationException("Changing target must retain existing cotton");
             _selectionPanel.Hide();_world.SpawnItem("cotton",4,origin);if(!_world.QueueProcessing("cloth"))throw new InvalidOperationException("Weaving order");
             _inspector.Show();RefreshUi();_billOrderScroll.ScrollVertical=10000;await Snap("crop-processing-orders");
             if(!_billRows.Values.Any(r=>r.Name.Text.Contains("织布")))throw new InvalidOperationException("Recipe name missing from orders");

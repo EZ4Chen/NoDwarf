@@ -24,9 +24,6 @@ public static class MedicalRescueChecks
         w=CombatChecks.Fixture();w.InjureResident("guard","left_hand","missing",100);w.SpawnItem("bandage",1,new(55,60));
         Check(w.ActResident(new("medic","treat","guard")).Ok,"fresh amputation uses actual care job");Advance(w,20);
         Check(ResidentHealth.Bleeding(w.Workers[0].Person)==0&&w.Total("bandage")==0,"hemostasis consumes one physical bandage");
-        var legacy=JsonNode.Parse(w.SaveJson())!;legacy["Version"]=20;
-        foreach(var record in legacy["Workers"]!.AsArray())foreach(var injury in record!["Person"]!["Injuries"]!.AsArray())injury!.AsObject().Remove("FreshAmputation");
-        Check(ResidentHealth.Bleeding(DemoWorld.LoadJson(legacy.ToJsonString()).Workers[0].Person)==0,"legacy missing limb migration");
         w=Fixture();Check(w.RescueResident("medic","guard").Ok,"reserve rescue");
         Check(!w.RescueResident("civilian","guard").Ok,"exclusive patient reservation");
         w=DemoWorld.LoadJson(w.SaveJson());Check(w.Workers[1].Person.Activity?.Kind=="rescue_pickup","pickup archive");

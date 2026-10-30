@@ -11,7 +11,7 @@ public partial class Main
     {
         _cutaway=mode!=0;_interiorView=mode==1;_floorWalls=mode==3;
         if(mode!=2)SelectTool("select");
-        _revision=-1;_hoverCell=null;Clear(_hover);SyncWorld();RefreshUi();
+        _revision=-1;_hoverCell=null;ClearHover();SyncWorld();RefreshUi();
     }
     private bool MiningCutaway=>_cutaway&&_tool is "dig" or "digstairs";
     private bool LocalWallCutaway=>_interiorView||MiningCutaway;

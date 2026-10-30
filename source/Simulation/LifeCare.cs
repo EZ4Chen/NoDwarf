@@ -6,6 +6,7 @@ public sealed partial class DemoWorld
     {
         var helper=Workers.FirstOrDefault(w=>w.Id==helperId);var patient=Workers.FirstOrDefault(w=>w.Id==patientId);
         if(helper is null||patient is null||helper.Person.Dead||patient.Person.Dead||helper.Person.Incapacitated||helper.Person.Manipulation<.05||MilitaryControlled(helper))return new(false,"需要能够照料的居民");
+        if(!helper.Person.Can("care")&&(helper!=patient||supply!="water_bucket"))return new(false,"该物种不具备照料能力");
         if(helper.WaterEvacuating||FloodThreat(helper))return new(false,"照料者需要先撤离水患");
         if(supply is not ("water_bucket" or "splint" or "prosthesis"))return new(false,"未知用品");
         if(supply=="water_bucket"&&patient.Person.Thirst>=95)return new(false,"暂不口渴");
@@ -23,15 +24,15 @@ public sealed partial class DemoWorld
             return RouteLifeUse(helper)?new(true,"正在送用品"):new(false,"水源或照料对象不可达，用品仍保留");
         }
         var stacks=Items.Where(s=>s.Owner==""&&s.Item==item&&s.Count>Reserved(s.Id)).ToArray();
-        if(stacks.Length==0)return new(false,"缺少"+ItemCatalog.Get(item).Name);
+        if(stacks.Length==0)return new(false,"缺少"+Content.Item(item).Name);
         var route=Navigation.FindNearest(helper.Tile,stacks.SelectMany(s=>ItemPositions(s.Cell)).Where(c=>Walkable(c)&&Navigation.CanReach(c,helper.Tile)),out var dest);
         if(route is null)return new(false,"用品不可达");
-        RefreshWeight(helper);if(helper.Person.CarriedWeight+ResidentGear.Weight(item)>helper.Person.Capacity)return new(false,"负重不足，请先卸货");
+        RefreshWeight(helper);if(helper.Person.CarriedWeight+ResidentGear.Weight(item,Content)>helper.Person.Capacity)return new(false,"负重不足，请先卸货");
         var stack=stacks.First(s=>ItemPositions(s.Cell).Contains(dest));
         if(helper.Job is not null)Release(helper.Job);CancelResidentActivity(helper);
         helper.Person.Activity=new(){Kind="life_supply",Target=patientId,Supply=item,BodyPart=part,ItemId=stack.Id,Destination=dest,Origin=origin};
         foreach(var c in route)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=Navigation.Version;
-        return new(true,"取用"+ItemCatalog.Get(item).Name);
+        return new(true,"取用"+Content.Item(item).Name);
     }
     private bool RouteLifeUse(DemoWorker helper)
     {
@@ -62,7 +63,7 @@ public sealed partial class DemoWorld
         a.Progress+=dt;if(a.Progress<(a.Kind=="life_use"&&a.Supply!="water_bucket"?8:2))return true;
         if(a.Kind=="life_supply")
         {
-            if(!ItemPositions(stack.Cell).Contains(helper.Tile)||helper.Person.CarriedWeight+ResidentGear.Weight(stack.Item)>helper.Person.Capacity){CancelResidentActivity(helper);return true;}
+            if(!ItemPositions(stack.Cell).Contains(helper.Tile)||helper.Person.CarriedWeight+ResidentGear.Weight(stack.Item,Content)>helper.Person.Capacity){CancelResidentActivity(helper);return true;}
             stack.Count--;if(stack.Count==0)Items.Remove(stack);
             var carried=new ItemStack{Id=++_nextItem,Item=stack.Item,Count=1,Owner=helper.Id,Cell=helper.Tile,Properties=stack.Properties};Items.Add(carried);a.ItemId=carried.Id;RefreshWeight(helper);RouteLifeUse(helper);return true;
         }

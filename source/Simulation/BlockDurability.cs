@@ -6,8 +6,8 @@ public sealed partial class DemoWorld
     public double RemainingDurability(Cell c)
     {
         string id=BlockAt(c);
-        if(id=="nodwarf:air"&&Jobs.FirstOrDefault(j=>j.Cell==c&&j.Build is not null) is {} plan)return plan.BuildDurability;
-        double max=BlockCatalog.Get(id).Durability;
+        if(id=="nodwarf:air"&&Jobs.FirstOrDefault(j=>j.Cell==c&&j.BuildingWork) is {} plan)return plan.BuildDurability;
+        double max=Content.Block(id).Durability;
         return Math.Max(0,max-(_blockDamage.TryGetValue(c,out var d)&&d.Block==id?d.Damage:0));
     }
     // Shared by mining and future destructive actions. Creative edits bypass damage.
@@ -15,20 +15,20 @@ public sealed partial class DemoWorld
     {
         if(!Inside(c)||!double.IsFinite(amount)||amount<=0)return false;
         string id=BlockAt(c);
-        if(id=="nodwarf:air"&&Jobs.FirstOrDefault(j=>j.Cell==c&&j.Build is not null) is {} plan)
+        if(id=="nodwarf:air"&&Jobs.FirstOrDefault(j=>j.Cell==c&&j.BuildingWork) is {} plan)
         {
             if(plan.BuildDurability<=0)return false; // An unstarted blueprint has no physical structure yet.
             if(amount>=plan.BuildDurability){CancelJob(plan);return true;}
-            plan.Progress=Math.Max(0,plan.Progress-amount/BlockCatalog.Get(plan.Build!.Value).Durability*DemoJob.BuildWorkRequired);
+            plan.Progress=Math.Max(0,plan.Progress-amount/BuildBlock(plan).Durability*DemoJob.BuildWorkRequired);
             return false;
         }
         double remaining=RemainingDurability(c);
         if(remaining<=0||double.IsPositiveInfinity(remaining))return false;
         if(Buildings.ContainsKey(c)&&Workers.Any(w=>w.Tile==c+new Cell(0,0,1)))return false;
-        if(amount<remaining){_blockDamage[c]=new(c,id,BlockCatalog.Get(id).Durability-remaining+amount);return false;}
+        if(amount<remaining){_blockDamage[c]=new(c,id,Content.Block(id).Durability-remaining+amount);return false;}
         _supportSafety.Clear();if(RemovalEndangersResident(c))return false;
         _blockDamage.Remove(c);
-        if(Buildings.Remove(c,out var building)){Refund(building.Kind,c);ValidateWorkshop();Revision++;}
+        if(Buildings.Remove(c,out var building)){Refund(building,c);ValidateWorkshop();Revision++;}
         else if(Trees.ContainsKey(c))FellTree(c);
         else MineWithDrop(c);
         return true;

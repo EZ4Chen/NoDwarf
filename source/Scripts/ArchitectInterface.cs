@@ -71,7 +71,7 @@ public partial class Main
         _structureTab=_categoryButtons["结构"];_stairsTab=_categoryButtons["楼梯"];
         Button Tool(Node parent,string id,string name,string icon,string help)
         {
-            var button=IconButton(parent,icon,name,()=>{SelectTool(id);ShowArchitectDetail(name,icon,help);buttonFocusRelease();if(_architectAutoClose.ButtonPressed)_buildMenu.Hide();},true);_toolButtons[id]=button;
+            var button=IconButton(parent,icon,name,()=>{SelectTool(id);ShowArchitectDetail(name,icon,help);buttonFocusRelease();if(_architectAutoClose.ButtonPressed)_buildMenu.Hide();if(id=="placeblock")ShowBlockPicker();},true);_toolButtons[id]=button;
             void buttonFocusRelease()=>GetViewport().GuiGetFocusOwner()?.ReleaseFocus();
             button.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;button.CustomMinimumSize=new(80,80);button.AddThemeConstantOverride("icon_max_width",48);
             button.AutowrapMode=TextServer.AutowrapMode.WordSmart;
@@ -91,15 +91,17 @@ public partial class Main
         Tool(zones,"stockpile","储存区","stockpile","左键拖框或点击同高两角划定；点击储存区设置物品筛选与优先级。");
         Tool(zones,"growingzone","种植区","growingzone","左键拖框或点击同高两角划定，最多 16×16。点击区域选择作物、树木与播种设置。");
         Tool(zones,"unstockpile","移除储存区","unstockpile","拖框或点击两角移除储存范围；物品留在地上。");
-        Tool(zones,"unfarm","移除种植区","unfarm","拖框或点击两角选择范围，确认后移除。未收获作物会损失，树木保留。");
+        Tool(zones,"unfarm","移除种植区","unfarm","拖框或点击两角选择范围，确认后移除。植物保留并继续生长，停止自动播种与收获。");
         var rows=new Dictionary<string,GridContainer>();
         foreach(var name in new[]{"结构","家具","楼梯","生产"}){var row=new GridContainer{Columns=3,SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};_buildPages[name].AddChild(row);rows[name]=row;}
-        foreach(var kind in new[]{BuildKind.Table,BuildKind.Chair,BuildKind.GameTable,BuildKind.Ladder,BuildKind.Wall,BuildKind.Door,BuildKind.Floodgate,BuildKind.Log,BuildKind.Planks,BuildKind.Cobblestone,BuildKind.StoneBricks,BuildKind.LogStairs,BuildKind.PlankStairs,BuildKind.CobbleStairs,BuildKind.BrickStairs,BuildKind.Furnace,BuildKind.Anvil,BuildKind.Stove,BuildKind.Bed,BuildKind.Campfire,BuildKind.Mill,BuildKind.Loom,BuildKind.Workbench})
+        foreach(var definition in _world.Content.Buildings.Values)
         {
-            string id=kind.ToString(),category=(BlockCatalog.IsStairs(kind)||kind==BuildKind.Ladder)?"楼梯":kind is BuildKind.Table or BuildKind.Chair or BuildKind.GameTable or BuildKind.Bed or BuildKind.Campfire?"家具":kind is BuildKind.Furnace or BuildKind.Anvil or BuildKind.Stove or BuildKind.Mill or BuildKind.Loom or BuildKind.Workbench?"生产":"结构";
-            Tool(rows[category],id,DemoWorld.NameOf(kind),id,DemoWorld.NameOf(kind)+" · "+DemoWorld.CostOf(kind)+"\n点击规划，居民搬料施工。");
+            var kind=definition.Handler;string id=definition.Id==BlockCatalog.Id(kind)?kind.ToString():definition.Id;
+            string category=(BlockCatalog.IsStairs(kind)||kind==BuildKind.Ladder)?"楼梯":kind is BuildKind.Table or BuildKind.Chair or BuildKind.GameTable or BuildKind.Bed or BuildKind.Campfire?"家具":kind is BuildKind.Furnace or BuildKind.Anvil or BuildKind.Stove or BuildKind.Mill or BuildKind.Loom or BuildKind.Workbench?"生产":"结构";
+            Tool(rows[category],id,definition.Name,id,definition.Name+" · "+_world.BuildCostText(definition)+"\n"+(LineBuildTool(id)?"单击或按住左键拖成一行，松开规划；右键或 Esc 取消。":"点击规划，居民搬料施工。"));
         }
         IconButton(_buildPages["楼梯"],"rotate","旋转 [R]",RotateStairs).TooltipText="旋转楼梯或梯子朝向";
+        _placeBlockMenuButton=Tool(rows["结构"],"placeblock","放置方块","Cobblestone","选择可放置的方块；材料和 Mod 定义自动列出。");
         var modes=new HBoxContainer();_buildPages["结构"].AddChild(modes);
         _placementButtons[0]=IconButton(modes,"wall","当前层",()=>SetPlacement(0));
         _placementButtons[-1]=IconButton(modes,"floor","楼板",()=>SetPlacement(-1));

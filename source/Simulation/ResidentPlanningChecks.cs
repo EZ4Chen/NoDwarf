@@ -5,7 +5,7 @@ namespace NoDwarf.Simulation;
 public static class ResidentPlanningChecks
 {
     private static void Check(bool yes,string message){if(!yes)throw new InvalidOperationException(message);}
-    private static void Advance(DemoWorld w,double seconds){for(int i=0;i<(int)(seconds*30);i++)w.Update(1d/30);}
+    private static void Advance(DemoWorld w,double seconds){for(int i=0;i<(int)(seconds*SimulationClock.BaseTicksPerSecond);i++)w.Update(SimulationClock.TickSeconds);}
     private static DemoWorld Fresh()
     {
         var w=new DemoWorld(flat:true);w.Workers.RemoveRange(1,w.Workers.Count-1);w.Stockpiles.Clear();w.Items.RemoveAll(i=>i.Owner!=w.Workers[0].Id);return w;
@@ -15,7 +15,7 @@ public static class ResidentPlanningChecks
     public static void Run()
     {
         Priorities();Schedules();ResearchAndCare();ArchiveAndAi();
-        Console.WriteLine("RESIDENT_PLANNING_OK: work ranks/disabled types, 24h transitions, emergency needs, cargo conservation, automatic research/care, save migration and AI policies");
+        Console.WriteLine("RESIDENT_PLANNING_OK: work ranks/disabled types, 24h transitions, emergency needs, cargo conservation, automatic research/care, save roundtrip and AI policies");
     }
     private static void Priorities()
     {
@@ -74,8 +74,6 @@ public static class ResidentPlanningChecks
         Check(a.Person.Schedule[8]=="work","Caller cannot mutate stored schedule through array alias");
         Priority(w,"research",2);var loaded=DemoWorld.LoadJson(w.SaveJson());
         Check(loaded.Workers[0].Person.Schedule.SequenceEqual(a.Person.Schedule)&&loaded.Workers[0].Person.WorkPriorities["research"]==2,"Policies survive save and load");
-        var old=JsonNode.Parse(w.SaveJson())!;var person=old["Workers"]![0]!["Person"]!.AsObject();person.Remove("Schedule");person.Remove("WorkPriorities");
-        var legacy=DemoWorld.LoadJson(old.ToJsonString());Check(legacy.Workers[0].Person.Schedule.All(m=>m=="anything")&&legacy.Workers[0].Person.WorkPriorities["research"]==0,"Older saves preserve free schedule and manual research");
         foreach(bool schedule in new[]{true,false})
         {
             var data=JsonNode.Parse(w.SaveJson())!;if(schedule)data["Workers"]![0]!["Person"]!["Schedule"]![0]="invalid";else data["Workers"]![0]!["Person"]!["WorkPriorities"]!["hauling"]=9;

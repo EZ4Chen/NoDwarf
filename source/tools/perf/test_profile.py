@@ -7,6 +7,17 @@ import profile as workflow
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_shared_core_change_invalidates_build_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp); entry = folder/'NoDwarf.dll'; core = folder/'NoDwarf.Core.dll'
+            entry.write_bytes(b'unchanged renderer'); core.write_bytes(b'old simulation')
+            before, files = workflow.build_fingerprint(entry)
+            core.write_bytes(b'new simulation')
+            after, changed = workflow.build_fingerprint(entry)
+            self.assertEqual(files['NoDwarf.dll'], changed['NoDwarf.dll'])
+            self.assertNotEqual(before, after)
+            self.assertEqual(after, workflow.build_fingerprint(entry)[0])
+
     def test_task_latency_does_not_turn_missing_completion_into_zero(self):
         def event(phase, ts, task=1):
             return dict(name='terrain', ph='i', ts=ts, tid=7, args=dict(phase=phase, task=task))

@@ -1,50 +1,50 @@
 <?xml version='1.0' encoding='utf-8'?>
 <ProductionDefinitions>
   <Items>
-    <Item id="splint" name="夹板" texture="nodwarf:planks" color="b59b72" />
-    <Item id="prosthesis" name="木制义肢" texture="nodwarf:log" color="ab8050" />
-    <Item id="bucket" name="空水桶" texture="nodwarf:log" color="b69b72" />
-    <Item id="water_bucket" name="饮用水桶" texture="nodwarf:water" color="60a9c5" />
-    <Item id="rot" name="腐败物" texture="nodwarf:soil" color="66634c" />
-    <Item id="cobblestone" name="圆石" texture="nodwarf:cobblestone" color="879087" />
-    <Item id="deep_rubble" name="深板岩碎石" texture="nodwarf:deepslate" color="515563" />
-    <Item id="soil" name="土壤" texture="nodwarf:soil" color="927158" />
-    <Item id="sand" name="沙子" texture="nodwarf:sand" color="d7c18a" />
-    <Item id="raw_iron" name="粗铁" texture="nodwarf:iron_ore" color="bb9476" />
-    <Item id="coal" name="煤" texture="nodwarf:coal_ore" color="353942" />
-    <Item id="acacia_sapling" name="金合欢树苗" texture="nodwarf:tree_acacia_log" color="8b9a53" />
-    <Item id="jungle_sapling" name="丛林树苗" texture="nodwarf:tree_jungle_log" color="508e3a" />
-    <Item id="sapling" name="橡树苗" texture="nodwarf:log" color="75a75b" />
-    <Item id="wood" name="木料" texture="nodwarf:log" color="ab8050" />
-    <Item id="iron" name="铁锭" texture="nodwarf:anvil" color="b5cbd0" />
-    <Item id="sword" name="铁剑" texture="nodwarf:anvil" color="e7d49d" />
-    <Item id="shirt" name="布衣" texture="nodwarf:planks" color="a9b69b" />
-    <Item id="trousers" name="布裤" texture="nodwarf:planks" color="787b79" />
-    <Item id="boots" name="皮靴" texture="nodwarf:log" color="876b50" />
-    <Item id="gloves" name="手套" texture="nodwarf:planks" color="c3b393" />
-    <Item id="cap" name="皮帽" texture="nodwarf:log" color="947b53" />
-    <Item id="pickaxe" name="矿镐" texture="nodwarf:anvil" color="aab8c0" />
-    <Item id="hammer" name="锻锤" texture="nodwarf:anvil" color="8e969c" />
-    <Item id="shield" name="木盾" texture="nodwarf:log" color="b49a75" />
-    <Item id="axe" name="铁斧" texture="nodwarf:anvil" color="aab8c0" />
-    <Item id="battleaxe" name="双刃战斧" texture="nodwarf:anvil" color="aab8c0" />
-    <Item id="shovel" name="铁铲" texture="nodwarf:anvil" color="aab8c0" />
-    <Item id="hoe" name="铁锄" texture="nodwarf:anvil" color="aab8c0" />
-    <Item id="potato_seed" name="土豆种薯" texture="nodwarf:soil" color="b48e60" />
-    <Item id="cotton_seed" name="棉花种子" texture="nodwarf:soil" color="9b8f6d" />
-    <Item id="birch_sapling" name="桦树苗" texture="nodwarf:log" color="c3c99f" />
-    <Item id="pine_sapling" name="松树苗" texture="nodwarf:log" color="4d7756" />
-    <Item id="wheat" name="小麦" texture="nodwarf:planks" color="d9bd69" />
-    <Item id="flour" name="面粉" texture="nodwarf:planks" color="eee4be" />
-    <Item id="potato" name="土豆" texture="nodwarf:soil" color="b58b59" />
-    <Item id="mushroom" name="蘑菇" texture="nodwarf:soil" color="b28cc4" />
-    <Item id="cotton" name="棉絮" texture="nodwarf:planks" color="eee9dc" />
-    <Item id="cloth" name="布" texture="nodwarf:planks" color="d5c9b5" />
-    <Item id="grain_seed" name="小麦种子" texture="nodwarf:planks" color="cbb675" />
-    <Item id="mushroom_spawn" name="蘑菇菌种" texture="nodwarf:soil" color="b995c8" />
-    <Item id="raw_food" name="食材" texture="nodwarf:planks" color="95ad60" />
-    <Item id="meal" name="口粮" texture="nodwarf:planks" color="dfc48b" />
-    <Item id="bandage" name="绷带" texture="nodwarf:planks" color="e9e2cd" />
+    <Item id="splint" value="12" name="夹板" texture="nodwarf:planks" color="b59b72" category="medical" />
+    <Item id="prosthesis" value="40" name="木制义肢" texture="nodwarf:log" color="ab8050" category="medical" />
+    <Item id="bucket" value="8" name="空水桶" texture="nodwarf:log" color="b69b72" category="container" />
+    <Item id="water_bucket" value="9" name="饮用水桶" texture="nodwarf:water" color="60a9c5" category="drink" />
+    <Item id="rot" value="0" name="腐败物" texture="nodwarf:soil" color="66634c" category="waste" />
+    <Item id="cobblestone" value="1" name="圆石" texture="nodwarf:cobblestone" color="879087" category="material"><Place block="nodwarf:gravel" count="1" support="below" /></Item>
+    <Item id="deep_rubble" value="1" name="深板岩碎石" texture="nodwarf:deepslate" color="515563" category="material"><Place block="nodwarf:deepslate" count="1" support="below" /></Item>
+    <Item id="soil" value=".2" name="土壤" texture="nodwarf:soil" color="927158" category="material"><Place block="nodwarf:soil" count="1" support="below" /></Item>
+    <Item id="sand" value=".2" name="沙子" texture="nodwarf:sand" color="d7c18a" category="material"><Place block="nodwarf:sand" count="1" support="below" /></Item>
+    <Item id="raw_iron" value="5" name="粗铁" texture="nodwarf:iron_ore" color="bb9476" category="material" />
+    <Item id="coal" value="3" name="煤" texture="nodwarf:coal_ore" color="353942" category="fuel" />
+    <Item id="acacia_sapling" value="3" name="金合欢树苗" texture="nodwarf:tree_acacia_log" color="8b9a53" category="seed" />
+    <Item id="jungle_sapling" value="3" name="丛林树苗" texture="nodwarf:tree_jungle_log" color="508e3a" category="seed" />
+    <Item id="sapling" value="3" name="橡树苗" texture="nodwarf:log" color="75a75b" category="seed" />
+    <Item id="wood" value="2" name="木料" texture="nodwarf:log" color="ab8050" category="material" storySupply="true" />
+    <Item id="iron" value="12" name="铁锭" texture="nodwarf:anvil" color="b5cbd0" category="material" />
+    <Item id="sword" value="65" name="铁剑" texture="nodwarf:anvil" color="e7d49d" category="weapon" />
+    <Item id="shirt" value="18" name="布衣" texture="nodwarf:planks" color="a9b69b" category="apparel" />
+    <Item id="trousers" value="18" name="布裤" texture="nodwarf:planks" color="787b79" category="apparel" />
+    <Item id="boots" value="25" name="皮靴" texture="nodwarf:log" color="876b50" category="apparel" />
+    <Item id="gloves" value="12" name="手套" texture="nodwarf:planks" color="c3b393" category="apparel" />
+    <Item id="cap" value="12" name="皮帽" texture="nodwarf:log" color="947b53" category="apparel" />
+    <Item id="pickaxe" value="45" name="矿镐" texture="nodwarf:anvil" color="aab8c0" category="tool" />
+    <Item id="hammer" value="35" name="锻锤" texture="nodwarf:anvil" color="8e969c" category="tool" />
+    <Item id="shield" value="30" name="木盾" texture="nodwarf:log" color="b49a75" category="armor" />
+    <Item id="axe" value="45" name="铁斧" texture="nodwarf:anvil" color="aab8c0" category="tool" />
+    <Item id="battleaxe" value="85" name="双刃战斧" texture="nodwarf:anvil" color="aab8c0" category="weapon" />
+    <Item id="shovel" value="30" name="铁铲" texture="nodwarf:anvil" color="aab8c0" category="tool" />
+    <Item id="hoe" value="30" name="铁锄" texture="nodwarf:anvil" color="aab8c0" category="tool" />
+    <Item id="potato_seed" value="1" name="土豆种薯" texture="nodwarf:soil" color="b48e60" category="seed" />
+    <Item id="cotton_seed" value="1" name="棉花种子" texture="nodwarf:soil" color="9b8f6d" category="seed" />
+    <Item id="birch_sapling" value="3" name="桦树苗" texture="nodwarf:log" color="c3c99f" category="seed" />
+    <Item id="pine_sapling" value="3" name="松树苗" texture="nodwarf:log" color="4d7756" category="seed" />
+    <Item id="wheat" value="2" name="小麦" texture="nodwarf:planks" color="d9bd69" category="food_ingredient" shelfLife="18000" />
+    <Item id="flour" value="3" name="面粉" texture="nodwarf:planks" color="eee4be" category="food_ingredient" shelfLife="18000" />
+    <Item id="potato" value="2" name="土豆" texture="nodwarf:soil" color="b58b59" category="food_ingredient" shelfLife="6000" />
+    <Item id="mushroom" value="2" name="蘑菇" texture="nodwarf:soil" color="b28cc4" category="food_ingredient" shelfLife="6000" />
+    <Item id="cotton" value="2" name="棉絮" texture="nodwarf:planks" color="eee9dc" category="material" />
+    <Item id="cloth" value="7" name="布" texture="nodwarf:planks" color="d5c9b5" category="material" />
+    <Item id="grain_seed" value="1" name="小麦种子" texture="nodwarf:planks" color="cbb675" category="seed" storySupply="true" />
+    <Item id="mushroom_spawn" value="1" name="蘑菇菌种" texture="nodwarf:soil" color="b995c8" category="seed" />
+    <Item id="raw_food" value="2" name="食材" texture="nodwarf:planks" color="95ad60" category="food_ingredient" shelfLife="6000" />
+    <Item id="meal" value="6" name="口粮" texture="nodwarf:planks" color="dfc48b" category="food" storySupply="true" weight="0.25" shelfLife="1800"><Edible nutrition="45" mood="4" diningBonus="2" feedingMood="4" /></Item>
+    <Item id="bandage" value="9" name="绷带" texture="nodwarf:planks" color="e9e2cd" category="medical" storySupply="true" weight="0.25" />
   </Items>
   <Recipes>
     <Recipe id="splint" name="夹板：1 木料 + 1 布 → 2 夹板" station="Workbench" output="splint" count="2" work="5">

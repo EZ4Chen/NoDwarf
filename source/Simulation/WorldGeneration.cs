@@ -3,9 +3,8 @@ namespace NoDwarf.Simulation;
 // A small, deterministic atlas. Only the selected tile becomes a simulated colony map.
 public sealed record WorldGenerationSettings
 {
-    public const int AtlasWidth=72,AtlasHeight=44;
-    // Revision 1 remains the default when loading older JSON without this field.
-    public int Revision {get;init;}=1;
+    public const int CurrentRevision=2;
+    [System.Text.Json.Serialization.JsonRequired] public int Revision {get;init;}=CurrentRevision;
     public int WorldSize {get;init;}=129;
     public int LandPercent {get;init;}=50;
     public int FeatureScale {get;init;}
@@ -18,10 +17,10 @@ public sealed record WorldGenerationSettings
     public int Aquifers {get;init;}=1;
     public int CavernLayers {get;init;}=1;
     public int CavernSize {get;init;}=1;
-    [System.Text.Json.Serialization.JsonIgnore] public int Width=>Revision==1?AtlasWidth:WorldSize;
-    [System.Text.Json.Serialization.JsonIgnore] public int Height=>Revision==1?AtlasHeight:WorldSize;
+    [System.Text.Json.Serialization.JsonIgnore] public int Width=>WorldSize;
+    [System.Text.Json.Serialization.JsonIgnore] public int Height=>WorldSize;
     public int Seed {get;init;}=74219;
-    public int EcologyVersion {get;init;}=2;
+    [System.Text.Json.Serialization.JsonRequired] public int EcologyVersion {get;init;}=TerrainMap.CurrentEcologyVersion;
     public int Temperature {get;init;}
     public int Moisture {get;init;}
     public int Elevation {get;init;}
@@ -29,34 +28,20 @@ public sealed record WorldGenerationSettings
     public int SiteY {get;init;}=22;
     public void Validate(bool requireLand=true)
     {
-        if(Revision is not (1 or 2)||(Revision==2&&EcologyVersion!=2)||WorldSize is not (65 or 129 or 257)||LandPercent is <25 or >75||
+        if(Revision!=CurrentRevision||WorldSize is not (65 or 129 or 257)||LandPercent is <25 or >75||
            FeatureScale is <-2 or >2||Ruggedness is <-2 or >2||Drainage is <-2 or >2||Erosion is <0 or >3||Rivers is <0 or >2||
            Minerals is <0 or >2||SoilDepth is <1 or >8||Aquifers is <0 or >2||CavernLayers is <0 or >3||CavernSize is <0 or >2||
-           EcologyVersion is not (1 or 2)||Temperature is <-2 or >2||Moisture is <-2 or >2||Elevation is <-2 or >2||SiteX<0||SiteX>=Width||SiteY<0||SiteY>=Height)
+           EcologyVersion!=TerrainMap.CurrentEcologyVersion||Temperature is <-2 or >2||Moisture is <-2 or >2||Elevation is <-2 or >2||SiteX<0||SiteX>=Width||SiteY<0||SiteY>=Height)
             throw new InvalidDataException("世界参数超出范围。");
         if(requireLand&&!Site.Land)throw new InvalidDataException("请选择陆地上的落脚点。");
     }
     public AtlasTile Site=>Tile(SiteX,SiteY);
     public int LocalSeed=>unchecked(Seed*397^SiteX*73856093^SiteY*19349663);
-    public AtlasTile Tile(int x,int y)
-    {
-        if(Revision==2)return WorldFields.For(this).Tiles[x,y];
-        double continental=Noise(x/15d+4,y/15d+11)*.72+Noise(x/6d+21,y/6d+7)*.28;
-        bool land=continental+Elevation*.045>.39;
-        int height=Math.Clamp(64+(int)Math.Round((continental-.39)*80)+Elevation*5,60,108);
-        double wet=Math.Clamp(Noise(x/9d+61,y/9d+43)+Moisture*.17,.03,.97);
-        double latitude=Math.Abs((y+.5)/AtlasHeight*2-1);
-        double temperature=Math.Round(29-latitude*42+Temperature*7-(height-64)*.22+(Noise(x/12d+8,y/12d+99)-.5)*7,1);
-        string region=height>=96?"alpine":temperature<6?"boreal":wet<.32||temperature>22?"savanna":"temperate";
-        if(EcologyVersion>=2)region=height>=96?"alpine":temperature<-2?"tundra":temperature<6?"boreal":
-            temperature>20&&wet<.22?"desert":wet<.3?"arid":temperature>22?(wet>.65?"rainforest":"savanna"):
-            wet>.78?"wetland":wet<.48?"grassland":"temperate";
-        return new(land,region,temperature,wet,height);
-    }
+    public AtlasTile Tile(int x,int y)=>WorldFields.For(this).Tiles[x,y];
     public RegionProfile Profile()
     {
-        Validate();var site=Site;var basis=RegionProfile.Get(site.Region,EcologyVersion);
-        return basis with {Mean=site.Temperature,Humidity=site.Wetness,CampHeight=site.Height,TreeChance=basis.TreeChance==0?0:Math.Clamp(basis.TreeChance*(.25+site.Wetness*1.5),EcologyVersion==1?.001:0,.4)};
+        Validate();var site=Site;var basis=RegionProfile.Get(site.Region);
+        return basis with {Mean=site.Temperature,Humidity=site.Wetness,CampHeight=site.Height,TreeChance=basis.TreeChance==0?0:Math.Clamp(basis.TreeChance*(.25+site.Wetness*1.5),0,.4)};
     }
     internal double Noise(double x,double y)
     {

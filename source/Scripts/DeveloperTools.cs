@@ -60,7 +60,7 @@ public partial class Main
         _commandInput.TextSubmitted+=text=>{RunCommand(text);_commandInput.Clear();};
         RefreshDeveloperUi();
     }
-    private void ToggleConsole(){_consolePanel.Visible=!_consolePanel.Visible;_consoleShield.Visible=_consolePanel.Visible;_dragging=false;_orbitHeld=false;_digStart=null;_digEnd=null;_hoverCell=null;Clear(_hover);RefreshDeveloperUi();if(_consolePanel.Visible)_commandInput.GrabFocus();else _commandInput.ReleaseFocus();}
+    private void ToggleConsole(){_consolePanel.Visible=!_consolePanel.Visible;_consoleShield.Visible=_consolePanel.Visible;_dragging=false;_orbitHeld=false;_digStart=null;_digEnd=null;_hoverCell=null;ClearHover();RefreshDeveloperUi();if(_consolePanel.Visible)_commandInput.GrabFocus();else _commandInput.ReleaseFocus();}
     private bool DeveloperInput(InputEvent input)
     {
         if(input is InputEventKey{Pressed:true} key)
@@ -80,7 +80,7 @@ public partial class Main
     {
         if(_tool is "dig" or "digstairs")_world.DeveloperDig(c,_tool=="digstairs",_facing);
         else if(_tool=="erase"){if(!_world.DeveloperErase(c))_world.Log("没有可移除的建筑或规划。");}
-        else if(Enum.TryParse<BuildKind>(_tool,out var kind))_world.DeveloperPlace(c,kind,_facing);
+        else if(TryBuildTool(_tool,out var kind)){if(_world.DeveloperPlace(c,kind,_facing))_world.Buildings[c]=new(c,kind,_facing){DefinitionId=ToolDefinition(_tool)!.Id};}
         else if(_tool=="blueprint")_world.Log("蓝图仍按正常施工规划；直接编辑请使用单块工具。");
         else return false;
         return true;
@@ -163,7 +163,7 @@ public partial class Main
                 if(a.Length==1){RecordWorldEvent($"当前天气：{_world.Weather.Name} · 纬度 {_world.Latitude:F1}°\nweather auto / clear / cloudy / rain / fog");break;}
                 Dev();Count(2);_world.SetWeather(a[1]);break;
             case "region":
-                if(a.Length==1){RecordWorldEvent("当前地区："+(_world.Terrain.Region?.Name??"旧版地形")+"\n"+string.Join(" | ",RegionProfile.All.Select(p=>p.Id+"："+p.Name))+"\nregion 类型 [种子]：确认后重新生成，当前营地会清空。");break;}
+                if(a.Length==1){RecordWorldEvent("当前地区："+(_world.Terrain.Region?.Name??"基础地形")+"\n"+string.Join(" | ",RegionProfile.All.Select(p=>p.Id+"："+p.Name))+"\nregion 类型 [种子]：确认后重新生成，当前营地会清空。");break;}
                 Dev();if(a.Length is not (2 or 3))throw new ArgumentException("region 类型 [种子]");
                 _nextRegion=RegionProfile.Get(a[1]).Id;if(a.Length==3){_seed.Value=Number(2,0,999999);_seed.GetLineEdit().Text=((int)_seed.Value).ToString();}
                 Reset();break;

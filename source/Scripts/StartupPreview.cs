@@ -74,7 +74,7 @@ public partial class Startup
             await ReadWorld(bad);if(_busy||!_message.Text.Contains("无法读取"))throw new InvalidOperationException("Corrupt save must keep the menu usable");
             File.Delete(bad);
             var sample=new DemoWorld(chosen.LocalSeed,region:chosen.Site.Region,generation:chosen);
-            var state=new Main.SessionState{World=sample.SaveJson(),Paused=true,Speed=3,Zoom=30,FocusY=sample.Camp.Level};
+            var state=new Main.SessionState{WorldState=sample.CaptureSnapshot(),Paused=true,Speed=3,Zoom=30,FocusY=sample.Camp.Level};
             string fixture=Path.Combine(SaveDirectory,"fixture.json");SaveFiles.Write(fixture,JsonSerializer.Serialize(state,DemoWorld.SaveOptions));
             var prepared=Main.PrepareSession(fixture);if(prepared.Clock.Speed!=3||prepared.World.Terrain.Generation!=chosen)throw new InvalidOperationException("Title save reader loses session/world settings");
             SaveFiles.Write(fixture,JsonSerializer.Serialize(state,DemoWorld.SaveOptions));
@@ -91,14 +91,12 @@ public partial class Startup
 }
 public partial class Main
 {
-    private void CheckStartupExitAndSaveIsolation()
+    private async Task CheckStartupExitAndSaveIsolation()
     {
         string active=SavePath;var currentWorld=_world;
         if(File.Exists(active)||ReadSavePath!=active)throw new InvalidOperationException("New colony must resolve its own unsaved path");
         RequestLoadSession();if(_world!=currentWorld||_loadDialog?.Visible==true)throw new InvalidOperationException("Unsaved colony F9 must not load another colony");
-        string legacy=Path.Combine(Path.GetDirectoryName(active)!,"isolated-legacy.json");File.WriteAllText(legacy,"legacy-fixture");
-        if(ResolveReadSavePath(active,legacy,true)!=active||ResolveReadSavePath(active,legacy,false)!=legacy)throw new InvalidOperationException("Legacy migration must only apply outside an active colony slot");
-        File.Delete(legacy);
+        if(ReadSavePath!=active)throw new InvalidOperationException("Read must use the active colony slot");
         _clock.Paused=false;GetWindow().EmitSignal(Window.SignalName.CloseRequested);
         if(GetTree().AutoAcceptQuit||_titleDialog?.Visible!=true||!_clock.Paused||_titleDialog.Title!="退出游戏")throw new InvalidOperationException("Window close bypassed save confirmation");
         var dialog=_titleDialog;GetWindow().EmitSignal(Window.SignalName.CloseRequested);
@@ -110,6 +108,7 @@ public partial class Main
         string blocked=Path.Combine(Path.GetDirectoryName(active)!,"save-target-is-directory");Directory.CreateDirectory(blocked);
         _activeSavePath=blocked;_clock.Paused=false;
         GetWindow().EmitSignal(Window.SignalName.CloseRequested);_titleDialog!.Hide();_titleDialog.EmitSignal(ConfirmationDialog.SignalName.Confirmed);
+        if(_saveTask is {} failedSave)await failedSave;
         if(_clock.Paused||GetTree().CurrentScene!=this||_world!=currentWorld||File.Exists(active))throw new InvalidOperationException("Save failure must keep unsaved colony running");
         _activeSavePath=active;Directory.Delete(blocked);_clock.Paused=true;
         GD.Print("STARTUP_EXIT_OK: native close signal, repeated requests, cancel pause restoration, failed save retention and active save isolation");
@@ -123,7 +122,7 @@ public partial class Main
             GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath("res://.local/startup-arrival.png"));
             if(Startup.PreviewSave is null)
             {
-                CheckStartupExitAndSaveIsolation();
+                await CheckStartupExitAndSaveIsolation();
                 _world.Workers[0].Person.Earn("mining",123);Startup.PreviewXp=_world.Workers[0].Person.GrowthXp;
                 Startup.PreviewSave=SavePath;RequestTitleScreen();_titleDialog!.EmitSignal(ConfirmationDialog.SignalName.Confirmed);
             }
@@ -133,6 +132,7 @@ public partial class Main
                 _world.Workers[0].Person.Earn("mining",17);long finalXp=_world.Workers[0].Person.GrowthXp;
                 GetWindow().EmitSignal(Window.SignalName.CloseRequested);
                 _titleDialog!.Hide();_titleDialog.EmitSignal(ConfirmationDialog.SignalName.Confirmed);
+                if(_saveTask is {} finalSave)await finalSave;
                 if(PrepareSession(SavePath).World.Workers[0].Person.GrowthXp!=finalXp)throw new InvalidOperationException("Save-and-quit lost progress");
                 GD.Print("STARTUP_UI_OK: title → settings → atlas → colony → save/return → title load → save/quit; progress and world settings restored");
             }

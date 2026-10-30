@@ -4,7 +4,7 @@ namespace NoDwarf;
 public partial class Main
 {
     private Node3D? _digRegionHighlight;
-    private (DemoWorld World,string Id,int LegacyId,Cell Min,Cell Max,int Level)? _digHighlightKey;
+    private (DemoWorld World,string Id,int JobId,Cell Min,Cell Max,int Level)? _digHighlightKey;
     private void SyncDigRegionHighlight(DemoJob? selected)
     {
         if(selected is null||_tool!="select"||!_selectionPanel.Visible)
