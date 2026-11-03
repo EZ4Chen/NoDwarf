@@ -111,7 +111,9 @@ public sealed partial class DemoWorld
         foreach(var g in gates){_openFloodgates.Add(g+delta);FluidGeometryChanged(g+delta);}
         foreach(var w in riders){StopMovement(w);w.Level-=distance;ApplyFallInjury(w,distance);}
         foreach(var job in Jobs.Where(j=>(j.Production||j.Refuel)&&cells.Contains(j.Cell)))
-        {Release(job);job.Cell+=delta;}
+        {Release(job);Jobs.Move(job,job.Cell+delta);}
+        foreach(var order in ProductionOrders.Where(o=>o.Station is Cell cell&&cells.Contains(cell)))
+            order.Station=order.Station!.Value+delta;
         // O(buildings + items), not a nested item-by-building scan.
         var destination=volume.Select(c=>c+delta).ToHashSet();
         var tops=destination.GroupBy(c=>(c.X,c.Z)).ToDictionary(g=>g.Key,g=>g.Max(c=>c.Level)+1);

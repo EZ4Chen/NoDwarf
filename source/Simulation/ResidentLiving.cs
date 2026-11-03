@@ -16,22 +16,33 @@ public sealed partial class DemoWorld
     }
     private bool BeginFoodSupplyCore(DemoWorker helper,DemoWorker patient,string origin)
     {
+        if(!SafetyWorkAllowed(patient.Tile)&&helper!=patient)return false;
         if(helper!=patient&&!helper.Person.Can("care"))return false;
         var p=helper.Person;
-        if(patient.Person.Dead||patient!=helper&&!NeedsFeeding(patient)||p.Dead||p.Incapacitated||p.Manipulation<.05||MilitaryControlled(helper)||FoodCareBusy(patient.Id,helper))return false;
-        var available=Items.Where(s=>CanEat(s)&&s.Owner==""&&s.Count>Reserved(s.Id)&&ResidentGear.Weight(s.Item,Content)<=p.Capacity).ToArray();
-        if(available.Length==0){p.FoodIssue=Items.Any(s=>CanEat(s)&&s.Owner=="")?"公共口粮已被预约":"没有可用公共口粮，需要烹饪";return false;}
-        var targets=available.SelectMany(s=>ItemPositions(s.Cell)).Where(c=>Walkable(c)&&Navigation.CanReach(c,helper.Tile)&&
-            (helper==patient||CanReachAny(c,ItemPositions(patient.Tile).Where(Walkable).ToArray())));
-        var route=Navigation.FindNearest(helper.Tile,targets,out var endpoint);
-        if(route is null||route.Count>0&&p.Mobility<.05){p.FoodIssue="口粮或照料对象不可达，请检查通路";return false;}
-        var meal=available.First(s=>ItemPositions(s.Cell).Contains(endpoint));
+        if(patient.Person.Dead||patient!=helper&&!NeedsFeeding(patient)||p.Dead||p.Incapacitated||p.Manipulation<.05||helper.Combat.Drafted||FoodCareBusy(patient.Id,helper))return false;
+        var available=Items.Where(s=>CanEat(s)&&FreeForUse(s,"food")>0&&ResidentGear.Weight(s.Item,Content)<=p.Capacity).ToArray();
+        if(available.Length==0){p.FoodIssue=Items.Any(s=>s.Owner==""&&Fresh(s)&&Content.Item(s.Item).Edible is not null)?"公共口粮被预约、禁用、保留或安全范围限制":"没有可用公共口粮，需要烹饪";return false;}
+        var choices=new List<(ItemStack Stack,Queue<Cell> Path,Cell End,int Distance)>();
+        foreach(var food in available)
+        {
+            var targets=ItemPositions(food.Cell).Where(c=>SafetySupplyAllowed(c)&&Walkable(c)&&ResidentNavigation.CanReach(c,helper.Tile)&&
+                (helper==patient||CanReachAny(c,ItemPositions(patient.Tile).Where(p=>SafetyWorkAllowed(p)&&Walkable(p)).ToArray())));
+            var path=ResidentNavigation.FindNearest(helper.Tile,targets,out var end);if(path is null||path.Count>0&&p.Mobility<.05)continue;
+            int delivery=helper==patient?0:ResidentNavigation.FindNearest(end,ItemPositions(patient.Tile).Where(c=>SafetyWorkAllowed(c)&&Walkable(c)),out _)?.Count??int.MaxValue;
+            double seconds=(path.Count+delivery)/Math.Max(.05,2.5*p.MoveRate)+3;
+            if(food.Properties.ExpiresAt is double expiry&&expiry<=SimulationTime+seconds)continue;
+            choices.Add((food,path,end,path.Count+delivery));
+        }
+        if(choices.Count==0){p.FoodIssue="口粮或照料对象不可达，或无法在腐败前送达";return false;}
+        int detour=Math.Min(8,(int)(Math.Max(0,patient.Person.Hunger-5)/.035*Math.Max(.05,2.5*p.MoveRate)));
+        var selected=OrderSupplyOptions(choices,c=>c.Distance,c=>c.Stack.Properties.ExpiresAt,c=>c.Stack.Id,detour).First();
+        var meal=selected.Stack;var route=selected.Path;var endpoint=selected.End;
         if(!MakeMealRoom(helper,meal.Item)){p.FoodIssue="装备负重过高，无法携带口粮";return false;}
         var research=p.Activity?.Kind=="research"?p.Activity:p.PausedResearch;
         CancelResidentActivity(helper);
         p.Activity=new(){Kind="food_supply",Origin=origin,Target=patient.Id,ItemId=meal.Id,Destination=endpoint};
         p.PausedResearch=research;p.FoodIssue="";
-        foreach(var c in route)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=Navigation.Version;
+        foreach(var c in route)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=ResidentNavigation.Version;
         helper.Status=helper==patient?"取一份口粮":"取口粮 → "+patient.Name;return true;
     }
     private bool TryAssignFeeding(DemoWorker helper,int ordinaryRank)
@@ -60,11 +71,11 @@ public sealed partial class DemoWorld
         var research=w.Person.PausedResearch;
         if(w==patient)
         {FinishResidentTask(w,"completed","已取粮供自己进食");CancelResidentActivity(w);BeginResidentActivity(w,"eat",itemId:carried.Id,origin:"need");w.Person.PausedResearch=research;return true;}
-        var path=Navigation.FindNearest(w.Tile,ItemPositions(patient.Tile).Where(c=>Walkable(c)&&Navigation.CanReach(c,w.Tile)),out var destination);
+        var path=ResidentNavigation.FindNearest(w.Tile,ItemPositions(patient.Tile).Where(c=>SafetyWorkAllowed(c)&&Walkable(c)&&ResidentNavigation.CanReach(c,w.Tile)),out var destination);
         if(path is null){CancelResidentActivity(w,"送饭断路，口粮留在背包");w.Person.FoodIssue="送饭断路，口粮保留在物品栏";return true;}
         StopMovement(w);
         a.Kind="feed";a.ItemId=carried.Id;a.Destination=destination;a.Progress=0;
-        foreach(var c in path)w.Path.Enqueue(c);w.CheckedNavigationVersion=Navigation.Version;w.Status="送饭 → "+patient.Name;return true;
+        foreach(var c in path)w.Path.Enqueue(c);w.CheckedNavigationVersion=ResidentNavigation.Version;w.Status="送饭 → "+patient.Name;return true;
     }
     private bool CompleteFeeding(DemoWorker helper,ResidentActivity a)
     {
@@ -83,7 +94,9 @@ public sealed partial class DemoWorld
     }
     private void ValidateHomeBed(DemoWorker w)
     {
-        if(w.Person.HomeBed is Cell bed&&(!Buildings.TryGetValue(bed,out var b)||b.Kind!=BuildKind.Bed||IsMedicalBed(bed)||w.Person.Dead))w.Person.HomeBed=null;
+        if(w.Person.HomeBed is Cell bed&&(!Buildings.TryGetValue(bed,out var b)||b.Kind!=BuildKind.Bed||IsMedicalBed(bed)||w.Person.Dead||
+            !SafetyWorkAllowed(bed)||!Directions.Any(d=>SafetyWorkAllowed(bed+d)&&Walkable(bed+d)&&ResidentNavigation.CanReach(w.Tile,bed+d))))
+        {w.Person.HomeBed=null;w.Person.MoodEffects.RemoveAll(e=>e.Key=="bedroom");}
     }
     private double RelaxRate(DemoWorker w)
     {
@@ -98,10 +111,11 @@ public sealed partial class DemoWorld
     }
     private void RestComfort(DemoWorker w)
     {
-        if(w.Person.HomeBed is not Cell bed||w.Person.Activity?.Target!=BedKey(bed)||!ItemPositions(bed).Contains(w.Tile))return;
-        if(w.Person.MoodEffects.Any(e=>e.Key=="bedroom"&&e.Until>_simulationTime+150))return;
-        var room=RoomAt(bed);
-        w.Status=room.Enclosed?"在自己的室内床休息":"在自己的露天床休息";
-        w.Person.Feeling("bedroom",room.Enclosed?"卧室休息 · "+room.Grade:"有床可睡",room.Enclosed?2+(int)Math.Min(4,room.Quality/25):1,_simulationTime+180);
+        bool hasBed=w.Person.HomeBed is Cell bed&&w.Person.Activity?.Target==BedKey(bed)&&ItemPositions(bed).Contains(w.Tile);
+        var room=RoomAt(hasBed?w.Person.HomeBed!.Value:w.Tile);
+        string text=hasBed?(room.Enclosed?"卧室休息 · "+room.Grade:"有床可睡"):(room.Enclosed?"地板休息":"露天休息");
+        int amount=hasBed?(room.Enclosed?2+(int)Math.Min(4,room.Quality/25):1):(room.Enclosed?-1:-2);
+        w.Status=text;
+        if(!w.Person.MoodEffects.Any(e=>e.Key=="bedroom"&&e.Text==text&&e.Amount==amount&&e.Until>_simulationTime+150))w.Person.Feeling("bedroom",text,amount,_simulationTime+180);
     }
 }

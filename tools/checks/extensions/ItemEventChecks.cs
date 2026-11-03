@@ -70,7 +70,7 @@ static class ItemEventChecks
         w=World(content);var origin=new Cell(58,58);RoomEnvironmentChecks.Shell(w,origin);var stove=new Cell(59,59);w.Buildings[stove]=new(stove,BuildKind.Stove);
         actor=w.Workers[0];actor.X=60;actor.Z=60;actor.Person.WorkPriorities["cooking"]=1;actor.Person.WorkPriorities["crafting"]=1;
         w.SpawnItem("flour",2,actor.Tile);w.SpawnItem("wood",1,actor.Tile);
-        Check(w.QueueProcessing("copper:bake"),"configured food recipe queued in kitchen");w=DemoWorld.LoadJson(w.SaveJson(),content:content);Advance(w,60);
+        Check(w.QueueProductionRecipe("copper:bake"),"configured food recipe queued in kitchen");w=DemoWorld.LoadJson(w.SaveJson(),content:content);Advance(w,60);
         Check(w.Total(bread.Id)==2&&w.Total("flour")==0&&w.Total("wood")==0,"new food recipe output and inputs conserved");
 
         w=World(content);w.EnableStory(true);var turn=Accept(w,"discover_food",bread.Id,2);string receipt=StorytellerTools.Apply(w,turn);

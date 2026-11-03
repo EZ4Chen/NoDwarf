@@ -47,7 +47,7 @@ public partial class Main
             if(origin==1&&!core||origin==2&&core)continue;
             var block=_world.Content.Block(p.Block);var item=_world.Content.Item(p.Item);
             if(query.Length>0&&!string.Join(" ",block.Name,item.Name,p.Block,p.Item,string.Join(" ",block.Info.Tags)).Contains(query,StringComparison.OrdinalIgnoreCase))continue;
-            int count=_pickerSource==0?_world.Available(p.Item):_world.AvailableInStack(_pickerSource);
+            int count=_pickerSource==0?_world.AvailableForUse(p.Item,"construction"):_world.AvailableInStack(_pickerSource);
             var button=Button(_blockChoices,$"{block.Name}  ·  {item.Name} ×{p.Count}/格  ·  可用 {count}",()=>BeginBlockPlacement(p,_pickerSource));
             button.Alignment=HorizontalAlignment.Left;button.Disabled=count<p.Count;button.Icon=UiIcons.Get(item.Texture);button.ExpandIcon=true;button.AddThemeConstantOverride("icon_max_width",24);
             button.TooltipText=count<p.Count?"可用材料不足或已被预留":"选择后在地图上单击或拖框，居民搬料放置。";
@@ -75,7 +75,7 @@ public partial class Main
     {
         if(_activePlacement is not {} p)return;
         SetPreviewSolids(new[]{cell});
-        bool valid=_world.CanPlaceBlock(cell,p.Item,p.Block)&&(_placementSource==0?_world.Available(p.Item):_world.AvailableInStack(_placementSource))>=p.Count;
+        bool valid=_world.CanPlaceBlock(cell,p.Item,p.Block)&&(_placementSource==0?_world.AvailableForUse(p.Item,"construction"):_world.AvailableInStack(_placementSource))>=p.Count;
         var shape=new Node3D();_hover.AddChild(shape);DrawPlacedBlock(shape,cell,p.Block);foreach(var mesh in shape.GetChildren().OfType<MeshInstance3D>()){mesh.MaterialOverride=PreviewMaterial(!valid);mesh.CastShadow=GeometryInstance3D.ShadowCastingSetting.Off;}
         _hint.Text=$"放置{_world.Content.Block(p.Block).Name} · {_world.Content.Item(p.Item).Name} ×{p.Count}/格 · 左键或拖框规划；右键退出";
     }
@@ -86,6 +86,7 @@ public partial class Main
         _groundItemChoice.ItemSelected+=index=>{if(index>=0&&index<_groundItemIds.Count){_selectedItemId=_groundItemIds[(int)index];RefreshUi();}};
         _placeItemButton=IconButton(_objectCommands,"Cobblestone","放置",PlaceSelectedItem,true);StyleObjectCommand(_placeItemButton,"Cobblestone");
         UiAccess.Name(_placeItemButton,"放置所选物品","选择目标位置，居民搬运材料并放成方块。");
+        BuildSupplyCommands();
     }
     private void PlaceSelectedItem()
     {
@@ -104,6 +105,7 @@ public partial class Main
         if(_selectedItemId!=0)_groundItemChoice.Select(_groundItemIds.IndexOf(_selectedItemId));
         _groundItemRow.Visible=stacks.Length>0;
         var selected=stacks.FirstOrDefault(s=>s.Id==_selectedItemId);
+        RefreshSupplyCommands(selected);
         var choices=selected is null?Array.Empty<PlacementDefinition>():_world.Content.Item(selected.Item).Placements;
         _placeItemButton.Visible=choices.Count>0;_placeItemButton.Disabled=selected is null||!choices.Any(p=>_world.AvailableInStack(selected.Id)>=p.Count);
         _placeItemButton.TooltipText=_placeItemButton.Disabled?"所选物品数量不足或已被预留":"选择目标位置，居民搬运材料并放成方块。";

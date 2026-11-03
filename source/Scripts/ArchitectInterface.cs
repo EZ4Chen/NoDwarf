@@ -88,6 +88,11 @@ public partial class Main
         Tool(commands,"canceldig","取消开采","cancel","两次左键跨层框选，取消未完成挖掘；不填回地形，不影响其他任务。相交的旧多米挖掘任务整项取消。");
         Tool(commands,"chop","伐木","chop","左键拖框批量标记树木，也可点击单棵；松开确认，右键或 Esc 取消。产出木料和树苗。");
         var zones=new GridContainer{Columns=3,SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};_buildPages["区域"].AddChild(zones);
+        var safety=IconButton(zones,"select","安全作业范围",()=>ShowSafetyAreas(),true);
+        safety.TooltipText="设置跨层作业区、禁行区与停止外出取料。";UiAccess.Name(safety,"安全作业范围",safety.TooltipText);
+        safety.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;safety.CustomMinimumSize=new(80,80);safety.AddThemeConstantOverride("icon_max_width",48);safety.AutowrapMode=TextServer.AutowrapMode.WordSmart;
+        _architectEntries.Add((safety,"区域","安全作业范围",safety.TooltipText,"select"));
+        safety.MouseEntered+=()=>ShowArchitectDetail("安全作业范围","select",safety.TooltipText);safety.FocusEntered+=()=>ShowArchitectDetail("安全作业范围","select",safety.TooltipText);
         Tool(zones,"stockpile","储存区","stockpile","左键拖框或点击同高两角划定；点击储存区设置物品筛选与优先级。");
         Tool(zones,"growingzone","种植区","growingzone","左键拖框或点击同高两角划定，最多 16×16。点击区域选择作物、树木与播种设置。");
         Tool(zones,"unstockpile","移除储存区","unstockpile","拖框或点击两角移除储存范围；物品留在地上。");

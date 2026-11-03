@@ -193,7 +193,7 @@ public sealed partial class DemoWorld
             for(int z=(int)Math.Floor(min.Z+.5f);z<=(int)Math.Floor(max.Z+.5f);z++)
                 for(int y=(int)Math.Floor(min.Y);y<=(int)Math.Floor(max.Y);y++)
                 {
-                    var c=new Cell(x,z,y);if(Inside(c)&&!Solid(c)&&!(Buildings.TryGetValue(c,out var building)&&building.Kind==BuildKind.Floodgate&&!GateOpen(c)))continue;
+                    var c=new Cell(x,z,y);if(Inside(c)&&!Solid(c)&&!LockedDoorBody(c)&&!(Buildings.TryGetValue(c,out var building)&&building.Kind==BuildKind.Floodgate&&!GateOpen(c)))continue;
                     var t=MeleeGeometry.Box(a,b,new Vector3(x-.5f,y,z-.5f)-new Vector3(radius),new Vector3(x+.5f,y+1,z+.5f)+new Vector3(radius));
                     if(t is float hit&&(nearest is null||hit<nearest))nearest=hit;
                 }

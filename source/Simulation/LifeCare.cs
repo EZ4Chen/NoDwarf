@@ -4,8 +4,9 @@ public sealed partial class DemoWorld
     private bool LifeReserved(string patient)=>Workers.Any(w=>w.Person.Activity is {Kind:"life_supply" or "life_use" or "water_fill"} a&&a.Target==patient);
     public ResidentResult SupplyCare(string helperId,string patientId,string supply,string part="",string origin="manual")
     {
+        if(helperId!=patientId&&Workers.FirstOrDefault(w=>w.Id==patientId) is {} target&&!SafetyWorkAllowed(target.Tile))return new(false,"照料对象在安全作业范围之外");
         var helper=Workers.FirstOrDefault(w=>w.Id==helperId);var patient=Workers.FirstOrDefault(w=>w.Id==patientId);
-        if(helper is null||patient is null||helper.Person.Dead||patient.Person.Dead||helper.Person.Incapacitated||helper.Person.Manipulation<.05||MilitaryControlled(helper))return new(false,"需要能够照料的居民");
+        if(helper is null||patient is null||helper.Person.Dead||patient.Person.Dead||helper.Person.Incapacitated||helper.Person.Manipulation<.05||helper.Combat.Drafted)return new(false,"需要能够照料的居民");
         if(!helper.Person.Can("care")&&(helper!=patient||supply!="water_bucket"))return new(false,"该物种不具备照料能力");
         if(helper.WaterEvacuating||FloodThreat(helper))return new(false,"照料者需要先撤离水患");
         if(supply is not ("water_bucket" or "splint" or "prosthesis"))return new(false,"未知用品");
@@ -14,24 +15,24 @@ public sealed partial class DemoWorld
         if(supply=="splint"&&part=="")return new(false,"没有待固定的骨折");
         if(supply=="prosthesis"&&(part is "head" or "torso"||!patient.Person.Injuries.Any(i=>i.Kind=="missing"&&i.Part==part&&i.Treated)||patient.Person.Prostheses.ContainsKey(part)))return new(false,"请选择已止血且尚无义肢的缺失肢体");
         if(LifeReserved(patientId)||RescueReserved(patientId)||Workers.Any(w=>w.Person.Activity is {Kind:"treat" or "care_supply"} a&&a.Target==patientId))return new(false,"该居民正在接受照料或搬运");
-        var carried=Inventory(helper).FirstOrDefault(s=>s.Item==supply);
+        var carried=Inventory(helper).FirstOrDefault(s=>!s.Forbidden&&s.Item==supply);
         string item=supply;
-        if(carried is null&&supply=="water_bucket"&&Available(supply)==0){item="bucket";carried=Inventory(helper).FirstOrDefault(s=>s.Item==item);}
+        if(carried is null&&supply=="water_bucket"&&!Items.Any(s=>s.Item==supply&&FreeForUse(s,"care")>0&&ItemPositions(s.Cell).Any(c=>SafetySupplyAllowed(c)&&ResidentNavigation.CanReach(helper.Tile,c)))){item="bucket";carried=Inventory(helper).FirstOrDefault(s=>!s.Forbidden&&s.Item==item);}
         if(carried is not null)
         {
             if(helper.Job is not null)Release(helper.Job);CancelResidentActivity(helper);
             helper.Person.Activity=new(){Kind="life_use",Target=patientId,Supply=item,BodyPart=part,ItemId=carried.Id,Origin=origin,Destination=helper.Tile};
             return RouteLifeUse(helper)?new(true,"正在送用品"):new(false,"水源或照料对象不可达，用品仍保留");
         }
-        var stacks=Items.Where(s=>s.Owner==""&&s.Item==item&&s.Count>Reserved(s.Id)).ToArray();
+        var stacks=Items.Where(s=>s.Item==item&&FreeForUse(s,"care")>0).ToArray();
         if(stacks.Length==0)return new(false,"缺少"+Content.Item(item).Name);
-        var route=Navigation.FindNearest(helper.Tile,stacks.SelectMany(s=>ItemPositions(s.Cell)).Where(c=>Walkable(c)&&Navigation.CanReach(c,helper.Tile)),out var dest);
+        var route=ResidentNavigation.FindNearest(helper.Tile,stacks.SelectMany(s=>ItemPositions(s.Cell)).Where(c=>SafetySupplyAllowed(c)&&Walkable(c)&&ResidentNavigation.CanReach(c,helper.Tile)),out var dest);
         if(route is null)return new(false,"用品不可达");
         RefreshWeight(helper);if(helper.Person.CarriedWeight+ResidentGear.Weight(item,Content)>helper.Person.Capacity)return new(false,"负重不足，请先卸货");
         var stack=stacks.First(s=>ItemPositions(s.Cell).Contains(dest));
         if(helper.Job is not null)Release(helper.Job);CancelResidentActivity(helper);
         helper.Person.Activity=new(){Kind="life_supply",Target=patientId,Supply=item,BodyPart=part,ItemId=stack.Id,Destination=dest,Origin=origin};
-        foreach(var c in route)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=Navigation.Version;
+        foreach(var c in route)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=ResidentNavigation.Version;
         return new(true,"取用"+Content.Item(item).Name);
     }
     private bool RouteLifeUse(DemoWorker helper)
@@ -39,18 +40,18 @@ public sealed partial class DemoWorld
         var a=helper.Person.Activity!;Queue<Cell>? path;
         if(a.Supply=="bucket")
         {
-            var sources=WaterPoints.Where(c=>Fluids.Amount(c)>=5&&Fluids.Cells[c].Temperature is >=0 and <=40).ToArray();
-            path=Navigation.FindNearest(helper.Tile,sources.SelectMany(c=>Directions.Select(d=>c+d)).Where(c=>Walkable(c)&&Fluids.Depth(c)<.2&&Navigation.CanReach(c,helper.Tile)),out var dest);
+            var sources=WaterPoints.Where(c=>SafetySupplyAllowed(c)&&Fluids.Amount(c)>=5&&Fluids.Cells[c].Temperature is >=0 and <=40).ToArray();
+            path=ResidentNavigation.FindNearest(helper.Tile,sources.SelectMany(c=>Directions.Select(d=>c+d)).Where(c=>SafetySupplyAllowed(c)&&Walkable(c)&&Fluids.Depth(c)<.2&&ResidentNavigation.CanReach(c,helper.Tile)),out var dest);
             if(path is not null){a.Kind="water_fill";a.SourceCell=sources.First(c=>Directions.Any(d=>c+d==dest));a.Destination=dest;}
         }
         else
         {
             var patient=Workers.FirstOrDefault(w=>w.Id==a.Target&&!w.Person.Dead);
-            path=patient is null?null:Navigation.FindNearest(helper.Tile,ItemPositions(patient.Tile).Where(c=>Walkable(c)&&Navigation.CanReach(c,helper.Tile)),out _);
+            path=patient==helper?new Queue<Cell>():patient is null?null:ResidentNavigation.FindNearest(helper.Tile,ItemPositions(patient.Tile).Where(c=>SafetyWorkAllowed(c)&&Walkable(c)&&ResidentNavigation.CanReach(c,helper.Tile)),out _);
             if(path is not null){a.Kind="life_use";a.Destination=path.Count>0?path.Last():helper.Tile;}
         }
         if(path is null){CancelResidentActivity(helper);return false;}
-        StopMovement(helper);foreach(var c in path)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=Navigation.Version;a.Progress=0;return true;
+        StopMovement(helper);foreach(var c in path)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=ResidentNavigation.Version;a.Progress=0;return true;
     }
     private bool UpdateLifeCare(DemoWorker helper,double dt,ref int budget)
     {
@@ -94,12 +95,12 @@ public sealed partial class DemoWorld
             if(p.ColdExposure>10||p.HeatExposure>10)SeekComfort(patient);
             if(p.Thirst<30)
             {
-                var helpers=Workers.Where(h=>!h.WaterEvacuating&&!FloodThreat(h)&&!h.Person.Dead&&!h.Person.Incapacitated&&!MilitaryControlled(h)&&h.Person.Activity?.Kind is not ("treat" or "care_supply" or "rescue_carry" or "life_supply" or "life_use" or "water_fill")&&(h==patient&&p.MedicalBed is null&&p.Mobility>=.05||h!=patient&&h.Person.WorkPriorities.GetValueOrDefault("care")>0&&h.Job is null)).OrderBy(h=>h==patient?0:1);
+                var helpers=Workers.Where(h=>!h.WaterEvacuating&&!FloodThreat(h)&&!h.Person.Dead&&!h.Person.Incapacitated&&!h.Combat.Drafted&&h.Person.Activity?.Kind is not ("treat" or "care_supply" or "rescue_carry" or "life_supply" or "life_use" or "water_fill")&&(h==patient&&p.MedicalBed is null&&p.Mobility>=.05||h!=patient&&h.Person.WorkPriorities.GetValueOrDefault("care")>0&&h.Job is null)).OrderBy(h=>h==patient?0:1);
                 foreach(var h in helpers.Take(4))if(SupplyCare(h.Id,patient.Id,"water_bucket",origin:h==patient?"need":"work").Ok)break;
             }
-            else if(p.Injuries.Any(i=>i.Kind=="fracture"&&!i.Fixed&&i.Severity>i.PermanentSeverity)&&Available("splint")>0)
+            else if(p.Injuries.Any(i=>i.Kind=="fracture"&&!i.Fixed&&i.Severity>i.PermanentSeverity)&&AvailableForUse("splint","care")>0)
             {
-                foreach(var h in Workers.Where(h=>!h.WaterEvacuating&&!FloodThreat(h)&&!h.Person.Dead&&!h.Person.Incapacitated&&!MilitaryControlled(h)&&h.Person.WorkPriorities.GetValueOrDefault("doctor")>0&&h.Job is null&&h.Person.Activity is null))
+                foreach(var h in Workers.Where(h=>!h.WaterEvacuating&&!FloodThreat(h)&&!h.Person.Dead&&!h.Person.Incapacitated&&!h.Combat.Drafted&&h.Person.WorkPriorities.GetValueOrDefault("doctor")>0&&h.Job is null&&h.Person.Activity is null))
                     if(SupplyCare(h.Id,patient.Id,"splint",origin:"work").Ok)break;
             }
         }
@@ -107,7 +108,7 @@ public sealed partial class DemoWorld
 }
 public sealed partial class DemoWorld
 {
-    private IEnumerable<Cell> DiningSeats(DemoWorker w)=>Buildings.Values.Where(b=>b.Kind==BuildKind.Chair&&Directions.Any(d=>Buildings.TryGetValue(b.Cell+d,out var t)&&t.Kind==BuildKind.Table)).SelectMany(b=>ItemPositions(b.Cell)).Where(c=>Walkable(c)&&!Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"eat"} a&&a.Destination==c));
+    private IEnumerable<Cell> DiningSeats(DemoWorker w)=>Buildings.Values.Where(b=>SafetyWorkAllowed(b.Cell)&&b.Kind==BuildKind.Chair&&Directions.Any(d=>Buildings.TryGetValue(b.Cell+d,out var t)&&t.Kind==BuildKind.Table)).SelectMany(b=>ItemPositions(b.Cell)).Where(c=>Walkable(c)&&!Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"eat"} a&&a.Destination==c));
 }
 public sealed partial class DemoWorld
 {
@@ -115,8 +116,8 @@ public sealed partial class DemoWorld
     {
         if(w.Person.Incapacitated||MilitaryControlled(w)||w.Person.Mobility<.05||w.Person.MedicalBed is not null||w.Person.Activity?.Kind is "treat" or "care_supply" or "rescue_carry" or "life_supply" or "life_use" or "water_fill")return;
         if(TemperatureAt(w.Tile) is >=5 and <=35)return;
-        var route=Navigation.FindNearest(w.Tile,Buildings.Values.Where(b=>b.Kind is BuildKind.Bed or BuildKind.Campfire).SelectMany(b=>ItemPositions(b.Cell)).Where(c=>Walkable(c)&&TemperatureAt(c) is >=5 and <=35&&Navigation.CanReach(c,w.Tile)),out var safe);
+        var route=ResidentNavigation.FindNearest(w.Tile,Buildings.Values.Where(b=>b.Kind is BuildKind.Bed or BuildKind.Campfire).SelectMany(b=>ItemPositions(b.Cell)).Where(c=>SafetyWorkAllowed(c)&&Walkable(c)&&TemperatureAt(c) is >=5 and <=35&&ResidentNavigation.CanReach(c,w.Tile)),out var safe);
         if(route is null||route.Count==0)return;
-        if(w.Job is not null)Release(w.Job);CancelResidentActivity(w);w.Person.Activity=new(){Kind="rest",Origin="need",Destination=safe};foreach(var c in route)w.Path.Enqueue(c);w.CheckedNavigationVersion=Navigation.Version;w.Status="前往舒适温度处休息";
+        if(w.Job is not null)Release(w.Job);CancelResidentActivity(w);w.Person.Activity=new(){Kind="rest",Origin="need",Destination=safe};foreach(var c in route)w.Path.Enqueue(c);w.CheckedNavigationVersion=ResidentNavigation.Version;w.Status="前往舒适温度处休息";
     }
 }

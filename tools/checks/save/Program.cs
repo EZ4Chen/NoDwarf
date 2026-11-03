@@ -37,6 +37,22 @@ string root=Path.Combine(Path.GetTempPath(),"nodwarf-save-check-"+Guid.NewGuid()
 try
 {
     string path=Path.Combine(root,"session.json");var service=new SaveService();
+    string sessionPath=Path.Combine(root,"world-session.json");
+    var session=new SessionState{WorldState=snapshot,Tick=42,Speed=2,Paused=true,Pending=.005,Zoom=38,
+        FoundationMin=new Cell(5,4),FoundationMax=new Cell(10,8),FloorHeight=3,Floor=1};
+    await service.Write(sessionPath,session);
+    var prepared=SessionPersistence.Read(sessionPath);
+    Check(prepared.Clock.Tick==42&&prepared.Clock.Speed==2&&prepared.Clock.Paused&&prepared.Clock.PendingSeconds==.005,
+        "Engine-independent session reader lost clock state");
+    Check(prepared.Foundation?.WorldLevel==3&&Json(prepared.World.CaptureSnapshot())==Json(DemoWorld.LoadSnapshot(snapshot).CaptureSnapshot()),
+        "Session reader lost world or foundation state");
+    Check(typeof(DemoWorld).Assembly.GetType("NoDwarf.Simulation.DemoChecks") is null&&
+        !typeof(DemoWorld).Assembly.GetReferencedAssemblies().Any(a=>a.Name!.StartsWith("Godot")),"Core depends on checks or Godot");
+    session.Zoom=0;await service.Write(sessionPath,session);
+    string invalidSession=File.ReadAllText(sessionPath);
+    try{SessionPersistence.Read(sessionPath);throw new Exception("Invalid session view accepted");}catch(InvalidDataException){}
+    Check(File.ReadAllText(sessionPath)==invalidSession,"Rejected session was rewritten");
+    Console.WriteLine("SESSION_DATA_OK: engine-independent world/clock/view roundtrip and validation");
     var first=service.Write(path,new{Sequence=1});var second=service.Write(path,new{Sequence=2});
     await Task.WhenAll(first,second);
     Check(JsonDocument.Parse(File.ReadAllText(path)).RootElement.GetProperty("Sequence").GetInt32()==2,"Writes completed out of order");

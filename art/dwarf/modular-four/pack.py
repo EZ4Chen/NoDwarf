@@ -3,10 +3,10 @@ from pathlib import Path
 from PIL import Image, ImageFilter
 ART=Path(__file__).resolve().parent
 ROOT=ART.parents[2]
-OLD=ROOT/'source/Assets/Characters/ModularDwarf'
+OLD=ROOT/'source/Development/Assets/Characters/ModularDwarf'
 LEGACY=ROOT/'source/Assets/Characters/Sprites4'
-COMPACT=ROOT/'source/Assets/Characters/CompactPrototype'
-OUT=ROOT/'source/Assets/Characters/ModularFour'
+COMPACT=ROOT/'source/Development/Assets/Characters/CompactPrototype'
+OUT=ROOT/'source/Development/Assets/Characters/ModularFour'
 OUT.mkdir(exist_ok=True)
 L=Image.Resampling.LANCZOS
 

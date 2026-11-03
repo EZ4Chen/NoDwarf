@@ -30,29 +30,29 @@ public sealed partial class DemoWorld
 
     private void CheckAccessVersion()
     {
-        if (_accessVersion == Navigation.Version) return;
-        _accessVersion = Navigation.Version;
+        if (_accessVersion == ResidentNavigation.Version) return;
+        _accessVersion = ResidentNavigation.Version;
         _jobAccess.Clear(); _itemAccess.Clear();
     }
     private Cell[] JobAccess(DemoJob job)
     {
         CheckAccessVersion();
         if (_jobAccess.TryGetValue(job, out var cached) && cached.Cell == job.Cell) return cached.Positions;
-        var result = (job.Haul ? ItemPositions(job.Cell) : ActionPositions(job)).Where(Walkable).ToArray();
+        var result = (job.Haul ? ItemPositions(job.Cell) : ActionPositions(job)).Where(c=>Walkable(c)&&SafetyWorkAllowed(c)).ToArray();
         _jobAccess[job] = (job.Cell, result);
         return result;
     }
     private Cell[] ItemAccess(Cell cell)
     {
         CheckAccessVersion();
-        if (!_itemAccess.TryGetValue(cell, out var result)) _itemAccess[cell] = result = ItemPositions(cell).Where(Walkable).ToArray();
+        if (!_itemAccess.TryGetValue(cell, out var result)) _itemAccess[cell] = result = ItemPositions(cell).Where(c=>Walkable(c)&&SafetySupplyAllowed(c)).ToArray();
         return result;
     }
     private bool CanReachAny(Cell from, Cell[] positions)
     {
-        int component = Navigation.ComponentAt(from);
+        int component = ResidentNavigation.ComponentAt(from);
         if (component == 0) return false;
-        foreach (var cell in positions) if (Navigation.CanReach(from,cell)) return true;
+        foreach (var cell in positions) if (ResidentNavigation.CanReach(from,cell)) return true;
         return false;
     }
     private Cell[] AssignmentPositions(DemoJob job)

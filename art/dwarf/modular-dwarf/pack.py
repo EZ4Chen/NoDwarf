@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 ROOT=Path(__file__).resolve().parents[3]
 ART=Path(__file__).resolve().parent
-OUT=ROOT/'source/Assets/Characters/ModularDwarf'
+OUT=ROOT/'source/Development/Assets/Characters/ModularDwarf'
 OUT.mkdir(exist_ok=True,parents=True)
 def crop(im,box):
     part=im.crop(box);a=np.array(part.getchannel('A'));ys,xs=np.where(a>128)

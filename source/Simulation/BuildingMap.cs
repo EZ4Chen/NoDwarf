@@ -28,6 +28,8 @@ public sealed class BuildingMap : IReadOnlyDictionary<Cell, Building>
             throw new ArgumentOutOfRangeException(nameof(key),"Building must fit inside world bounds");
     }
     public IEnumerable<Cell> Keys => _items.Keys;
+    // A permission change preserves geometry, damage, room temperature and support.
+    internal void SetDoorLocked(Cell cell,bool locked) => _items[cell]=_items[cell] with {Locked=locked};
     public IEnumerable<Building> Values => _items.Values;
     public int Count => _items.Count;
     public bool ContainsKey(Cell key) => _items.ContainsKey(key);

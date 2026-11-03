@@ -20,9 +20,11 @@ public partial class Startup : Control
     public override void _Ready()
     {
         GetTree().AutoAcceptQuit=true;
+#if NODWARF_CHECKS
         var args=OS.GetCmdlineUserArgs();
         if(args.Any(a=>a.EndsWith("-test")||a.EndsWith("-review"))&&!args.Contains("--startup-preview-test")&&!args.Contains("--llm-settings-test"))
         {Callable.From(()=>GetTree().ChangeSceneToFile("res://Scenes/Main.tscn")).CallDeferred();return;}
+#endif
         GetWindow().Title="NoDwarf · 开始";
         Theme=new Theme{DefaultFont=GameFont.Regular,DefaultFontSize=16};
         var frame=new MarginContainer();AddChild(frame);frame.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -35,8 +37,10 @@ public partial class Startup : Control
         column.AddChild(Label("一片土地，几位居民。故事从这里开始。",13,Muted));
         PreferencesRuntime.Initialize();PreferencesRuntime.Apply(GetTree().Root);
         Resized+=QueueRedraw;ShowHome();
+#if NODWARF_CHECKS
         if(args.Contains("--startup-preview-test"))RunStartupPreview();
         if(args.Contains("--llm-settings-test"))RunLlmSettingsReview();
+#endif
     }
     public override void _Draw()
     {
@@ -155,7 +159,11 @@ public partial class Startup : Control
         var site=_settings.Site;_enter.Disabled=!site.Land;_atlas.SetWorld(_settings);
         _siteInfo.Text=site.Land?$"{RegionProfile.Get(site.Region).Name}\n\n地区 {_settings.SiteX+1}, {_settings.SiteY+1}\n年均温度 {site.Temperature:F1}°C\n湿润度 {site.Wetness:P0}\n营地高度 {site.Height} m\n{(site.RiverWidth>0?$"河流约 {site.RiverWidth} 格宽 · 过河需通路":"无地表河流")}{(site.Lake?" · 湖泊":"")}\n含水层 {new[]{"无","适中","丰富"}[_settings.Aquifers]} · 洞穴 {_settings.CavernLayers} 层\n\n{(site.Temperature<4?"寒冷：露天种植窗口较短。":site.Temperature>26?"炎热：注意作物耐温范围。":site.Wetness<.3?"干燥：树木较少，注意木材供应。":"气候较温和，适合初次定居。")}":"海洋\n\n这里无法建立营地。\n请选择陆地上的地区。";
     }
-    private string SaveDirectory=>ProjectSettings.GlobalizePath(OS.GetCmdlineUserArgs().Contains("--startup-preview-test")?"res://.local/startup-tests":"user://saves");
+    private string SaveDirectory=>ProjectSettings.GlobalizePath(
+#if NODWARF_CHECKS
+        OS.GetCmdlineUserArgs().Contains("--startup-preview-test")?"res://.local/startup-tests":
+#endif
+        "user://saves");
     private static string SaveLabel(string path)=>path.EndsWith(".json.bak",StringComparison.OrdinalIgnoreCase)
         ?Path.GetFileNameWithoutExtension(path[..^4])+" · 上一次备份":Path.GetFileNameWithoutExtension(path);
     private void ShowSaves(string error="")
@@ -192,7 +200,7 @@ public partial class Startup : Control
         if(_busy)return;ShowBusy("正在读取营地");
         try
         {
-            var prepared=await Task.Run(()=>Main.PrepareSession(path));
+            var prepared=await Task.Run(()=>SessionPreparation.Prepare(path));
             string target=path.EndsWith(".bak")?path[..^4]:path;
             if(!Path.GetFullPath(target).StartsWith(Path.GetFullPath(SaveDirectory)+Path.DirectorySeparatorChar,StringComparison.Ordinal))target=Path.Combine(SaveDirectory,"colony-save.json");
             GameLaunch.Pending=new(prepared.World,prepared,target);

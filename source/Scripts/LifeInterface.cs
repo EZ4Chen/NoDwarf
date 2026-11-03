@@ -31,12 +31,17 @@ public partial class Main
         else if(alert.Id is "food" or "water")
         {if(!_inspector.Visible)TogglePanel(_inspector);ShowActionFeedback(alert.Id=="water"?"在生产页制作水桶；选中安全水源地格可设为取水点。":"在生产页安排烹饪，或在建筑规划 → 区域划定种植区。");}
         else ShowActionFeedback(alert.Text);
-        if(alert.Location is Cell location && (alert.Id.StartsWith("dig-water:") || alert.Id.StartsWith("flood:")))
+        if(alert.Location is Cell location && (alert.Id.StartsWith("dig-water:") || alert.Id.StartsWith("flood:") || alert.Id.StartsWith("safety") || alert.Id.StartsWith("supply") || alert.Id.StartsWith("storage:") || alert.Id.StartsWith("output:")))
         {
             _heightSelected=true;_cutaway=true;_interiorView=false;_floorWalls=false;
             _layerOffset=location.Level-(_foundation?.WorldLevel??_world.Camp.Level);_revision=-1;
         }
         PositionCamera();RefreshUi();
+        if(alert.Id.StartsWith("supply:"))ShowSupplyRules(alert.Id[7..]);
+        if(alert.Id.StartsWith("supply-job:")&&int.TryParse(alert.Id[11..],out int supplyJob)&&_world.Jobs.FirstOrDefault(j=>j.Id==supplyJob)?.Materials.FirstOrDefault() is {} material)ShowSupplyRules(material.Item);
+        if(alert.Id.StartsWith("output:")&&alert.Location is Cell output)OpenProductionBills(output);
+        if(alert.Id.StartsWith("storage:")&&alert.Location is Cell sc&&_world.EditableStorageAt(sc) is {} zone)ShowStorage(zone);
+        if(alert.Id.StartsWith("safety")){ShowSafetyAreas();_safetyFrame?.SetStatus(alert.Text+"；调整范围或补充安全区内的物资。");}
         if(alert.Id.StartsWith("dig-water:") && int.TryParse(alert.Id[10..],out int jobId))ShowWaterDigWarning(jobId);
     }
     private void ShowWaterDigWarning(int jobId)
@@ -64,7 +69,7 @@ public partial class Main
         {
             var medic=_world.Workers.FirstOrDefault(w=>w.Id==helper());
             string common=patient.Person.Dead?"该居民已死亡":medic is null||medic.Person.Incapacitated||medic.Person.Manipulation<.05||medic.Combat.Drafted?"请选择能够照料、未征召的居民":"";
-            bool Has(string item)=>_world.Available(item)>0||medic is not null&&_world.Inventory(medic).Any(s=>s.Item==item);
+            bool Has(string item)=>_world.AvailableForUse(item,"care")>0||medic is not null&&_world.Inventory(medic).Any(s=>s.Item==item);
             string[] reasons=[
                 patient.Person.Thirst>=95?"暂不口渴":!Has("water_bucket")&&!(Has("bucket")&&_world.WaterPoints.Count>0)?"需要一桶饮水，或水桶与取水点":"",
                 !patient.Person.Injuries.Any(i=>i.Kind=="fracture"&&!i.Fixed&&i.Severity>i.PermanentSeverity)?"没有待固定的骨折":!Has("splint")?"缺少夹板，可在工作台制作":"",

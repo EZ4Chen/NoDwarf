@@ -22,7 +22,7 @@ public sealed partial class DemoWorld
             {
                 if(Math.Max(Math.Abs(dx),Math.Abs(dz))!=radius)continue;
                 var c=requested+new Cell(dx,dz);
-                if(Inside(c)&&Walkable(c)&&!MilitaryStandReserved(actor,c)&&Navigation.CanReach(actor.Tile,c))return c;
+                if(Inside(c)&&Walkable(c)&&(Enemies.Contains(actor)||actor.Combat.Drafted||SafetyWorkAllowed(c))&&!MilitaryStandReserved(actor,c)&&NavigationFor(actor).CanReach(actor.Tile,c))return c;
             }
         return null;
     }

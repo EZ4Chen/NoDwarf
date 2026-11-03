@@ -6,6 +6,7 @@ public partial class Main
     private HFlowContainer _objectCommands=null!;
     private Label _selectionTitle=null!;
     private Button _productionBillAction=null!,_harvestPlantAction=null!,_cancelHarvestPlantAction=null!;
+    private Button _doorAction=null!;
     private Button _mineSelectionAction=null!,_chopSelectionAction=null!,_cancelChopAction=null!,_locateSelectionAction=null!;
     private void BuildObjectCommands(Control root)
     {
@@ -21,6 +22,12 @@ public partial class Main
         _harvestPlantAction=Command("收获","wheat",()=>{if(_selectedCell is Cell c)_world.QueuePlantHarvest(c);SyncWorld();RefreshUi();},"采收成熟植物，产出作物和种子；收获后移除植株。");
         _cancelHarvestPlantAction=Command("取消收获","cancel",()=>{if(_selectedCell is Cell c)foreach(var j in _world.Jobs.At(c).Where(j=>j.Harvest).ToArray())_world.CancelJob(j);RefreshUi();},"取消尚未完成的收获任务，保留植物。");
         _productionBillAction=Command("清单","workbench",()=>OpenProductionBills(_selectedCell),"查看该设施的制作清单、原料和工作者设置。");
+        _doorAction=Command("锁闭门","door",()=>
+        {
+            if(_selectedCell is not Cell cell)return;
+            var result=_world.SetDoorLocked(cell,!_world.DoorLocked(cell));
+            ShowActionFeedback(result.Message,!result.Ok);SyncWorld();RefreshUi();
+        },"锁闭会阻断通行、取料和救援，可能切断唯一出口；普通门不挡水。");
         _mineSelectionAction=Command("开采","dig",()=>OrderSelectedObject("dig"),"安排居民开采这个方块；完成后移除岩土并掉落材料，开始前可取消。");
         _demolishAction=Command("拆除","erase",()=>OrderSelectedObject("erase"),"安排居民拆除选中的建筑并回收材料；开始前可取消。");
         _chopSelectionAction=Command("伐木","chop",()=>OrderSelectedObject("chop"),"安排居民砍倒这棵树，产出木料和树苗；开始前可取消。");
@@ -61,6 +68,15 @@ public partial class Main
         _locateSelectionAction.Visible=_selectedWorker>=0;
         _productionBillAction.Visible=_selectedCell is Cell station&&_world.Buildings.TryGetValue(station,out var bench)&&_world.Content.Recipes.Any(r=>r.Station==bench.Kind);
         _harvestPlantAction.Hide();_cancelHarvestPlantAction.Hide();
+        _doorAction.Visible=_selectedWorker<0&&_selectedCell is Cell dc&&CurrentView.Known(_world,dc)&&_world.Buildings.TryGetValue(dc,out var door)&&door.Kind==BuildKind.Door;
+        if(_doorAction.Visible)
+        {
+            bool locked=_world.DoorLocked(_selectedCell!.Value);
+            _selection.Text+="\n"+_world.RoomDescription(_selectedCell.Value);
+            _doorAction.Text=locked?"解锁门":"锁闭门";
+            _doorAction.TooltipText=locked?"允许居民与其他生物通行，重新检查工作与补给路线。":"锁闭会阻断通行、取料和救援，可能切断唯一出口；普通门不挡水。";
+            UiAccess.Name(_doorAction,_doorAction.Text,_doorAction.TooltipText);
+        }
         if(_selectedWorker<0&&_selectedCell is Cell pc&&CurrentView.Known(_world,pc)&&_world.Plants.TryGetValue(pc,out var plant))
         {bool pending=_world.Jobs.At(pc).Any(j=>j.Harvest);_harvestPlantAction.Visible=!pending&&plant.Growth>=DemoWorld.GrowTime(plant.Crop);_cancelHarvestPlantAction.Visible=pending;}
         _mineSelectionAction.Hide();_demolishAction.Hide();_chopSelectionAction.Hide();_cancelChopAction.Hide();

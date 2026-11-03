@@ -43,6 +43,7 @@ public partial class Main
     private void BuildProductionBrowser(Control root)
     {
         _productionFrame=new GameWindowFrame("生产清单",()=>_inspector.Hide());_inspector=_productionFrame;root.AddChild(_inspector);_inspector.ZIndex=20;
+        _productionFrame.AddAction("物资使用",()=>ShowSupplyRules());
         _inspector.VisibilityChanged+=()=>{if(_inspector.Visible){_inspector.MoveToFront();RefreshOrders();}else _billInfo?.Hide();};
         _productionColumns=new BoxContainer{SizeFlagsVertical=Control.SizeFlags.ExpandFill};_productionColumns.AddThemeConstantOverride("separation",16);_productionFrame.Body.AddChild(_productionColumns);
         var columns=_productionColumns;LayoutProductionPanel();root.Resized+=LayoutProductionPanel;
@@ -116,7 +117,7 @@ public partial class Main
     private void OpenProductionBills(Cell? station=null)
     {
         if(_inspector.Visible&&_billStation==station){_inspector.Hide();return;}
-        _combatPanel?.Hide();if(DossierOpen)CloseResidentPanel();_storagePanel?.QueueFree();_storagePanel=null;
+        _combatPanel?.Hide();if(DossierOpen)CloseResidentPanel();CloseStorage();CloseSupplyRules();
         _buildMenu.Hide();_selectionPanel.Hide();_worldMenu.Hide();SelectTool("select");_billStation=station;_recipeSearch.Text="";FilterRecipes();_inspector.Show();RefreshOrders();
     }
     private void RefreshOrders()

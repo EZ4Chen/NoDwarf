@@ -45,22 +45,23 @@ public sealed partial class DemoWorld
     public ResidentResult RescueResident(string helperId,string patientId,string origin="manual")
     {
         var helper=Workers.FirstOrDefault(w=>w.Id==helperId);var patient=Workers.FirstOrDefault(w=>w.Id==patientId);
-        if(helper is null||patient is null||helper==patient||helper.Person.Dead||helper.Person.Incapacitated||helper.Person.Mobility<.2||helper.Person.Manipulation<.2||MilitaryControlled(helper))return new(false,"需要一名能够移动和搬运、未征召的同伴");
+        if(patient is not null&&!SafetyWorkAllowed(patient.Tile))return new(false,"伤员位于安全范围之外，请先调整范围");
+        if(helper is null||patient is null||helper==patient||helper.Person.Dead||helper.Person.Incapacitated||helper.Person.Mobility<.2||helper.Person.Manipulation<.2||helper.Combat.Drafted)return new(false,"需要一名能够移动和搬运、未征召的同伴");
         if(!helper.Person.Can("care"))return new(false,"该物种不具备照料能力");
         if(helper.WaterEvacuating||FloodThreat(helper))return new(false,"照料者需要先撤离水患");
         if(!NeedsRescue(patient))return new(false,"目标不需要搬运或已有医疗床");
         if(ResidentHealth.Bleeding(patient.Person)>0)return new(false,"先原地止血，再搬运到医疗床");
         if(LifeReserved(patientId)||RescueReserved(patientId)||Workers.Any(w=>w!=helper&&w.Person.Activity is {Kind:"treat" or "care_supply" or "feed" or "food_supply"} a&&a.Target==patientId))return new(false,"已有同伴正在照料或搬运");
-        var approach=Navigation.FindNearest(helper.Tile,ItemPositions(patient.Tile).Where(Walkable),out var pickup);
+        var approach=ResidentNavigation.FindNearest(helper.Tile,ItemPositions(patient.Tile).Where(c=>Walkable(c)&&SafetyWorkAllowed(c)),out var pickup);
         if(approach is null)return new(false,"无法到达伤员旁边");
-        var beds=MedicalBeds.Where(c=>IsMedicalBed(c)&&!BedReserved(c)).OrderBy(c=>Math.Abs(c.X-patient.Tile.X)+Math.Abs(c.Z-patient.Tile.Z)).ToArray();
+        var beds=MedicalBeds.Where(c=>SafetyWorkAllowed(c)&&IsMedicalBed(c)&&!BedReserved(c)).OrderBy(c=>Math.Abs(c.X-patient.Tile.X)+Math.Abs(c.Z-patient.Tile.Z)).ToArray();
         foreach(var bed in beds)
         {
-            var route=Navigation.FindNearest(pickup,ItemPositions(bed).Where(c=>Walkable(c)&&MedicalBedsideFree(c,helper)&&Navigation.CanReach(c,pickup)),out var bedside);
+            var route=ResidentNavigation.FindNearest(pickup,ItemPositions(bed).Where(c=>SafetyWorkAllowed(c)&&Walkable(c)&&MedicalBedsideFree(c,helper)&&ResidentNavigation.CanReach(c,pickup)),out var bedside);
             if(route is null)continue;
             if(helper.Job is not null)Release(helper.Job);CancelResidentActivity(helper);
             helper.Person.Activity=new(){Kind="rescue_pickup",Target=patient.Id,Destination=pickup,RescueBed=bed,Origin=origin};
-            foreach(var c in approach)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=Navigation.Version;
+            foreach(var c in approach)helper.Path.Enqueue(c);helper.CheckedNavigationVersion=ResidentNavigation.Version;
             helper.Status="前往救援 → "+patient.Name;return new(true,helper.Status);
         }
         return new(false,beds.Length==0?"没有空闲医疗床；选中一张床设为医疗床":"医疗床不可达，请检查楼梯和通路");
@@ -89,11 +90,11 @@ public sealed partial class DemoWorld
         if(helper.Tile!=a.Destination){CancelResidentActivity(helper);helper.Status="救援路线中断";return true;}
         if(a.Kind=="rescue_pickup")
         {
-            var route=Navigation.FindNearest(helper.Tile,ItemPositions(bed).Where(c=>Walkable(c)&&MedicalBedsideFree(c,helper)&&Navigation.CanReach(c,helper.Tile)),out var destination);
+            var route=ResidentNavigation.FindNearest(helper.Tile,ItemPositions(bed).Where(c=>SafetyWorkAllowed(c)&&Walkable(c)&&MedicalBedsideFree(c,helper)&&ResidentNavigation.CanReach(c,helper.Tile)),out var destination);
             if(route is null){CancelResidentActivity(helper);return true;}
             if(patient.Job is not null)Release(patient.Job);CancelResidentActivity(patient);
             a.Kind="rescue_carry";a.Destination=destination;foreach(var c in route)helper.Path.Enqueue(c);
-            helper.CheckedNavigationVersion=Navigation.Version;CarryPosition(helper,patient);helper.Status="搬运 → "+patient.Name;
+            helper.CheckedNavigationVersion=ResidentNavigation.Version;CarryPosition(helper,patient);helper.Status="搬运 → "+patient.Name;
         }
         else
         {

@@ -10,6 +10,27 @@ public sealed class WorldNavigation
     private const int Columns = (DemoWorld.Width + ChunkSize - 1) / ChunkSize;
     private const int Rows = (DemoWorld.Depth + ChunkSize - 1) / ChunkSize;
     private readonly DemoWorld _world;
+    private readonly bool _residentRules;
+    private WorldNavigation? _residents;
+    public WorldNavigation Residents
+    {
+        get
+        {
+            if(_residents is not null)return _residents;
+            _residents=new(_world,true){Version=Version};
+            for(int x=0;x<Columns;x++)for(int z=0;z<Rows;z++)
+            {_residents._chunks[x,z].Candidates.UnionWith(_chunks[x,z].Candidates);_residents._chunks[x,z].Version=Version;}
+            return _residents;
+        }
+    }
+    private bool CanStand(Cell c)=>_world.Walkable(c)&&(!_residentRules||_world.SafetyTransitAllowed(c));
+    private bool CanStep(Cell a,Cell b)=>CanStand(b)&&_world.Connected(a,b)&&(!_residentRules||_world.SafetyEdgeAllowed(a,b));
+    public void InvalidatePermissions()
+    {
+        Version++;_residents?.InvalidatePermissions();
+        if(!_residentRules)return;
+        _dirty=true;foreach(var chunk in _chunks){chunk.Dirty=true;chunk.Version=Version;}
+    }
     private readonly Dictionary<Cell, Node> _nodes = new();
     private readonly Dictionary<int, Region> _regions = new();
     private readonly Chunk[,] _chunks = new Chunk[Columns, Rows];
@@ -61,8 +82,9 @@ public sealed class WorldNavigation
         public readonly HashSet<Cell> Candidates = new();
     }
 
-    public WorldNavigation(DemoWorld world)
+    public WorldNavigation(DemoWorld world,bool residentRules=false)
     {
+        _residentRules=residentRules;
         _world = world;
         for (int x = 0; x < Columns; x++)
             for (int z = 0; z < Rows; z++) _chunks[x, z] = new Chunk();
@@ -71,6 +93,7 @@ public sealed class WorldNavigation
 
     public void Invalidate(Cell changed)
     {
+        _residents?.Invalidate(changed);
         Version++;
         _dirty = true;
         if (DemoWorld.Inside(changed))
@@ -103,7 +126,7 @@ public sealed class WorldNavigation
             if (!DemoWorld.Inside(from) || !DemoWorld.Inside(to)) return false;
             if (_chunks[from.X / ChunkSize, from.Z / ChunkSize].Version > checkedVersion ||
                 _chunks[to.X / ChunkSize, to.Z / ChunkSize].Version > checkedVersion)
-                if (!_world.Walkable(from) || !_world.Walkable(to) || (from != to && !_world.Connected(from, to))) return false;
+                if (!CanStand(from) || !CanStand(to) || (from != to && !CanStep(from,to))) return false;
             from = to;
         }
         return true;
@@ -221,9 +244,9 @@ public sealed class WorldNavigation
         // navigation nodes. Walkable remains the authority for every candidate.
         foreach (var cell in chunk.Candidates)
         {
-            if (!_world.Walkable(cell)) continue;
+            if (!CanStand(cell)) continue;
             var node = new Node(cell);
-            node.Edges = _world.Neighbors(cell).Where(next => _world.Connected(cell, next)).ToArray();
+            node.Edges = _world.Neighbors(cell).Where(next => CanStep(cell,next)).ToArray();
             _nodes.Add(cell, node); chunk.Cells.Add(cell);
             if (node.Edges.Any(next => next.X / ChunkSize != x || next.Z / ChunkSize != z || cell.Level-next.Level==2)) chunk.Portals.Add(node);
         }

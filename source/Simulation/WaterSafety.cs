@@ -57,10 +57,10 @@ public sealed partial class DemoWorld
     }
     private bool FloodThreat(DemoWorker w) => Fluids.Amount(w.Tile)>=EvacuationWater ||
         w.Path.Any(c=>Fluids.Amount(c)>=500);
-    private bool DryRefuge(Cell c) => Walkable(c) && Fluids.Amount(c)<EvacuationWater &&
+    private bool DryRefuge(Cell c) => SafetyTransitAllowed(c)&&Walkable(c) && Fluids.Amount(c)<EvacuationWater &&
         !FluidSimulation.Adjacent.Any(d=>Fluids.Amount(c+d)>=500) &&
         !Jobs.Any(j=>PlannedHazard(j,c));
-    private bool EscapeStep(Cell from,Cell to) => ConnectedCore(from,to,true) &&
+    private bool EscapeStep(Cell from,Cell to) => SafetyEscapeStep(from,to)&&ConnectedCore(from,to,true) &&
         Fluids.Amount(to)<500 && (Fluids.Amount(from)<EvacuationWater || Fluids.Amount(to)<=Fluids.Amount(from));
     private Queue<Cell>? FindWaterEscape(Cell start)
     {

@@ -8,10 +8,13 @@
   <ItemGroup>
     <Compile Include="../Simulation/*.cs;../Services/Llm/*.cs;../MenuLogic/*.cs" />
     <EmbeddedResource Include="../Assets/Combat/*.json;../Assets/Definitions/*.xml" LogicalName="NoDwarf.%(Filename)%(Extension)" />
-    <!-- Transitional snapshot/benchmark access; gameplay still has one implementation. -->
+    <!-- Scene adapter access; checks and benchmarks are development-only friends. -->
     <InternalsVisibleTo Include="NoDwarf" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
     <InternalsVisibleTo Include="NavigationBench" />
     <InternalsVisibleTo Include="CoreChecks" />
+    <InternalsVisibleTo Include="NoDwarf.SimulationChecks" />
     <InternalsVisibleTo Include="ExtensionChecks" />
   </ItemGroup>
 </Project>

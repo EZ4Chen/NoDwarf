@@ -89,22 +89,12 @@ public partial class Main
         else return false;
         GetViewport().SetInputAsHandled();return true;
     }
-    public sealed class SessionState
-    {
-        [System.Text.Json.Serialization.JsonRequired] public int Version {get;set;}=2;
-        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        public WorldSnapshot? WorldState {get;set;}
-        [System.Text.Json.Serialization.JsonRequired] public int TickRate {get;set;}=SimulationClock.BaseTicksPerSecond;
-        public long Tick {get;set;} public int Speed {get;set;} public bool Paused {get;set;} public double Pending {get;set;}
-        public bool Developer {get;set;} public bool Creative {get;set;}
-        public Cell? FoundationMin {get;set;} public Cell? FoundationMax {get;set;} public int Floor {get;set;} public int FloorHeight {get;set;}=3;
-        public int LayerOffset {get;set;} public int Placement {get;set;} public bool HeightSelected {get;set;}
-        public int ViewMode {get;set;} public bool TopDown {get;set;} public float Yaw {get;set;} public float Zoom {get;set;}
-        public float Pitch {get;set;}=DefaultCameraPitch;
-        public float FocusX {get;set;} public float FocusY {get;set;} public float FocusZ {get;set;}
-    }
     private string? _activeSavePath;
-    private string SavePath=>_activeSavePath??ProjectSettings.GlobalizePath(OS.GetCmdlineUserArgs().Contains("--colony-preview-test")?"res://.local/test-colony-save.json":"user://saves/colony-save.json");
+    private string SavePath=>_activeSavePath??ProjectSettings.GlobalizePath(
+#if NODWARF_CHECKS
+        OS.GetCmdlineUserArgs().Contains("--colony-preview-test")?"res://.local/test-colony-save.json":
+#endif
+        "user://saves/colony-save.json");
     private string ReadSavePath=>SavePath;
     private readonly SaveService _saveService=new();
     private Task<bool>? _saveTask;
@@ -172,22 +162,6 @@ public partial class Main
         }
         _loadDialog.PopupCentered();
     }
-    public sealed record PreparedSession(SessionState State,DemoWorld World,SimulationClock Clock,FoundationPlan? Foundation,TerrainView.ForestData Forest,WorldOverview.MapData Map);
-    public static PreparedSession PrepareSession(string path)
-    {
-        if(new FileInfo(path).Length>64*1024*1024)throw new InvalidDataException("存档文件过大。");
-        var s=JsonSerializer.Deserialize<SessionState>(File.ReadAllText(path),DemoWorld.SaveOptions)??throw new InvalidDataException("无效存档。");
-            if(!float.IsFinite(s.Pitch)||s.Pitch<MinCameraPitch||s.Pitch>MaxCameraPitch)throw new InvalidDataException("视角俯仰无效。");
-            if(s.Version!=2)throw new InvalidDataException("不支持的存档版本。开发阶段请新建游戏；原存档未改写。");
-            if(s.ViewMode is <0 or >3||s.Placement is <-1 or >1||!float.IsFinite(s.Yaw)||!float.IsFinite(s.Zoom)||s.Zoom is <12 or >240||!float.IsFinite(s.FocusX)||!float.IsFinite(s.FocusY)||!float.IsFinite(s.FocusZ))throw new InvalidDataException("视图存档无效。");
-            if(s.WorldState is null)throw new InvalidDataException("世界存档结构无效。");
-            var loaded=DemoWorld.LoadSnapshot(s.WorldState!);var clock=new SimulationClock();clock.Restore(s.Tick,s.Speed,s.Paused,s.Pending,s.TickRate);
-            FoundationPlan? foundation=null;
-            if(s.FoundationMin is Cell a&&s.FoundationMax is Cell b){if(!DemoWorld.Inside(a)||!DemoWorld.Inside(b))throw new InvalidDataException("地基越界。");foundation=new FoundationPlan(a,b);foundation.SetFloorHeight(s.FloorHeight);foundation.Step(s.Floor);}
-            int level=(foundation?.WorldLevel??loaded.Camp.Level)+s.LayerOffset;
-            if(level<=TerrainMap.MinLevel||level>TerrainMap.MaxLevel)throw new InvalidDataException("视图高度越界。");
-        return new(s,loaded,clock,foundation,TerrainView.PrepareForest(loaded),WorldOverview.PrepareMap(loaded));
-    }
     private void ApplyPreparedSession(PreparedSession prepared)
     {
         var (s,loaded,clock,foundation,forest,map)=prepared;
@@ -217,77 +191,27 @@ public partial class Main
             var result=await Task.Run(()=>
             {
                 long started=System.Diagnostics.Stopwatch.GetTimestamp();
-                var prepared=PrepareSession(readPath);
+                var prepared=SessionPreparation.Prepare(readPath);
                 return (prepared,ms:System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
             });
             if(!SessionAlive||_world!=owner||SavePath!=path||_sessionLeaving)return;
             _sessionPrepareMs=result.ms;
+#if NODWARF_CHECKS
             bool measurePublish=OS.GetCmdlineUserArgs().Contains("--session-async-test");
             if(measurePublish)result.prepared.World.Probe=new PerformanceProbe();
+#endif
             long published=System.Diagnostics.Stopwatch.GetTimestamp();
             ApplyPreparedSession(result.prepared);
             _world.Log("营地已恢复，可继续搬运、施工与生产。");
             RefreshUi();
             _sessionPublishMs=System.Diagnostics.Stopwatch.GetElapsedTime(published).TotalMilliseconds;
+#if NODWARF_CHECKS
             if(measurePublish){GD.Print("SESSION_PUBLISH_PROFILE: "+JsonSerializer.Serialize(_world.Probe!.Report()));_world.Probe=null;}
+#endif
         }
         catch(Exception e)
         {if(SessionAlive&&_world==owner){owner.Log("读取失败，保留当前营地："+e.Message);RefreshUi();}}
         finally{_loadTask=null;owner=null!;}
     }
 
-}
-
-public partial class Main
-{
-    private async void CaptureColonyPreview()
-    {
-        try
-        {
-            _world=new DemoWorld();_world.DeveloperResidents(false);_overview.World=_world;_terrainRevision=-1;
-            _world.QueueBlueprint(_world.Camp,DemoWorld.ExampleBlueprint());_world.DeveloperFinishPlans();
-            _world.SpawnItem("raw_iron",6,_world.Camp+new Cell(3,8));
-            _world.SetStockpile(_world.Camp+new Cell(0,8),_world.Camp+new Cell(5,9));
-            _foundation=new FoundationPlan(_world.Camp,_world.Camp+new Cell(5,4));_heightSelected=true;_layerOffset=0;
-            _focus=WorldPosition(_world.Camp+new Cell(2,4));_camera.Size=17;_cameraYaw=0;PositionCamera();CreatePeople();DrawFoundation();
-            async Task Snap(string name)
-            {
-                await ToSignal(GetTree(),SceneTree.SignalName.PhysicsFrame);
-                await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);
-                await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
-                if(GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://.local/{name}.png"))!=Error.Ok)throw new IOException("Screenshot failed");
-            }
-            SetViewMode(3);await Snap("colony-walls");
-            if(!_floorWalls||_interiorView||CurrentView.Top!=ActiveLevel+2)throw new InvalidOperationException("Full floor walls must omit ceiling and upper floors");
-            SetViewMode(1);await Snap("colony-cutaway");
-            ToggleTopDown();await Snap("colony-topdown");
-            var target=_world.Camp+new Cell(2,2);
-            if(Pick(_camera.UnprojectPosition(WorldPosition(target)),1)!=target)throw new InvalidOperationException("Top-down picking must hit same floor cell");
-            SyncWorld();
-            var raw=_world.Items.Single(i=>i.Item=="raw_iron");
-            ulong itemNode=_itemNodes[raw.Id].Root.GetInstanceId(),buildingNode=_structures.GetChild(0).GetInstanceId();
-            _world.SpawnItem("raw_iron",1,raw.Cell);SyncWorld();
-            if(_itemNodes[raw.Id].Root.GetInstanceId()!=itemNode||_structures.GetChild(0).GetInstanceId()!=buildingNode||_itemNodes[raw.Id].Label.Text!="7")
-                throw new InvalidOperationException("Stock count change rebuilt unchanged geometry or failed label update");
-            if(!_world.QueueSmelt())throw new InvalidOperationException("Preview smelting order unavailable");
-            _world.DeveloperPlace(_world.Camp+new Cell(3,1),BuildKind.Stove);
-            if(!_world.QueueCook())throw new InvalidOperationException("Preview cooking order unavailable");
-            _orbitPitch=Mathf.DegToRad(55);
-            await SaveSessionAsync();if(!File.Exists(SavePath))throw new InvalidOperationException("Session save missing");
-            _world.Items.Clear();_topDown=false;_orbitPitch=MinCameraPitch;await LoadSessionAsync();
-            if(!_topDown||_world.Total("raw_iron")!=7||!_world.Jobs.Any(j=>j.Smelt)||_world.Workers.Count!=0||_foundation?.WorldLevel!=_world.Camp.Level)throw new InvalidOperationException("Session restore lost world, editor or camera state");
-            ToggleTopDown();_inspector.Show();RefreshUi();await Snap("colony-orders");
-            if(!Mathf.IsEqualApprox(_cameraPitch,Mathf.DegToRad(55)))throw new InvalidOperationException("Session restore lost saved pitch");
-            if(new SessionState().Pitch!=DefaultCameraPitch)throw new InvalidOperationException("Default camera angle changed");
-            var order=_world.Jobs.Single(j=>j.Smelt);
-            if(!_billRows.TryGetValue(order.ProductionOrderId,out var row)||!row.Count.TooltipText.Contains("尚未启用居民"))throw new InvalidOperationException("Order list must show individual waiting reason");
-            _world.RemoveProductionOrder(order.ProductionOrderId);RefreshOrders();
-            if(_world.Jobs.Any(j=>j.Smelt)||_world.Available("raw_iron")!=7||_billRows.ContainsKey(order.ProductionOrderId))throw new InvalidOperationException("Per-order cancel must release reservations and remove its row");
-            if(_inspector.GetGlobalRect().Intersects(_buildTab.GetGlobalRect()))throw new InvalidOperationException("Order panel blocks bottom tabs");
-            _inspector.Hide();_worldMenu.Show();await Snap("colony-save-menu");
-            if(_worldMenu.GetGlobalRect().Intersects(_buildTab.GetGlobalRect()))throw new InvalidOperationException("Save panel blocks bottom tabs");
-            GD.Print("COLONY_UI_OK: full walls, cutaway, top-down picking, stock rendering, session roundtrip and panel bounds");GetTree().Quit();
-        }
-        catch(Exception e){GD.PushError(e.ToString());GetTree().Quit(1);}
-    }
 }

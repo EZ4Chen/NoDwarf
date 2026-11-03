@@ -67,12 +67,12 @@ public sealed partial class DemoWorld
     }
     public void RefreshLifeAlerts()
     {
-        LifeAlerts.Clear();AddWaterAlerts();var alive=Workers.Where(w=>!w.Person.Dead).ToArray();if(alive.Length==0)return;
+        LifeAlerts.Clear();AddWaterAlerts();AddSafetyAlerts();AddStorageAlerts();AddSupplyAlerts();var alive=Workers.Where(w=>!w.Person.Dead).ToArray();if(alive.Length==0)return;
         int meals=AvailableFood(),personal=Items.Where(s=>s.Owner!=""&&CanEat(s)).Sum(s=>s.Count),raw=Items.Where(s=>s.Owner==""&&Content.Item(s.Item).Category=="food_ingredient").Sum(s=>s.Count);
         double nutrition=Items.Where(CanEat).Sum(s=>s.Count*Content.Item(s.Item).Edible!.Nutrition);
         double days=nutrition/(alive.Length*.035*600);
         if(days<2)LifeAlerts.Add(new("food",$"口粮约 {days:F1} 天：公共 {meals}／随身 {personal}，食材 {raw}（未计收成）",2,Location:Items.FirstOrDefault(CanEat)?.Cell));
-        if(Available("water_bucket")==0)LifeAlerts.Add(new("water","饮水不足：检查水桶、取水点及安全通路",2));
+        if(AvailableForUse("water_bucket","care")==0)LifeAlerts.Add(new("water","饮水不足：检查水桶、取水点及安全通路",2));
         foreach(var w in alive)
         {
             var p=w.Person;
@@ -84,7 +84,7 @@ public sealed partial class DemoWorld
             if(p.ColdExposure>0||p.HeatExposure>0)Add("temperature",$"冷热伤害 · 当前 {TemperatureAt(w.Tile):F0}°C，需要安全住所",1);
             if(NeedsRescue(w)&&!RescueReserved(w.Id))Add("rescue",MedicalBeds.Any(IsMedicalBed)?"等待照料者搬运，请检查通路":"等待救援，没有医疗床",1);
             if(HealthCare.Needed(p)&&!Workers.Any(m=>m.Person.Activity is {Kind:"treat" or "care_supply"} a&&a.Target==w.Id))
-                Add("care",Available("bandage")==0&&!Items.Any(s=>s.Item=="bandage"&&s.Owner!="")?"缺绷带（布料不等于成品）":"等待医生，请启用医疗工作",1);
+                Add("care",AvailableForUse("bandage","care")==0&&!Items.Any(s=>s.Item=="bandage"&&s.Owner!="")?"缺绷带（布料不等于成品）":"等待医生，请启用医疗工作",1);
         }
         LifeAlerts.Sort((a,b)=>a.Priority.CompareTo(b.Priority));
     }
@@ -94,7 +94,7 @@ public sealed partial class DemoWorld
         foreach(var patient in Workers.Where(w=>!w.Person.Dead&&HealthCare.Urgency(w.Person)==0&&!RescueReserved(w.Id)).OrderBy(w=>HealthCare.TimeToBleedOut(w.Person)).Take(4))
         {
             if(Workers.Any(m=>m.Person.Activity is {Kind:"treat" or "care_supply"} a&&a.Target==patient.Id))continue;
-            var medic=Workers.Where(m=>!m.WaterEvacuating&&!FloodThreat(m)&&!m.Person.Dead&&!m.Person.Incapacitated&&!MilitaryControlled(m)&&m.Person.WorkPriorities.GetValueOrDefault("doctor")>0&&m.Person.Manipulation>=.05&&m.Person.Mobility>=.05&&m.Person.Hunger>=10&&m.Person.Thirst>=10&&m.Person.Activity?.Kind is not ("treat" or "care_supply" or "rescue_carry" or "life_use"))
+            var medic=Workers.Where(m=>!m.WaterEvacuating&&!FloodThreat(m)&&!m.Person.Dead&&!m.Person.Incapacitated&&!m.Combat.Drafted&&m.Person.WorkPriorities.GetValueOrDefault("doctor")>0&&m.Person.Manipulation>=.05&&m.Person.Mobility>=.05&&m.Person.Hunger>=10&&m.Person.Thirst>=10&&m.Person.Activity?.Kind is not ("treat" or "care_supply" or "rescue_carry" or "life_use"))
                 .OrderBy(m=>Math.Abs(m.X-patient.X)+Math.Abs(m.Z-patient.Z));
             foreach(var m in medic.Take(4))if(BeginResidentActivity(m,"treat",patient.Id,origin:"emergency").Ok)break;
         }

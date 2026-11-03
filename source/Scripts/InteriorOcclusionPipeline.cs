@@ -23,10 +23,14 @@ public partial class Main
     private void ConfigureInteriorThreads()
     {
         var args=OS.GetCmdlineUserArgs();
+#if NODWARF_CHECKS
         // Synchronous checks make immediate geometry assertions. The dedicated thread
         // review tests the asynchronous path; normal play and TPS reviews use it too.
         bool immediateCheck=args.Any(a=>(a.EndsWith("-test")||a.EndsWith("-review"))&&a is not "--tps-test" and not "--interior-thread-test");
         _backgroundInterior=!args.Contains("--interior-sync")&&(!immediateCheck||args.Contains("--interior-async"));
+#else
+        _backgroundInterior=!args.Contains("--interior-sync");
+#endif
     }
     private bool SetInteriorCaps(IReadOnlyDictionary<Cell,float>? caps)
     {

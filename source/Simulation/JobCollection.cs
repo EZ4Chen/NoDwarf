@@ -20,6 +20,12 @@ public sealed class JobCollection : IReadOnlyList<DemoJob>
         set {ArgumentNullException.ThrowIfNull(value);if(ReferenceEquals(_items[index],value))return;_prepare?.Invoke(value);Unindex(_items[index]);_items[index]=value;Index(value);Version++;}
     }
     public void Add(DemoJob job){ArgumentNullException.ThrowIfNull(job);_prepare?.Invoke(job);_items.Add(job);Index(job);Version++;}
+    public void Move(DemoJob job,Cell destination)
+    {
+        if(!_items.Contains(job))throw new ArgumentException("Task does not belong to this collection",nameof(job));
+        if(job.Cell==destination)return;
+        Unindex(job);job.Relocate(destination);Index(job);Version++;
+    }
     public bool Remove(DemoJob job){if(!_items.Remove(job))return false;Unindex(job);Version++;return true;}
     public void Clear(){if(_items.Count==0)return;_items.Clear();_byCell.Clear();Version++;}
     public bool Contains(DemoJob job)=>_items.Contains(job);

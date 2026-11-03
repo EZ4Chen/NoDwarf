@@ -9,4 +9,5 @@
     <ProjectReference Include="../source/Core/NoDwarf.Core.csproj" />
   </ItemGroup>
   <ItemGroup><EmbeddedResource Include="../source/Assets/Definitions/plant-growth.xml" LogicalName="NoDwarf.plant-growth.xml" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../tools/checks/simulation/SimulationChecks.csproj" /></ItemGroup>
 </Project>

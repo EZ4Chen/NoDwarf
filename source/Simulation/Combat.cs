@@ -63,12 +63,13 @@ public sealed partial class DemoWorld
     {
         var w=Workers.FirstOrDefault(w=>w.Id==id);
         if(w is null||!w.Combat.Drafted||!Fighting(w)||w.Person.Mobility<.05)return new(false,"请先征召可移动的居民");
+        if(!SafetyTransitAllowed(destination))return new(false,"目的地位于禁行区；征召不能绕过限制");
         var landing=AvailableMilitaryDestination(w,destination);
         if(landing is null)return new(false,"目的地或附近同层位置不可达／已占用");
         destination=landing.Value;
-        var path=FindPath(w.Tile,destination);if(path is null)return new(false,"目的地不可达");
+        var path=NavigationFor(w).FindPath(w.Tile,destination);if(path is null)return new(false,"目的地不可达");
         InterruptForOrders(w);w.Combat.Destination=destination;
-        foreach(var c in path)w.Path.Enqueue(c);w.CheckedNavigationVersion=Navigation.Version;
+        foreach(var c in path)w.Path.Enqueue(c);w.CheckedNavigationVersion=NavigationFor(w).Version;
         return new(true,"前往指定位置");
     }
     public ResidentResult MilitaryAttack(string id,string target)
@@ -84,7 +85,7 @@ public sealed partial class DemoWorld
     }
     public ResidentResult SetRallyPoint(Cell c)
     {
-        if(!Walkable(c))return new(false,"集合点需要可站立地面");
+        if(!Walkable(c)||!SafetyWorkAllowed(c))return new(false,"集合点需要安全范围内的可站立地面");
         RallyPoint=c;
         if(CivilianAlert)foreach(var w in Workers.Where(w=>!w.Combat.Drafted))InterruptForOrders(w);
         Revision++;return new(true,"已设置平民集合点");
@@ -92,6 +93,7 @@ public sealed partial class DemoWorld
     public ResidentResult SetCivilianAlert(bool enabled)
     {
         if(enabled&&RallyPoint is null)return new(false,"请先在地面设置集合点");
+        if(enabled&&RallyPoint is Cell point&&!SafetyWorkAllowed(point))return new(false,"集合点不在安全作业范围内，请先调整");
         CivilianAlert=enabled;
         foreach(var w in Workers.Where(w=>!w.Combat.Drafted)){InterruptForOrders(w);w.NextJobSearch=0;}
         Log(enabled?"集合警报：平民暂停工作并前往集合点。":"警报解除：重新检查并分配工作。");return new(true,enabled?"集合警报已开启":"集合警报已解除");
@@ -133,6 +135,9 @@ public sealed partial class DemoWorld
         if(!Fighting(w)){CancelMelee(w);if(w.Job is not null)Release(w.Job);CancelResidentActivity(w);w.Status=w.Person.Dead?"已死亡":"失能 · 等待照料";return true;}
         if(!enemy&&!state.Drafted)
         {
+            if(w.Person.Activity?.Kind is "eat" or "food_supply" or "feed" or "care_supply" or "treat" or "life_supply" or "life_use" or "water_fill" or "rescue_pickup" or "rescue_carry")return false;
+            if(RallyPoint is Cell restricted&&!SafetyWorkAllowed(restricted)){StopMovement(w);state.Destination=null;w.Status="集合点被安全范围限制，请调整范围或集合点";return true;}
+            if(state.Destination is Cell previous&&!SafetyWorkAllowed(previous)){StopMovement(w);state.Destination=null;state.RetryAt=0;}
             if(state.Destination is null&&RallyPoint is Cell point&&_simulationTime>=state.RetryAt&&budget>0)
             {budget--;state.Destination=AvailableMilitaryDestination(w,point);state.RetryAt=_simulationTime+2;if(state.Destination is null)w.Status="集合点及附近同层位置不可达／已占用";}
             if(state.Destination is Cell assigned&&w.Tile==assigned)
@@ -175,9 +180,9 @@ public sealed partial class DemoWorld
             {
                 budget--;state.RetryAt=_simulationTime+1;StopMovement(w);
                 var candidates=MeleeApproachCells(w,target).Where(c=>!MilitaryStandReserved(w,c)).ToArray();
-                var path=Navigation.FindNearest(w.Tile,candidates,out _);
+                var path=NavigationFor(w).FindNearest(w.Tile,candidates,out _);
                 if(path is not null)foreach(var c in path)w.Path.Enqueue(c);
-                w.CheckedNavigationVersion=Navigation.Version;w.Status=path is null?"目标不可达 · 等待":"接近 "+target.Name;
+                w.CheckedNavigationVersion=NavigationFor(w).Version;w.Status=path is null?"目标不可达 · 等待":"接近 "+target.Name;
             }
             StepMilitary(w,dt,ref budget);return true;
         }
@@ -203,8 +208,8 @@ public sealed partial class DemoWorld
         if(w.Path.Count==0&&_simulationTime>=w.Combat.RetryAt&&budget>0)
         {
             budget--;w.Combat.RetryAt=_simulationTime+2;
-            var path=FindPath(w.Tile,destination);if(path is not null)foreach(var c in path)w.Path.Enqueue(c);
-            w.CheckedNavigationVersion=Navigation.Version;w.Status=path is null?blocked:"前往集合／指令位置";
+            var path=NavigationFor(w).FindPath(w.Tile,destination);if(path is not null)foreach(var c in path)w.Path.Enqueue(c);
+            w.CheckedNavigationVersion=NavigationFor(w).Version;w.Status=path is null?blocked:"前往集合／指令位置";
         }
         StepMilitary(w,dt,ref budget);
     }

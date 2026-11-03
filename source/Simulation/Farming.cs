@@ -170,7 +170,7 @@ public sealed partial class DemoWorld
             if(Plants.ContainsKey(cell)){QueuePlantHarvest(cell);continue;}
             if(CropCatalog.IsTree(p.Crop))
             {
-                if(GrowingZoneAt(cell)?.AllowSowing==true&&Plantable(cell)&&Available(CropSeed(p.Crop))>0&&!Jobs.At(cell).Any(j=>j.Forestry))QueueTree(cell,false,p.Crop);
+                if(GrowingZoneAt(cell)?.AllowSowing==true&&Plantable(cell)&&AvailableForUse(CropSeed(p.Crop),"growing")>0&&!Jobs.At(cell).Any(j=>j.Forestry))QueueTree(cell,false,p.Crop);
                 continue;
             }
             if(FarmEnvironment(p)!=""||ClimateRules.TemperatureFactor(p.Crop,FarmClimate(p).Temperature)==0)
@@ -211,7 +211,7 @@ public sealed partial class DemoWorld
         if(Trees.TryGetValue(p.Cell,out var tree))return $"{CropName(tree.Species)} {tree.Height} m · 成长 {TreeAge(tree)/GrowTime(tree.Species):P0}（伐木由命令指定）";
         if(Plants.TryGetValue(p.Cell,out var plant))return PlantStatus(plant);
         if(GrowingZoneAt(p.Cell)?.AllowSowing==false)return "已暂停播种；现有作物仍生长并收获";
-        if(CropCatalog.IsTree(p.Crop))return !Plantable(p.Cell)?"树木需露天土壤、14 米净空和 4 米树间距（含待种树苗）":Available(CropSeed(p.Crop))==0&&!Jobs.Any(j=>j.PlantTree&&j.Cell==p.Cell)?"等待：缺少树苗":"等待居民种树";
+        if(CropCatalog.IsTree(p.Crop))return !Plantable(p.Cell)?"树木需露天土壤、14 米净空和 4 米树间距（含待种树苗）":AvailableForUse(CropSeed(p.Crop),"growing")==0&&!Jobs.Any(j=>j.PlantTree&&j.Cell==p.Cell)?"等待：缺少树苗":"等待居民种树";
         string issue=FarmEnvironment(p);if(issue!="")return "暂停："+issue;
         var climate=FarmClimate(p);
         if(ClimateRules.TemperatureFactor(p.Crop,climate.Temperature)==0)return "等待播种："+climate.Issue;
@@ -220,11 +220,11 @@ public sealed partial class DemoWorld
         {
             if(sow.Worker>=0)return sow.Materials.All(r=>r.Stage==2)?"正在播种":"正在取料／搬入种子";
             if(Workers.Count==0)return "等待：启用居民耕作";
-            if(!Workers.Any(w=>ActionPositions(sow).Any(c=>Navigation.CanReach(w.Tile,c))&&CanSupply(w,sow)))return "等待：田地或种子不可达";
+            if(!Workers.Any(w=>ActionPositions(sow).Any(c=>ResidentNavigation.CanReach(w.Tile,c))&&CanSupply(w,sow)))return "等待：田地或种子不可达";
             return "等待居民播种";
         }
-        if(Available(CropSeed(p.Crop))<1)return "等待：缺少"+Content.Item(CropSeed(p.Crop)).Name;
-        if(p.Crop=="mushroom"&&!p.Prepared&&Available("soil")<1)return "等待：首次铺设菌床需要 1 土壤";
+        if(AvailableForUse(CropSeed(p.Crop),"growing")<1)return "等待：缺少"+Content.Item(CropSeed(p.Crop)).Name;
+        if(p.Crop=="mushroom"&&!p.Prepared&&AvailableForUse("soil","growing")<1)return "等待：首次铺设菌床需要 1 土壤";
         return "等待播种";
     }
 }

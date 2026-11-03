@@ -19,8 +19,9 @@ public sealed class SimulationClock
         Speed = speed;
     }
 
-    public int Advance(double realSeconds)
+    public int Advance(double realSeconds,Action update)
     {
+        ArgumentNullException.ThrowIfNull(update);
         if (!double.IsFinite(realSeconds) || realSeconds < 0)
             throw new ArgumentOutOfRangeException(nameof(realSeconds));
         if (Paused) return 0;
@@ -29,6 +30,7 @@ public sealed class SimulationClock
         // Keep backlog rather than silently discarding simulation time.
         while (PendingSeconds + 1e-12 >= TickSeconds && count < 300)
         {
+            update();
             PendingSeconds = Math.Max(0, PendingSeconds - TickSeconds);
             Tick++;
             count++;
@@ -42,8 +44,11 @@ public sealed class SimulationClock
         if(savedTickRate!=BaseTicksPerSecond)throw new ArgumentException("Unsupported saved tick rate");
         SetSpeed(speed);Tick=tick;Paused=paused;PendingSeconds=pending;
     }
-    public void Step()
+    public void Step(Action update)
     {
-        if (Paused) Tick++;
+        ArgumentNullException.ThrowIfNull(update);
+        if (!Paused) return;
+        update();
+        Tick++;
     }
 }

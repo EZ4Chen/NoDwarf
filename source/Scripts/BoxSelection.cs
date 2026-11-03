@@ -12,7 +12,11 @@ public partial class Main
     private bool _leftMoved,_leftAdditive;
     private Panel? _marquee;
     private static bool AreaTool(string tool)=>tool is "growingzone" or "unfarm" or "stockpile" or "unstockpile" or "foundation" or "chop" or "placeblock";
-    private bool GestureTest=>OS.GetCmdlineUserArgs().Any(a=>a is "--camera-cutaway-test" or "--object-commands-test" or "--dig-volume-test" or "--interaction-test" or "--box-selection-test" or "--construction-line-test" or "--construction-preview-test" or "--designation-test");
+#if NODWARF_CHECKS
+    private bool GestureTest=>OS.GetCmdlineUserArgs().Any(a=>a is "--safety-areas-test" or "--camera-cutaway-test" or "--object-commands-test" or "--dig-volume-test" or "--interaction-test" or "--box-selection-test" or "--construction-line-test" or "--construction-preview-test" or "--designation-test");
+#else
+    private bool GestureTest=>false;
+#endif
     private bool IsResidentSelected(int i)=>_selectedWorker>=0&&_selectedWorker<_world.Workers.Count&&
         (i==_selectedWorker||_residentSelectionWorld==_world&&_selectedResidents.Contains(_world.Workers[_selectedWorker].Id)&&_selectedResidents.Contains(_world.Workers[i].Id));
     private int[] SelectedResidents()=>Enumerable.Range(0,_world.Workers.Count).Where(IsResidentSelected).ToArray();
@@ -178,7 +182,7 @@ public partial class Main
             {if(_world.MilitaryMove(worker.Id,goal).Ok)moved++;else skipped++;continue;}
             if(_world.CivilianAlert||worker.Person.Incapacitated||worker.Person.Mobility<.05||worker.Job is not null||worker.Person.Activity is not null)
             {skipped++;continue;}
-            var path=_world.FindPath(worker.Tile,goal);if(path is null){skipped++;continue;}
+            var path=_world.ResidentNavigation.FindPath(worker.Tile,goal);if(path is null){skipped++;continue;}
             worker.Path.Clear();foreach(var step in path)worker.Path.Enqueue(step);moved++;
         }
         _world.Log($"移动命令：{moved} 人；跳过 {skipped} 人（工作中、无法行动、集合警报或路径不可达）。");RefreshUi();

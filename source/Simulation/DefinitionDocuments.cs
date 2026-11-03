@@ -49,7 +49,7 @@ internal static class DefinitionDocuments
             string id=(string?)e.Attribute("id")??"";string source=p.Id+"/"+f.Name+"/"+id;
             string[] fields=e.Name.LocalName switch
             {
-                "Item"=>["id","name","value","texture","color","category","weight","shelfLife","storySupply","abstract"],
+                "Item"=>["id","name","value","texture","color","category","weight","storageUnits","shelfLife","storySupply","abstract"],
                 "Block"=>["id","name","shape","color","durability","indestructible","abstract"],
                 _=>["id","name","block","handler","abstract"]
             };

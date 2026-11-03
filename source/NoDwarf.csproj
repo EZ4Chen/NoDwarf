@@ -12,4 +12,14 @@
     <Compile Remove="Simulation/**/*.cs;Services/Llm/**/*.cs;MenuLogic/**/*.cs;Core/**/*.cs" />
     <ProjectReference Include="Core/NoDwarf.Core.csproj" />
   </ItemGroup>
+  <!-- Editor/check builds only. Neither debug nor release exports include test code. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);NODWARF_CHECKS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' != 'Debug'">
+    <Compile Remove="Development/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <ProjectReference Include="../tools/checks/simulation/SimulationChecks.csproj" />
+  </ItemGroup>
 </Project>

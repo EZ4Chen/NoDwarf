@@ -20,7 +20,7 @@ if(args.Length>0&&args[0]=="--sample")
     var w=CombatChecks.Fixture();var station=new Cell(62,61);w.Buildings[station]=new(station,BuildKind.Furnace);
     w.SpawnItem("copper:ore",2,new(61,61));w.SpawnItem("coal",1,new(61,61));
     foreach(var r in w.Workers){r.Person.WorkPriorities["crafting"]=1;r.Person.WorkPriorities["smelting"]=1;}
-    Check(w.QueueProcessing("copper:smelt"),"XML recipe queued");Advance(w,60);
+    Check(w.QueueProductionRecipe("copper:smelt"),"XML recipe queued");Advance(w,60);
     Check(w.Total("copper:ingot")==1&&w.Total("copper:ore")==0,"XML recipe executed");
     Check(ValueCatalog.Base("copper:ingot")==10&&w.Values(true).Items>=10,"new content valuation");
     long creature=w.SpawnCreature("copper:grazer",new(75,75));Advance(w,4);

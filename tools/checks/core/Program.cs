@@ -51,4 +51,12 @@ Console.WriteLine("JOB_CACHE_OK: stable ticks, live ownership, unrelated revisio
 Check(ItemCatalog.Get("cloth") is not null&&ProductionCatalog.Get("cloth") is not null,"Production resource missing");
 Check(CreatureCatalog.Default.Species.ContainsKey("base:dwarf"),"Creature resource missing");
 ToolEquipmentChecks.Run();CreatureChecks.Run();ProductionBillChecks.Run();
+ProductionStructureChecks.Run();
+DoorAccessChecks.Run();
+SafetyAreaChecks.Run();
+StorageCapacityChecks.Run();
+SupplyControlChecks.Run();
+FoodSchedulingChecks.Run();
+LifeFacilitiesChecks.Run();
+ClockCommitChecks.Run();TickRateChecks.Run();
 Console.WriteLine("CORE_CHECKS_OK: shared core resources, job cache, resource cache, creatures and production");

@@ -8,6 +8,8 @@
 
 - [`source/`](source/)：Godot 工程、C# 源码、场景和运行所需资源。
 - [`source/README.md`](source/README.md)：功能说明、操作方式、验证入口及开发记录。
+- [`source/Development/`](source/Development/)：仅开发构建使用的场景检查、截图工具和人物原型资源。
+- [`tools/checks/`](tools/checks/)：独立模拟检查、统一检查入口与发行程序集检查。
 - [`benchmarks/`](benchmarks/)：寻路、模拟与性能检查。
 - [文档目录](docs/README.md)：玩家说明、版本计划与设计文档。
 - [开发版本计划](docs/开发版本计划.md)：版本目标与待完成工作。
@@ -18,6 +20,17 @@
 项目当前配置为 **Godot 4.7.2 .NET** 和 **.NET SDK 8.0.426**。请使用支持 C# 的 Godot .NET 版本；具体配置见 `source/NoDwarf.csproj` 和 `source/global.json`。
 
 工具本体、缓存、存档和构建产物不进入 Git。克隆仓库后需要自行准备开发环境。
+
+### 一键启动（Windows / macOS）
+
+两端的双击入口统一放在**仓库根目录**，安装好下方工具后即可使用：
+
+| 操作 | Windows | macOS |
+| --- | --- | --- |
+| 启动游戏 | 双击 `运行游戏.cmd` | 双击 `运行游戏.command` |
+| 打开编辑器 | 双击 `打开编辑器.cmd` | 双击 `打开编辑器.command` |
+
+脚本自动定位项目、配置工具路径、编译并导入资源，再启动游戏或编辑器，无需手动输入命令。失败时保留终端显示错误，按键后关闭。`source/tools/` 存放底层开发脚本。
 
 ### macOS
 
@@ -39,7 +52,23 @@ bash source/tools/check.sh   # 现有回归检查
 
 ### Windows
 
-安装匹配的 Godot .NET 与 .NET SDK，保留 Godot 目录中的 `GodotSharp` 文件夹，然后在仓库根目录运行：
+安装匹配的 Windows x64 工具，推荐将官方 ZIP 解压到仓库内（这些目录已被 Git 忽略）：
+
+- `.tools/dotnet/dotnet.exe`：.NET SDK 8.0.426。
+- `.tools/godot/Godot_v4.7.2-stable_mono_win64/`：Godot 4.7.2 .NET，保留整个目录及 `GodotSharp`。
+
+从仓库根目录的 PowerShell 运行，脚本自动配置当前进程的工具路径和本地 NuGet 缓存，无需修改系统 PATH：
+
+```powershell
+./source/tools/windows.ps1 -Mode editor             # 打开编辑器
+./source/tools/windows.ps1 -Mode run                # 启动游戏
+./source/tools/windows.ps1 -Mode build              # 只编译
+./source/tools/windows.ps1 -Mode check -CheckGroup quick  # 核心离线检查
+./source/tools/windows.ps1 -Mode check              # 完整回归（含资源导入和界面）
+./source/tools/windows.ps1 -Mode check -Only "smoke,settings-ui"
+```
+
+首次打开编辑器会导入资源。也可用 `NODWARF_DOTNET_ROOT`、`NODWARF_GODOT_BIN` 指向已有安装，或单次传入 Godot 路径；没有项目内 SDK 时使用 PATH 中的 `dotnet`（仍需满足 `source/global.json`）：
 
 ```powershell
 ./source/tools/windows.ps1 -Godot "C:\Tools\Godot\Godot_v4.7.2-stable_mono_win64.exe" -Mode editor
@@ -63,6 +92,8 @@ git push origin v0.1.0-alpha.1
 ```
 
 标签只包含已经提交的代码。工作目录中的未提交修改不会进入安装包。使用 `v主版本.次版本.修订号` 格式；带 `-alpha.1`、`-beta.1` 等后缀会自动标为预发布。
+
+打包先运行开发构建的完整回归，再生成不含检查代码／资源的发行包。外部工具校验程序集和资源包，并从仓库外启动主菜单与营地场景；调试导出同样不包含检查程序集。
 
 两个平台都导出成功且安装包运行检查通过后，工作流才会创建 Release、上传两个 ZIP 和 `SHA256SUMS.txt`，最后发布。若上传中断，Release 保持草稿，重新运行失败任务可重试；已发布的同名版本不会被覆盖，应创建新版本标签。
 

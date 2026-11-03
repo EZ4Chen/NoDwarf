@@ -66,7 +66,7 @@ public sealed partial class ContentCatalog
         if(element.Name=="View")return "";
         string Value(XAttribute a)
         {
-            if(a.Name.LocalName is "value" or "count" or "work" or "health" or "defaultCount" or "speed" or "stepUp" or "dropDown" or "maxWater" or "thinkSeconds" or "limit" or "populationLimit" or "updateBudget" or "weight" or "shelfLife" or "nutrition" or "mood" or "diningBonus" or "feedingMood" or "minCount" or "maxCount" or "minDelay" or "maxDelay" or "minDuration" or "maxDuration" or "durability" or "veins" or "size" or "minDepth" or "maxDepth")
+            if(a.Name.LocalName is "value" or "count" or "work" or "health" or "defaultCount" or "speed" or "stepUp" or "dropDown" or "maxWater" or "thinkSeconds" or "limit" or "populationLimit" or "updateBudget" or "weight" or "storageUnits" or "shelfLife" or "nutrition" or "mood" or "diningBonus" or "feedingMood" or "minCount" or "maxCount" or "minDelay" or "maxDelay" or "minDuration" or "maxDuration" or "durability" or "veins" or "size" or "minDepth" or "maxDepth")
                 if(double.TryParse(a.Value,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out double n)&&double.IsFinite(n))return n.ToString("R",System.Globalization.CultureInfo.InvariantCulture);
             if(a.Name.LocalName is "vital" or "ladders" or "storySupply" && bool.TryParse(a.Value,out bool b))return b?"true":"false";
             return a.Value;
@@ -201,7 +201,7 @@ public sealed partial class ContentCatalog
             }
             string[] allowed=node.Name.LocalName switch
             {
-                "Item"=>new[]{"id","name","value","texture","color","category","weight","shelfLife","storySupply","description","parent","categories","tags"},
+                "Item"=>new[]{"id","name","value","texture","color","category","weight","storageUnits","shelfLife","storySupply","description","parent","categories","tags"},
                 "Recipe"=>new[]{"id","name","station","output","count","work"},
                 "Mode"=>new[]{"id","label","behavior","defaultCount"},
                 "Body"=>new[]{"id"},
@@ -210,7 +210,7 @@ public sealed partial class ContentCatalog
             };
             foreach(var attribute in node.Attributes())if(attribute.Name.Namespace!=XNamespace.None||!allowed.Contains(attribute.Name.LocalName))throw new InvalidDataException(Origin(attribute.Name.LocalName)+" 未支持的字段 "+attribute.Name);
             ValidateNested(node,origin:Origin(""));
-            foreach(string field in allowed.Where(f=>f is not ("controller" or "category" or "weight" or "shelfLife" or "storySupply" or "description" or "parent" or "categories" or "tags")))
+            foreach(string field in allowed.Where(f=>f is not ("controller" or "category" or "weight" or "storageUnits" or "shelfLife" or "storySupply" or "description" or "parent" or "categories" or "tags")))
             {
                 if(node.Attribute(field)?.Value is not {Length:>0})throw new InvalidDataException(Origin(field)+" 缺少字段 "+field);
                 if(field is "value" or "count" or "work" or "defaultCount" or "speed" or "stepUp" or "dropDown" or "maxWater" or "thinkSeconds" or "limit")

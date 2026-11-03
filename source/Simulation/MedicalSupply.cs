@@ -5,18 +5,19 @@ public sealed partial class DemoWorld
     {
         var patient=Workers.FirstOrDefault(w=>w.Id==patientId);
         if(patient is null||patient.Person.Dead||!HealthCare.Needed(patient.Person))return new(false,"伤员已不需要护理");
+        if(!SafetyWorkAllowed(patient.Tile))return new(false,"伤员不在允许照料的安全范围");
         if(Workers.Any(w=>w!=medic&&w.Person.Activity is {Kind:"treat" or "care_supply"} a&&a.Target==patientId))return new(false,"已有护理者负责这名伤员");
         RefreshWeight(medic);
         if(medic.Person.CarriedWeight+.25>medic.Person.Capacity)return new(false,"护理负重不足，请先放下物资");
-        var supplies=Items.Where(s=>s.Item=="bandage"&&s.Owner==""&&s.Count>Reserved(s.Id)).ToArray();
+        var supplies=Items.Where(s=>s.Item=="bandage"&&FreeForUse(s,"care")>0).ToArray();
         if(supplies.Length==0)return new(false,"护理缺料：没有可用的公共绷带");
         foreach(var stack in supplies.OrderBy(s=>Math.Abs(s.Cell.X-medic.Tile.X)+Math.Abs(s.Cell.Z-medic.Tile.Z)))
         {
-            var positions=ItemPositions(stack.Cell).Where(c=>Walkable(c)&&Navigation.CanReach(c,medic.Tile)&&CanReachAny(c,ItemPositions(patient.Tile).Where(Walkable).ToArray()));
-            var path=Navigation.FindNearest(medic.Tile,positions,out var destination);if(path is null)continue;
+            var positions=ItemPositions(stack.Cell).Where(c=>SafetySupplyAllowed(c)&&Walkable(c)&&ResidentNavigation.CanReach(c,medic.Tile)&&CanReachAny(c,ItemPositions(patient.Tile).Where(p=>Walkable(p)&&SafetyWorkAllowed(p)).ToArray()));
+            var path=ResidentNavigation.FindNearest(medic.Tile,positions,out var destination);if(path is null)continue;
             if(medic.Job is not null)Release(medic.Job);CancelResidentActivity(medic);
             medic.Person.Activity=new(){Kind="care_supply",Target=patientId,ItemId=stack.Id,Destination=destination,Origin=origin};
-            foreach(var c in path)medic.Path.Enqueue(c);medic.CheckedNavigationVersion=Navigation.Version;
+            foreach(var c in path)medic.Path.Enqueue(c);medic.CheckedNavigationVersion=ResidentNavigation.Version;
             medic.Status="取用公共绷带 → "+patient.Name;medic.Person.DecisionVersion++;return new(true,medic.Status);
         }
         return new(false,"护理断路：无法取到绷带并抵达伤员");

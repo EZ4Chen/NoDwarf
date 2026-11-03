@@ -31,7 +31,7 @@ public partial class Main
                 if (_tool == "select" && _selectedWorker >= 0 && Pick(position) is Cell destination)
                 {
                     var worker = _world.Workers[_selectedWorker];
-                    var path = _world.FindPath(worker.Tile, destination);
+                    var path = _world.ResidentNavigation.FindPath(worker.Tile, destination);
                     if (worker.Person.Incapacitated||worker.Person.Mobility<.05) _world.Log("居民无法行动，需要先照料。");
                     else if (worker.Job is not null || worker.Person.Activity is not null) _world.Log("居民正在工作或进行个人活动，请先在人物档案中安排。");
                     else if (path is null) _world.Log("无法到达：需要连通的平地或坡道。");
@@ -89,12 +89,15 @@ public partial class Main
                 ClearHover();_hoverCell=null;GetViewport().SetInputAsHandled();return true;
             }
             if(input is InputEventKey{Pressed:true,Keycode:Key.Escape} || input is InputEventMouseButton{ButtonIndex:MouseButton.Right,Pressed:true})
-            { _digStart=null;_digEnd=null;_hoverCell=null;ClearHover();GetViewport().SetInputAsHandled();return true; }
+            { _digStart=null;_digEnd=null;_hoverCell=null;ClearHover();if(SafetyTool(_tool))ShowSafetyAreas(false);GetViewport().SetInputAsHandled();return true; }
         }
+        if(SafetyTool(_tool)&&(input is InputEventKey{Pressed:true,Keycode:Key.Escape}||input is InputEventMouseButton{ButtonIndex:MouseButton.Right,Pressed:true}))
+        {ShowSafetyAreas(false);GetViewport().SetInputAsHandled();return true;}
         return false;
     }
     private void CommitDigDrag(Cell start,Cell end)
     {
+        if(SafetyTool(_tool)){CommitSafetyArea(start,end);return;}
         if(_tool=="canceldig"){CommitCancelDig(start,end);return;}
         string region=Guid.NewGuid().ToString("N");
         var regionMin=new Cell(Math.Min(start.X,end.X),Math.Min(start.Z,end.Z),Math.Min(start.Level,end.Level));
@@ -137,7 +140,7 @@ public partial class Main
         ClearHover();
         float w=Math.Abs(start.X-end.X)+1,d=Math.Abs(start.Z-end.Z)+1,h=Math.Abs(start.Level-end.Level)+(_tool=="digstairs"?3:1);
         var center=WorldPosition(new Cell(0,0,Math.Min(start.Level,end.Level)))+new Vector3((start.X+end.X)*.5f,h/2,(start.Z+end.Z)*.5f);
-        bool oversized=_tool!="canceldig"&&(long)w*(long)d*(long)h>4096;
+        bool oversized=!SafetyTool(_tool)&&_tool!="canceldig"&&(long)w*(long)d*(long)h>4096;
         var mat=Mat(oversized?"ff6464":_tool=="canceldig"?"ff927b":"ffd36b");
         mat.ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded;mat.NoDepthTest=true;
         foreach(float a in new[]{-1f,1f}) foreach(float b in new[]{-1f,1f})
@@ -153,6 +156,6 @@ public partial class Main
             Box(_hover,center+new Vector3(sign*w/2,y-h/2,0),new Vector3(.015f,.015f,d),mat);
             Box(_hover,center+new Vector3(0,y-h/2,sign*d/2),new Vector3(w,.015f,.015f),mat);
         }
-        _hint.Text=$"{(_tool=="canceldig"?"取消挖掘（仅未完成任务）":"挖掘")} {(int)w} × {(int)d} × {(int)h} · {Math.Min(start.Level,end.Level)} 至 {Math.Max(start.Level,end.Level)} m · +/− 选层 · 再次左键确认 / 右键或 Esc 取消{(oversized?" · 超过 4096 格，请缩小范围":"")}";
+        _hint.Text=$"{(SafetyTool(_tool)?(_tool=="workarea"?"作业区":"禁行区"):_tool=="canceldig"?"取消挖掘（仅未完成任务）":"挖掘")} {(int)w} × {(int)d} × {(int)h} · {Math.Min(start.Level,end.Level)} 至 {Math.Max(start.Level,end.Level)} m · +/− 选层 · 再次左键确认 / 右键或 Esc 取消{(oversized?" · 超过 4096 格，请缩小范围":"")}";
     }
 }

@@ -39,14 +39,14 @@ Check(core.Item("cloth").BaseValue==7,"a second catalog mutated the first");
 
 // Production jobs carry the exact recipe they reserved, including input/output/work.
 w=World(core);w.Buildings[new(64,60)]=new(new(64,60),BuildKind.Loom);w.SpawnItem("cotton",4,new(60,61));
-Check(w.QueueProcessing("cloth"),"weaving starts");saved=w.SaveJson();
+Check(w.QueueProductionRecipe("cloth"),"weaving starts");saved=w.SaveJson();
 var yieldPatch=Pack("yield","<Patches><Set domain='production' section='Recipes' id='cloth' field='count' expect='2' value='20'/></Patches>");
 var higherYield=ContentCatalog.Load([yieldPatch]);
 Reject(()=>DemoWorld.LoadJson(saved,content:higherYield),"配置不一致");
 restored=DemoWorld.LoadJson(saved,content:core);
 Check(restored.PendingOutput("cloth")==2,"restored batch changed output");FinishCloth(restored,2);
 var fresh=World(higherYield);fresh.Buildings[new(64,60)]=new(new(64,60),BuildKind.Loom);fresh.SpawnItem("cotton",4,new(60,61));
-Check(fresh.QueueProcessing("cloth"),"current recipe queues");FinishCloth(fresh,20);
+Check(fresh.QueueProductionRecipe("cloth"),"current recipe queues");FinishCloth(fresh,20);
 var corrupt=Node(saved);corrupt["Jobs"]![0]!["RecipeSnapshot"]!["Count"]=99;
 Reject(()=>DemoWorld.LoadJson(corrupt.ToJsonString(),content:core),"配方版本");
 Check(Node(saved)["Jobs"]![0]!["RecipeSnapshot"]!["Count"]!.GetValue<int>()==2,"load mutated input JSON");
@@ -94,9 +94,9 @@ var newItems=ContentCatalog.Load([renamedItem]);
 Reject(()=>DemoWorld.LoadJson(modWorld.SaveJson(),content:newItems),"配置不一致");
 var modRecipe=Pack("smelting","<ProductionDefinitions><Recipes><Recipe id='smelting:ore' name='矿物冶炼' station='Furnace' output='ore:raw' count='1' work='1'><Ingredient item='wood' count='1'/></Recipe></Recipes></ProductionDefinitions>","production","1.0",new ContentDependency("ore","1.0"));
 var recipeWorld=World(ContentCatalog.Load([item,modRecipe]));recipeWorld.Buildings[new(64,60)]=new(new(64,60),BuildKind.Furnace);recipeWorld.SpawnItem("wood",1,new(60,61));
-Check(recipeWorld.QueueProcessing("smelting:ore")&&ResidentWork.JobType(recipeWorld.Jobs[0])=="smelting","new recipe uses global work category");
-recipeWorld.Jobs.Clear();
 foreach(var actor in recipeWorld.Workers){actor.Person.WorkPriorities["crafting"]=0;actor.Person.WorkPriorities["smelting"]=1;}
+Check(recipeWorld.QueueProductionRecipe("smelting:ore")&&ResidentWork.JobType(recipeWorld.Jobs[0])=="smelting","new recipe uses global work category");
+recipeWorld.Jobs.Clear();
 for(int i=0;i<4000&&recipeWorld.Total("ore:raw")==0;i++)recipeWorld.Update(1d/30);
 Check(recipeWorld.Total("ore:raw")==1,"automatic production cannot schedule a new recipe for its specialized workers");
 Reject(()=>ContentCatalog.Load([item,item]),"重复");

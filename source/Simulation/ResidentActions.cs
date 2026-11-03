@@ -59,7 +59,7 @@ public sealed partial class DemoWorld
         if(!Workers.Contains(worker))return; // Creative completion never creates character XP.
         worker.Person.Earn(skill,amount);TryAutoTalents(worker);
     }
-    private string JobSkill(DemoJob job)=>job.Processing?(JobRecipe(job).Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",BuildKind.Furnace=>"smelting",_=>"woodwork"}):job.Farming||job.PlantTree?"growing":job.Chop?"woodwork":job.Demolish?"construction":job.Cook?"cooking":job.Dig?"mining":job.Smelt?"smelting":job.Forge?"smithing":
+    private string JobSkill(DemoJob job)=>job.Processing?(JobRecipe(job).Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",BuildKind.Furnace=>"smelting",_=>"woodwork"}):job.Farming||job.PlantTree?"growing":job.Chop?"woodwork":job.Demolish?"construction":job.Dig?"mining":
         job.Build is BuildKind.Ladder or BuildKind.Log or BuildKind.Planks or BuildKind.PlankStairs or BuildKind.LogStairs?"woodwork":"construction";
     internal double GearWorkBonus(DemoWorker worker,DemoJob job)
     {
@@ -154,57 +154,59 @@ public sealed partial class DemoWorld
     {
         if(kind=="social"&&!w.Person.Can("social")||kind=="research"&&!w.Person.Can("research")||kind=="treat"&&!w.Person.Can("care"))return new(false,"该物种不具备这项能力");
         if(w.WaterEvacuating||FloodThreat(w))return new(false,"正在处理水患，先撤离或排水");
-        var p=w.Person;if(MilitaryControlled(w))return new(false,"请先解除征召或集合警报");if(p.Incapacitated)return new(false,"居民失去行动能力");
+        var p=w.Person;if(w.Combat.Drafted||CivilianAlert&&kind is not ("eat" or "treat"))return new(false,"请先解除征召或集合警报");if(p.Incapacitated)return new(false,"居民失去行动能力");
         if(kind is "research" or "treat"&&p.Manipulation<.05)return new(false,"双手无法操作，不能进行这项工作");
         Cell destination=w.Tile;Queue<Cell>? path=new();
         if(kind=="rest"&&!p.Incapacitated)
         {
             ValidateHomeBed(w);
-            var beds=Buildings.Values.Where(b=>b.Kind==BuildKind.Bed&&!IsMedicalBed(b.Cell)&&(p.HomeBed is null||p.HomeBed==b.Cell)&&!Workers.Any(o=>o!=w&&!o.Person.Dead&&(o.Person.HomeBed==b.Cell||o.Person.Activity?.Target==BedKey(b.Cell)))).ToArray();
-            var candidates=beds.SelectMany(b=>Directions.Select(d=>b.Cell+d)).Where(Walkable);
-            var route=Navigation.FindNearest(w.Tile,candidates.Where(c=>origin=="manual"||Navigation.CanReach(c,w.Tile)),out var bedside);
+            var beds=Buildings.Values.Where(b=>SafetyWorkAllowed(b.Cell)&&b.Kind==BuildKind.Bed&&!IsMedicalBed(b.Cell)&&(p.HomeBed is null||p.HomeBed==b.Cell)&&!Workers.Any(o=>o!=w&&!o.Person.Dead&&(o.Person.HomeBed==b.Cell||o.Person.Activity?.Target==BedKey(b.Cell)))).ToArray();
+            var candidates=beds.SelectMany(b=>Directions.Select(d=>b.Cell+d)).Where(c=>SafetyWorkAllowed(c)&&Walkable(c));
+            var route=ResidentNavigation.FindNearest(w.Tile,candidates.Where(c=>origin=="manual"||ResidentNavigation.CanReach(c,w.Tile)),out var bedside);
             if(route is not null){path=route;destination=bedside;p.HomeBed=beds.First(b=>Directions.Any(d=>b.Cell+d==bedside)).Cell;target=BedKey(p.HomeBed.Value);}
         }
         if(kind=="relax")
         {
-            var fires=Buildings.Values.Where(b=>!p.Isolated&&b.Kind is BuildKind.Campfire or BuildKind.GameTable).ToArray();
-            var destinations=fires.SelectMany(b=>Directions.Select(d=>b.Cell+d)).Where(c=>Walkable(c)&&Navigation.CanReach(c,w.Tile)&&
+            var fires=Buildings.Values.Where(b=>SafetyWorkAllowed(b.Cell)&&!p.Isolated&&b.Kind is BuildKind.Campfire or BuildKind.GameTable).ToArray();
+            var destinations=fires.SelectMany(b=>Directions.Select(d=>b.Cell+d)).Where(c=>SafetyWorkAllowed(c)&&Walkable(c)&&ResidentNavigation.CanReach(c,w.Tile)&&
                 !Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"relax"} activity&&activity.Destination==c));
-            var route=Navigation.FindNearest(w.Tile,destinations,out var seat);
+            var route=ResidentNavigation.FindNearest(w.Tile,destinations,out var seat);
             if(route is not null){path=route;destination=seat;target=BedKey(fires.First(b=>Directions.Any(d=>b.Cell+d==seat)).Cell);}
         }
         if(kind=="research"&&Research.Active=="")return new(false,"先选择一个研究项目");
         if(kind=="eat"&&itemId!=0&&PersonalFood(w,itemId) is null)return new(false,"指定物品不可食用、已过期或不在物品栏");
         if(kind=="eat"&&PersonalFood(w,itemId) is not null)
-        {var dining=DiningSeats(w).ToArray();var route=Navigation.FindNearest(w.Tile,dining,out var seat);if(route is not null){path=route;destination=seat;}}
+        {var dining=DiningSeats(w).Where(SafetyWorkAllowed).ToArray();var route=ResidentNavigation.FindNearest(w.Tile,dining,out var seat);if(route is not null){path=route;destination=seat;}}
         if(kind=="eat"&&p.Hunger>=95)return new(false,"现在不饿");
         if(kind=="eat"&&PersonalFood(w,itemId) is null)return BeginFoodSupply(w,w)?new(true,"正在取用一份口粮"):new(false,p.FoodIssue);
         if(kind=="pickup")
         {
-            var item=Items.FirstOrDefault(s=>s.Id==itemId&&s.Owner==""&&s.Count>Reserved(s.Id));
+            var item=Items.FirstOrDefault(s=>s.Id==itemId&&FreeForUse(s,"pickup")>0);
             if(item is null)return new(false,"物品不存在或已被预约");
             RefreshWeight(w);if(p.CarriedWeight+ResidentGear.Weight(item.Item,Content)>p.Capacity)return new(false,"负重不足");
-            path=Navigation.FindNearest(w.Tile,ItemPositions(item.Cell).Where(c=>Walkable(c)&&(origin=="manual"||Navigation.CanReach(c,w.Tile))),out destination);
+            path=ResidentNavigation.FindNearest(w.Tile,ItemPositions(item.Cell).Where(c=>SafetySupplyAllowed(c)&&Walkable(c)&&(origin=="manual"||ResidentNavigation.CanReach(c,w.Tile))),out destination);
         }
         if(kind is "treat" or "social")
         {
             var other=Workers.FirstOrDefault(o=>o.Id==target);if(other is null||other.Person.Dead)return new(false,"目标居民不存在或已死亡");
+            if(!SafetyWorkAllowed(other.Tile))return new(false,"目标在安全作业范围之外");
             if(kind=="treat"&&(RescueReserved(target)||LifeReserved(target)))return new(false,"伤员正在搬运，抵达后再护理");
             if(kind=="treat"&&Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"treat" or "care_supply"} care&&care.Target==target))return new(false,"已有护理者负责这名伤员");
-            if(kind=="treat"&&!Inventory(w).Any(i=>i.Item=="bandage"))return BeginMedicalSupply(w,target,origin);
-            if(kind=="treat"&&(!HealthCare.Needed(other.Person)||!Inventory(w).Any(i=>i.Item=="bandage")))return new(false,"需要待护理的伤病和随身护理用品");
+            if(kind=="treat"&&!Inventory(w).Any(i=>!i.Forbidden&&i.Item=="bandage"))return BeginMedicalSupply(w,target,origin);
+            if(kind=="treat"&&(!HealthCare.Needed(other.Person)||!Inventory(w).Any(i=>!i.Forbidden&&i.Item=="bandage")))return new(false,"需要待护理的伤病和随身护理用品");
             if(kind=="social"&&!other.Person.Can("social"))return new(false,"对方不具备社交能力");
             if(kind=="social"&&(p.Isolated||other.Person.Isolated))return new(false,"隔离期间暂停社交");
             if(kind=="social"&&(other==w||other.Person.Incapacitated||other.Job is not null||other.Path.Count>0||other.Person.Activity is not null))return new(false,"请选择空闲且清醒的另一位居民");
             if(kind=="social"&&p.Relations.Count>=32&&!p.Relations.Any(r=>r.Target==target))return new(false,"关系记录已满");
             if(kind=="social"&&p.Relations.Any(r=>r.Target==target&&_simulationTime-r.LastSocial<120))return new(false,"刚交流过，稍后再聊");
-            path=Navigation.FindNearest(w.Tile,ItemPositions(other.Tile).Where(c=>Walkable(c)&&(origin=="manual"||Navigation.CanReach(c,w.Tile))),out destination);
+            path=ResidentNavigation.FindNearest(w.Tile,ItemPositions(other.Tile).Where(c=>SafetyWorkAllowed(c)&&Walkable(c)&&(origin=="manual"||ResidentNavigation.CanReach(c,w.Tile))),out destination);
         }
         if(path is null)return new(false,"没有可达路线");
+        if(!(kind=="pickup"?SafetySupplyAllowed(destination):kind is "eat" or "rest"&&destination==w.Tile?SafetyTransitAllowed(destination):SafetyWorkAllowed(destination)))return new(false,"目的地不符合安全作业范围");
         if(path.Count>0&&p.Mobility<.05)return new(false,"居民无法移动到目标位置");
         if(kind=="eat")itemId=PersonalFood(w,itemId)?.Id??0;
         CancelResidentActivity(w);if(w.Job is not null)Release(w.Job);else StopMovement(w);
-        foreach(var c in path)w.Path.Enqueue(c);w.CheckedNavigationVersion=Navigation.Version;
+        foreach(var c in path)w.Path.Enqueue(c);w.CheckedNavigationVersion=ResidentNavigation.Version;
         p.PausedResearch=null;p.Activity=new(){Kind=kind,Origin=origin,Target=target,ItemId=itemId,Destination=destination};p.DecisionVersion++;
         w.Status=ActivityName(kind);return new(true,w.Status);
     }
@@ -214,11 +216,13 @@ public sealed partial class DemoWorld
     {FinishResidentTask(worker,"cancelled",reason);DropRescue(worker);worker.Person.Activity=null;StopMovement(worker);worker.Status="等待工作";worker.Person.DecisionVersion++;}
     private bool ConsumePersonal(DemoWorker worker,string item)
     {
-        var s=Inventory(worker).FirstOrDefault(s=>s.Item==item);if(s is null)return false;
+        var s=Inventory(worker).FirstOrDefault(s=>!s.Forbidden&&s.Item==item);if(s is null)return false;
         s.Count--;if(s.Count==0)Items.Remove(s);RefreshWeight(worker);Revision++;return true;
     }
     private bool UpdateResidentActivity(DemoWorker w,double dt,ref int budget)
     {
+        if(w.Person.Activity is {} activity&&!SafetyActivityAllowed(w,activity))
+        {CancelResidentActivity(w,"安全范围限制了活动或用品");w.Status="安全范围限制，请检查区域和补给";return true;}
         using var timing = Probe?.Measure("residents.activity") ?? default;
         var p=w.Person;
         if(p.Dead||p.Incapacitated)
@@ -296,7 +300,7 @@ public sealed partial class DemoWorld
                 var stack=Items.FirstOrDefault(s=>s.Id==a.ItemId&&s.Owner=="");RefreshWeight(w);
                 if(stack is not null&&Near(stack.Cell))
                 {
-                    int count=Math.Min(ResidentGear.Get(stack.Item) is null?5:1,Math.Min(stack.Count-Reserved(stack.Id),(int)Math.Floor((p.Capacity-p.CarriedWeight)/ResidentGear.Weight(stack.Item,Content))));
+                    int count=Math.Min(ResidentGear.Get(stack.Item) is null?5:1,Math.Min(FreeForUse(stack,"pickup"),(int)Math.Floor((p.Capacity-p.CarriedWeight)/ResidentGear.Weight(stack.Item,Content))));
                     if(count>0)
                     {
                         stack.Count-=count;Items.Add(new(){Id=++_nextItem,Item=stack.Item,Count=count,Cell=w.Tile,Owner=w.Id,Properties=stack.Properties});

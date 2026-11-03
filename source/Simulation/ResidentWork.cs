@@ -14,7 +14,7 @@ public static class ResidentWork
     public static string[] FreeDay()=>Enumerable.Repeat("anything",24).ToArray();
     public static string[] DayShift()=>Enumerable.Range(0,24).Select(h=>h<6||h>=22?"sleep":h>=8&&h<18?"work":h>=18&&h<20?"recreation":"anything").ToArray();
     public static string ModeName(string mode)=>mode switch{"sleep"=>"休息","work"=>"工作","recreation"=>"娱乐",_=>"无固定"};
-    public static string JobType(DemoJob job)=>job.Processing?((job.RecipeSnapshot??ProcessingCatalog.Find(job.Recipe))?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",BuildKind.Furnace=>"smelting",_=>"crafting"}):job.Haul||job.Refuel?"hauling":job.Farming||job.PlantTree?"growing":job.Chop?"forestry":job.Demolish||job.BuildingWork?"construction":job.Dig?"mining":job.Cook?"cooking":job.Smelt?"smelting":"smithing";
+    public static string JobType(DemoJob job)=>job.Processing?((job.RecipeSnapshot??ProcessingCatalog.Find(job.Recipe))?.Station switch {BuildKind.Stove=>"cooking",BuildKind.Anvil=>"smithing",BuildKind.Furnace=>"smelting",_=>"crafting"}):job.Haul||job.Refuel?"hauling":job.Farming||job.PlantTree?"growing":job.Chop?"forestry":job.Demolish||job.BuildingWork?"construction":job.Dig?"mining":throw new InvalidOperationException("Unknown task kind");
     public static int Rank(ResidentProfile p,string type)
     {
         if(!p.Can("work")||type=="research"&&!p.Can("research")||type is "doctor" or "care"&&!p.Can("care"))return int.MaxValue;
@@ -64,6 +64,7 @@ public sealed partial class DemoWorld
         if(a?.Origin=="work"&&ResidentWork.Rank(p,a.Kind=="research"?"research":a.Supply is "splint" or "prosthesis"?"doctor":a.Kind is "life_supply" or "life_use" or "water_fill" or "food_supply" or "feed" or "rescue_pickup" or "rescue_carry"?"care":"doctor")==int.MaxValue)
         {CancelResidentActivity(w);p.PausedResearch=null;a=null;}
         if(p.PausedResearch?.Origin=="work"&&p.WorkPriorities["research"]==0)p.PausedResearch=null;
+        if(CivilianAlert&&a?.Kind is "eat" or "food_supply" or "feed" or "care_supply" or "treat" or "life_supply" or "life_use" or "water_fill" or "rescue_pickup" or "rescue_carry")return false;
         if(a?.Origin=="schedule"&&a.Kind!=(mode=="sleep"?"rest":mode=="recreation"?"relax":""))
         {
             // A free period allows an already sleeping resident to finish sleeping.

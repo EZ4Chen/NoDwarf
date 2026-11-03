@@ -13,6 +13,7 @@ public sealed partial class DemoWorld
     public string BuildCostText(BuildingDefinition d)=>string.Join("、",d.Cost.Select(p=>Content.Item(p.Key).Name+" "+p.Value));
     private Building BindBuilding(Building b)
     {
+        if(b.Locked&&b.Kind!=BuildKind.Door)throw new InvalidDataException("非普通门不能具有锁闭状态");
         var d=BuildingDefinition(b);if(d.Handler!=b.Kind)throw new InvalidDataException("建筑定义与处理器不匹配："+d.Id);
         return b with{DefinitionId=d.Id,Definition=d,BlockDefinition=Content.Block(d.Block)};
     }

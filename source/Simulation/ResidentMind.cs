@@ -56,7 +56,7 @@ public sealed partial class DemoWorld
                 choices.Add(new("feed:"+other.Id,"feed",other.Id,"送饭给"+other.Name,60+affinity));
             if(p.WorkPriorities.GetValueOrDefault("doctor")>0&&HealthCare.Needed(other.Person)&&!RescueReserved(other.Id)&&!LifeReserved(other.Id)&&
                 !Workers.Any(o=>o!=w&&o.Person.Activity is {Kind:"treat" or "care_supply"} a&&a.Target==other.Id)&&
-                (Inventory(w).Any(i=>i.Item=="bandage")||Available("bandage")>0))
+                (Inventory(w).Any(i=>!i.Forbidden&&i.Item=="bandage")||AvailableForUse("bandage","care")>0))
                 choices.Add(new("treat:"+other.Id,"treat",other.Id,"护理"+other.Name,65+affinity));
             if(ScheduledMode(w)=="anything"&&!p.Isolated&&!other.Person.Isolated&&!other.Person.Incapacitated&&other.Job is null&&other.Path.Count==0&&other.Person.Activity is null&&
                 !p.Relations.Any(r=>r.Target==other.Id&&SimulationTime-r.LastSocial<120))

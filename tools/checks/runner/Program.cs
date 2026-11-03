@@ -11,8 +11,8 @@ static async Task<int> Run(string[] args)
     {
         if(args[i]=="--skip-build"){skipBuild=true;continue;}
         if(args[i]=="--list"){list=true;continue;}
-        if(args[i] is not ("--root" or "--godot" or "--game" or "--group" or "--only")||i+1==args.Length)
-            throw new ArgumentException("Use --root PATH [--group quick|regression|performance|export] [--only ID,...] [--godot PATH|--game PATH] [--skip-build] [--list]");
+        if(args[i] is not ("--root" or "--godot" or "--group" or "--only")||i+1==args.Length)
+            throw new ArgumentException("Use --root PATH [--group quick|regression|performance] [--only ID,...] [--godot PATH] [--skip-build] [--list]");
         options.Add(args[i],args[++i]);
     }
     string root=Path.GetFullPath(options.GetValueOrDefault("--root")??throw new ArgumentException("--root is required"));
@@ -28,9 +28,8 @@ static async Task<int> Run(string[] args)
     if(list){foreach(var c in selected)Console.WriteLine($"{c.Id}: {c.Kind} [{string.Join(',',c.Groups)}]");return 0;}
     string project=Path.Combine(root,"source"),logs=Path.Combine(project,".local/checks");Directory.CreateDirectory(logs);
     string dotnet=Environment.GetEnvironmentVariable("DOTNET_HOST_PATH")??"dotnet";
-    string? game=options.GetValueOrDefault("--game"),godot=options.GetValueOrDefault("--godot");
-    if(selected.Any(c=>c.Kind=="godot")&&game is null&&godot is null)throw new ArgumentException("Godot checks require --godot or --game");
-    if(game is not null&&selected.Any(c=>c.Kind!="godot"))throw new ArgumentException("Export checks require a Godot-only group");
+    string? godot=options.GetValueOrDefault("--godot");
+    if(selected.Any(c=>c.Kind=="godot")&&godot is null)throw new ArgumentException("Godot checks require --godot");
     async Task Execute(string id,string exe,IEnumerable<string> arguments,string cwd,int timeout,string[] markers,bool ownsErrors=false)
     {
         Console.WriteLine("START "+id);
@@ -47,7 +46,7 @@ static async Task<int> Run(string[] args)
         Console.WriteLine("PASS "+id);
         foreach(var line in output.Split('\n').Where(l=>l.Contains("_MEASURE:")||l.Contains("_STATS:")))Console.WriteLine(line.Trim());
     }
-    if(!skipBuild&&game is null&&selected.Any(c=>c.Kind=="godot"))
+    if(!skipBuild&&selected.Any(c=>c.Kind=="godot"))
     {
         await Execute("build-game",dotnet,["build",Path.Combine(project,"NoDwarf.csproj"),"--nologo"],project,300,[]);
         await Execute("import",godot!,["--headless","--path",project,"--editor","--import","--quit","--log-file",Path.Combine(logs,"import-engine.log")],project,300,[]);
@@ -68,9 +67,9 @@ static async Task<int> Run(string[] args)
             else
             {
                 var command=new List<string>{"--headless"};
-                if(game is null){command.Add("--path");command.Add(project);}
+                command.Add("--path");command.Add(project);
                 command.AddRange(["--log-file",Path.Combine(logs,check.Id+"-engine.log"),"--"]);command.AddRange(check.Args);
-                await Execute(check.Id,game??godot!,command,game is null?project:external,check.TimeoutSeconds,check.Markers,check.OwnsErrorValidation);
+                await Execute(check.Id,godot!,command,project,check.TimeoutSeconds,check.Markers,check.OwnsErrorValidation);
             }
         }
     }

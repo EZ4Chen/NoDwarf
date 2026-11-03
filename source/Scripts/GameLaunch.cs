@@ -2,7 +2,7 @@ using Godot;
 using NoDwarf.Simulation;
 namespace NoDwarf;
 
-public sealed record GameLaunch(DemoWorld World,Main.PreparedSession? Session=null,string? SavePath=null)
+public sealed record GameLaunch(DemoWorld World,PreparedSession? Session=null,string? SavePath=null)
 {
     public static GameLaunch? Pending {get;set;}
     public static GameLaunch? Take(){var value=Pending;Pending=null;return value;}

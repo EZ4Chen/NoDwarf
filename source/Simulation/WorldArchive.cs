@@ -17,7 +17,9 @@ public sealed class WorkerState
 }
 public sealed class WorldSnapshot
 {
-    public const int CurrentVersion=34;
+    public const int CurrentVersion=38;
+    [JsonRequired] public SupplyReserve[] SupplyReserves {get;set;}=[];
+    [JsonRequired] public SafetyRules Safety {get;set;}=new();
     [JsonRequired] public int Version {get;set;}=CurrentVersion;
     public ContentManifest? Content {get;set;}
     public ModuleArchive[]? Modules {get;set;}
@@ -76,7 +78,7 @@ public sealed partial class DemoWorld
     private WorldSnapshot CreateArchive()=>new WorldSnapshot{
         PlacedBlocks=Terrain.PlacedBlocks.ToArray(),TerrainBlocks=Terrain.DefinitionBlocks.ToArray(),Content=Content.Manifest(),Modules=Modules.Save(this),
         Creatures=_creatures?.Save()??new CreatureArchive(),Story=Story,ResidentMind=ResidentMind,Dialogues=Dialogues,
-        WaterPoints=WaterPoints.ToArray(),MedicalBeds=MedicalBeds.Where(IsMedicalBed).ToArray(),
+        SupplyReserves=SupplyReserves.ToArray(),Safety=Safety.CheckedCopy(),WaterPoints=WaterPoints.ToArray(),MedicalBeds=MedicalBeds.Where(IsMedicalBed).ToArray(),
         Enemies=Enemies.Select(SaveWorker).ToArray(),RallyPoint=RallyPoint,CivilianAlert=CivilianAlert,RaidSerial=_raidSerial,BattleOutcome=BattleOutcome,
         ProductionOrders=ProductionOrders.ToArray(),ProductionElapsed=_productionElapsed,RoomClimates=SaveRoomClimates(),RoomTemperatureUpdatedAt=_lastRoomTemperatureUpdate,
         Fluids=Fluids.Save(_openFloodgates),ClimateVersion=ClimateVersion,WeatherOverride=WeatherOverride,EcologyVersion=Terrain.EcologyVersion,Seed=Terrain.Seed,Flat=Terrain.Flat,Region=Terrain.Region?.Id,GeneratorVersion=Terrain.GeneratorVersion,Trees=Trees.Values.ToArray(),StorageZones=StorageZones.ToArray(),Fires=FireFuel.Where(f=>Buildings.TryGetValue(f.Key,out var b)&&b.Kind==BuildKind.Campfire).Select(f=>new FireState(f.Key,f.Value)).ToArray(),Farms=Farms.Values.ToArray(),Plants=Plants.Values.ToArray(),Damage=_blockDamage.Values.Where(d=>d.Block==BlockAt(d.Cell)).ToArray(),Excavated=Terrain.Excavated.ToArray(),Buildings=Buildings.Values.ToArray(),Items=Items.ToArray(),Stockpiles=Stockpiles.ToArray(),Jobs=Jobs.ToArray(),
@@ -105,6 +107,13 @@ public sealed partial class DemoWorld
         s.Generation?.Validate();
         if(s.ClimateVersion!=1||(s.WeatherOverride is not null&&!WeatherState.All.Any(x=>x.Id==s.WeatherOverride)))throw new InvalidDataException("天气存档无效。");
         var w=new DemoWorld(s.Seed,s.Flat,s.Region,s.Generation,generateFluids:false,content:catalog,generateContentTerrain:false);w.WeatherOverride=s.WeatherOverride;w.Research=research;w._residentElapsed=s.ResidentElapsed;w.Items.Clear();w.Stockpiles.Clear();w.Workers.Clear();w.Jobs.Clear();
+        w.Safety=(s.Safety??throw new InvalidDataException("缺少安全范围")).CheckedCopy();
+        if(s.SupplyReserves is null||s.SupplyReserves.Length>catalog.Items.Count||s.SupplyReserves.Any(r=>r is null||r.AllowedUses is null)||s.SupplyReserves.Select(r=>r.Item).Distinct().Count()!=s.SupplyReserves.Length)throw new InvalidDataException("物资保留规则无效");
+        foreach(var rule in s.SupplyReserves)
+        {
+            if(!catalog.ItemsById.ContainsKey(rule.Item)||rule.Minimum is <1 or >1000000||rule.AllowedUses.Any(u=>!w.SupplyUses.Any(p=>p.Id==u)))throw new InvalidDataException("物资保留规则无效");
+            w.SupplyReserves.Add(rule with{AllowedUses=new(rule.AllowedUses)});
+        }
         w._simulationTime=s.SimulationTime;if(modules is not null)w.Modules=modules;
         {
             if(s.Trees is null||s.Trees.Length>Width*Depth)throw new InvalidDataException("树木记录无效。");
@@ -177,10 +186,12 @@ public sealed partial class DemoWorld
                 j.Cell.X<lo.X||j.Cell.X>hi.X||j.Cell.Z<lo.Z||j.Cell.Z>hi.Z||j.Cell.Level<lo.Level||j.Cell.Level+j.DigHeight-1>hi.Level))
                 throw new InvalidDataException("开采区域记录无效。");
             if(j.WaterPaused&&(!j.Dig||j.Demolish))throw new InvalidDataException("水患暂停任务类型无效。");
+            if(j.MaterialsPaused&&j.Worker>=0)throw new InvalidDataException("安全暂停任务不能占用工作者");
+            if(j.OutputCell is Cell output&&(!j.Production||!Inside(output)||output.Level!=j.Cell.Level||Math.Abs(output.X-j.Cell.X)+Math.Abs(output.Z-j.Cell.Z)>1))throw new InvalidDataException("生产输出预约位置无效");
             if(j.Id<=0||!Inside(j.Cell)||!double.IsFinite(j.Progress)||j.Progress<0||j.Materials is null||w.Jobs.Any(o=>o.Id==j.Id)||j.Worker< -1||j.Worker>=s.Workers.Length||j.DigHeight is <1 or >3)
                 throw new InvalidDataException("任务记录无效。");
             if(j.PlaceItem is null||j.PlaceBlock is null)throw new InvalidDataException("放置字段为空");
-            if((j.Build is not null?1:0)+(j.Placing?1:0)+(j.Dig?1:0)+(j.Haul?1:0)+(j.Smelt?1:0)+(j.Cook?1:0)+(j.Sow?1:0)+(j.Harvest?1:0)+(j.Refuel?1:0)+(j.Chop?1:0)+(j.PlantTree?1:0)+(j.Processing?1:0)>1||j.Demolish&&(!j.Dig||j.DigHeight!=1))throw new InvalidDataException("任务类型冲突。");
+            if((j.Build is not null?1:0)+(j.Placing?1:0)+(j.Dig?1:0)+(j.Haul?1:0)+(j.Sow?1:0)+(j.Harvest?1:0)+(j.Refuel?1:0)+(j.Chop?1:0)+(j.PlantTree?1:0)+(j.Processing?1:0)!=1||j.Demolish&&(!j.Dig||j.DigHeight!=1))throw new InvalidDataException("任务类型冲突。");
             if(j.Recipe is null||j.Processing&&catalog.FindRecipe(j.Recipe) is null||j.PlantTree&&!CropCatalog.IsTree(j.TreeSpecies))throw new InvalidDataException("生产配方或树种无效。");
             RestoreJobRecipe(j,catalog);
             if(j.Processing)
@@ -204,7 +215,7 @@ public sealed partial class DemoWorld
                 if(r.Properties is null)throw new InvalidDataException("搬运属性为空");
                 r.Properties.Validate();
                 if(r.DestinationZone< -1||r.Count<=0||r.Stage is <0 or >2||(r.Stage==1&&j.Worker<0)||
-                    (r.Stage!=1&&!w.Items.Any(i=>i.Id==r.StackId&&i.Item==r.Item&&i.Owner=="")))throw new InvalidDataException("材料预约无效。");
+                    (j.MaterialsPaused&&r.Stage==0?r.StackId!=0:r.Stage!=1&&!w.Items.Any(i=>i.Id==r.StackId&&i.Item==r.Item&&i.Owner=="")))throw new InvalidDataException("材料预约无效。");
             }
             if(j.Sow)
             {

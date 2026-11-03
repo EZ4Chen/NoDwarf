@@ -34,15 +34,15 @@ internal static class ItemUseParser
             if(block.Length is <1 or >100||block.Any(c=>!char.IsAsciiLetterOrDigit(c)&&c is not ':' and not '_' and not '-' and not '.')||support is not ("below" or "adjacent")||placements.Any(p=>p.Block==block)||placements.Count>=32)throw new InvalidDataException(Context("Place")+" 目标／支撑无效或重复");
             placements.Add(new(item.Id,block,Integer(place,"count",1,1,10000),support));
         }
-        return item with{Placements=placements.AsReadOnly(),Info=DefinitionInfo.Read(e),Category=category,Weight=Number(e,"weight",1,.01,1000),ShelfLife=Number(e,"shelfLife",0,0,1e9),StorySupply=supply,Edible=edible};
+        return item with{StorageUnits=Integer(e,"storageUnits",1,1,100),Placements=placements.AsReadOnly(),Info=DefinitionInfo.Read(e),Category=category,Weight=Number(e,"weight",1,.01,1000),ShelfLife=Number(e,"shelfLife",0,0,1e9),StorySupply=supply,Edible=edible};
     }
 }
 public sealed partial class DemoWorld
 {
     // Classification is descriptive; only a registered capability authorizes use. Expiry is checked at commit too.
-    public bool CanEat(ItemStack stack)=>stack.Count>0&&stack.Slot==""&&Content.Item(stack.Item).Edible is not null&&
+    public bool CanEat(ItemStack stack)=>!stack.Forbidden&&stack.Count>0&&stack.Slot==""&&Content.Item(stack.Item).Edible is not null&&
         (stack.Properties.ExpiresAt is null||stack.Properties.ExpiresAt>SimulationTime);
-    public int AvailableFood()=>Items.Where(i=>i.Owner==""&&CanEat(i)).Sum(i=>Math.Max(0,i.Count-Reserved(i.Id)));
+    public int AvailableFood()=>Items.Where(i=>i.Owner==""&&CanEat(i)&&UsableSource(i)).GroupBy(i=>i.Item).Sum(g=>Math.Min(AvailableForUse(g.Key,"food"),g.Sum(i=>Math.Max(0,i.Count-Reserved(i.Id)))));
     private ItemStack? PersonalFood(DemoWorker worker,int itemId=0)=>Inventory(worker).Where(i=>CanEat(i)&&(itemId==0||i.Id==itemId))
         .OrderBy(i=>i.Properties.ExpiresAt??double.MaxValue).ThenBy(i=>i.Id).FirstOrDefault();
     private void EatPersonal(DemoWorker worker,ResidentActivity activity,bool comfort=true)

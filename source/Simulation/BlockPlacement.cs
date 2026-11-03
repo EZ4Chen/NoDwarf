@@ -13,7 +13,7 @@ public sealed partial class ContentCatalog
 }
 public sealed partial class DemoWorld
 {
-    public int AvailableInStack(int id)=>Items.FirstOrDefault(i=>i.Id==id&&i.Owner==""&&i.Slot=="") is {} s?Math.Max(0,s.Count-Reserved(id)):0;
+    public int AvailableInStack(int id)=>Items.FirstOrDefault(i=>i.Id==id&&i.Owner==""&&i.Slot=="") is {} s?FreeForUse(s,"construction"):0;
     private bool PlacementSupported(Cell cell,PlacementDefinition p,bool plans)=>p.Support=="adjacent"?Supported(cell,plans):Solid(cell+new Cell(0,0,-1))||plans&&PlannedSolid(cell+new Cell(0,0,-1));
     private bool PlacementSpace(Cell cell,bool ignoreWater=false)=>Inside(cell)&&cell.Level>TerrainMap.MinLevel&&!Occupied(cell)&&!Farms.ContainsKey(cell)&&!Trees.ContainsKey(cell)&&!WaterPoints.Contains(cell)&&(ignoreWater||Fluids.Amount(cell)==0);
     public bool CanPlaceBlock(Cell cell,string item,string block)=>PlacementSpace(cell)&&CanPlace(cell)&&PlacementSupported(cell,Content.Placement(item,block),true);

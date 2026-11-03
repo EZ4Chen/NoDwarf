@@ -83,7 +83,7 @@ public partial class Main
         _dossierId=_selectedWorker>=0&&_selectedWorker<_world.Workers.Count?_world.Workers[_selectedWorker].Id:"";
         _residentPicker.Clear();foreach(var w in _world.Workers)_residentPicker.AddItem(w.Name);if(_selectedWorker>=0)_residentPicker.Select(_selectedWorker);
         _buildMenu.Hide();_inspector.Hide();_worldMenu.Hide();_combatPanel.Hide();_selectionPanel.Hide();
-        _storagePanel?.QueueFree();_storagePanel=null;
+        CloseStorage();CloseSupplyRules();
         RenderResidentPanel();LayoutResidentPanel();_residentBackdrop.Show();_residentPanel.Show();RefreshUi();
     }
     private void CloseResidentPanel()

@@ -56,14 +56,14 @@ try
     worker.X=60;worker.Z=60;worker.Level=0;worker.Path.Clear();foreach(var i in w.Items.Where(i=>i.Owner==""))i.Cell=new(60,61);
     w.SpawnItem("cobblestone",8,new(60,61));w.SpawnItem("coal",5,new(60,61));
     Check(w.QueueBuild(new(63,60),BuildKind.Furnace),"build initial furnace");Advance(w,60);
-    for(int n=0;n<4;n++){Check(w.QueueProcessing("copper:smelt"),"smelt mined ore");Advance(w,35);}
+    for(int n=0;n<4;n++){Check(w.QueueProductionRecipe("copper:smelt"),"smelt mined ore");Advance(w,35);}
     Check(w.Total("copper:ingot")==4,"four physical copper ingots");
     var chair=new Cell(60,63);var furnace=new Cell(63,63);
     Check(w.QueueBuild(chair,"copper:chair")&&w.QueueBuild(furnace,"copper:furnace"),"new building IDs accept copper cost");
     Advance(w,1);w=DemoWorld.LoadJson(w.SaveJson(),content:catalog);worker=w.Workers[0];Advance(w,90);
     Check(w.Buildings[chair].DefinitionId=="copper:chair"&&w.BlockAt(chair)=="copper:chair_block"&&w.Total("copper:ingot")==0,"construction retains type and consumes custom material");
     Check(w.RemainingDurability(chair)==160,"custom durability uses world catalog");
-    w.Buildings.Remove(new(63,60));Check(w.QueueProcessing("copper:smelt"),"mod furnace discovered by production");Advance(w,40);
+    w.Buildings.Remove(new(63,60));Check(w.QueueProductionRecipe("copper:smelt"),"mod furnace discovered by production");Advance(w,40);
     Check(w.Total("copper:ingot")==1&&w.Total("copper:ore")==0,"mod furnace completes final copper");
     w.Buildings[new(61,63)]=new(new(61,63),BuildKind.Table);worker.Person.Hunger=10;worker.X=60;worker.Z=62;
     var food=w.SpawnItem("meal",1,worker.Tile);food.Owner=worker.Id;Check(w.ActResident(new(worker.Id,"eat")).Ok,"eat near custom chair");Advance(w,20);

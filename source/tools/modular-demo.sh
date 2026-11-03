@@ -1,3 +1,3 @@
 #!/bin/bash
 source "$(dirname "$0")/env.sh"
-exec "$GODOT_BIN" --path "$PROJECT_DIR" res://Scenes/Characters/ModularDwarfDemo.tscn "$@"
+exec "$GODOT_BIN" --path "$PROJECT_DIR" res://Development/Scenes/Characters/ModularDwarfDemo.tscn "$@"

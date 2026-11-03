@@ -22,7 +22,7 @@ public static class ProductionCatalog
 {
     public static IReadOnlyList<ProcessingRecipe> All=>ProductionDefinitions.Recipes;
     public static ProcessingRecipe Get(string id)=>ContentRuntime.Current.RecipesById.GetValueOrDefault(id)??throw new ArgumentException("未知生产配方。");
-    public static string RecipeOf(DemoJob j)=>j.Processing?j.Recipe:j.Cook?"cook":j.Smelt?"smelt":j.Forge?"sword":"";
+    public static string RecipeOf(DemoJob j)=>j.Recipe;
 }
 public sealed partial class DemoWorld
 {
@@ -71,7 +71,7 @@ public sealed partial class DemoWorld
         Revision++;return true;
     }
     public int ProductionStock(string item)=>Items.Where(s=>s.Owner==""&&s.Item==item).Sum(s=>s.Count)
-        -Jobs.Where(j=>!j.Haul).SelectMany(j=>j.Materials).Where(r=>r.Item==item&&r.Stage!=1).Sum(r=>r.Count)
+        -Jobs.Where(j=>!j.Haul).SelectMany(j=>j.Materials.Where(r=>!j.MaterialsPaused||r.Stage!=0)).Where(r=>r.Item==item&&r.Stage!=1).Sum(r=>r.Count)
         +Jobs.Where(j=>j.Haul).SelectMany(j=>j.Materials).Where(r=>r.Item==item&&r.Stage==1).Sum(r=>r.Count);
     public int PendingOutput(string item)=>Jobs.Where(j=>j.Production).Sum(j=>{var r=JobRecipe(j);return r.Output==item?r.Count:0;});
     public string ProductionTargetStatus(ProductionOrder order)
@@ -82,25 +82,51 @@ public sealed partial class DemoWorld
         if(mode=="count"&&order.Target==0)return prefix+" · 已完成";
         if(mode=="maintain"&&ProductionStock(r.Output)+PendingOutput(r.Output)>=order.Target)return prefix+" · 已达目标（含在制）";
         if(Jobs.FirstOrDefault(j=>j.ProductionOrderId==order.Id) is {} job)return prefix+" · "+OrderStatus(job);
-        if(!ProductionStationReady(r))return prefix+" · 等待"+NameOf(r.Station);
+        if(!Buildings.Values.Any(b=>ProductionStationReady(r,b.Cell)&&(order.Station is null||order.Station==b.Cell)))return prefix+" · 等待"+NameOf(r.Station);
+        if(!Buildings.Values.Any(b=>SafetyWorkAllowed(b.Cell)&&ProductionStationReady(r,b.Cell)&&(order.Station is null||order.Station==b.Cell)))return prefix+" · 设施在安全作业范围之外";
         if(order.WorkerId!=""&&!Workers.Any(w=>w.Id==order.WorkerId&&!w.Person.Dead))return prefix+" · 等待指定工作者";
         if(order.SourceZone>0&&!StorageZones.Any(z=>z.Id==order.SourceZone))return prefix+" · 原料储存区已移除";
         var station=Buildings.Values.FirstOrDefault(b=>b.Kind==r.Station&&(order.Station is null||order.Station==b.Cell));
         if(station is not null)
         {
             var probe=new DemoJob{Cell=station.Cell,Recipe=r.Id,ProductionOrderId=order.Id};
+            if(!ReserveOutputSpace(probe))return prefix+" · 输出区已满或不可用，请清运附近物资";
             var missing=r.Inputs.Where(p=>Items.Where(s=>s.Item==p.Key&&s.Owner==""&&BillAllowsSource(probe,s)).Sum(s=>Math.Max(0,s.Count-Reserved(s.Id)))<p.Value).Select(p=>Content.Item(p.Key).Name).ToArray();
             if(missing.Length>0)return prefix+" · 缺少符合条件的"+string.Join("、",missing);
+            if(r.Inputs.Any(p=>AvailableForUse(p.Key,"recipe:"+r.Id)<p.Value))return prefix+" · 原料已保留，调整物资使用规则或允许此配方";
         }
         return prefix+" · 等待符合条件的原料与设施";
     }
-    private bool ProductionStationReady(ProcessingRecipe r)=>r.Id is "smelt" or "sword"?WorkshopReady:
-        Buildings.Values.Any(b=>b.Kind==r.Station&&(r.Station!=BuildKind.Stove||KitchenReady(b.Cell)));
-    public bool QueueProductionRecipe(string id)=>id switch {"smelt"=>QueueSmelt(),"sword"=>QueueSword(),"cook"=>QueueCook(),_=>QueueProcessing(id)};
+    private bool ProductionStationReady(ProcessingRecipe recipe,Cell cell)
+    {
+        if(!Buildings.TryGetValue(cell,out var building)||building.Kind!=recipe.Station)return false;
+        if(recipe.Id is "smelt" or "sword")
+        {
+            if(_workshopVersion!=Navigation.Version)ValidateWorkshop();
+            return _workshopStations.Contains(cell);
+        }
+        return recipe.Station!=BuildKind.Stove||KitchenReady(cell);
+    }
+    private bool ProductionReady(DemoJob job)=>ProductionStationReady(JobRecipe(job),job.Cell);
+    // Immediate one-batch request; both this entry and recurring bills use the same scheduler.
+    public bool QueueProductionRecipe(string id)
+    {
+        if(Content.FindRecipe(id) is not {} recipe)return false;
+        ValidateWorkshop();
+        var order=AddProductionOrder(id);
+        if(TryScheduleProduction(order))
+        {
+            order.Station=Jobs.Single(j=>j.ProductionOrderId==order.Id).Cell;
+            Log("已安排"+recipe.Name);return true;
+        }
+        ProductionOrders.Remove(order);Revision++;
+        Log("暂不能安排"+recipe.Name+"：请检查设施、材料与工作安排。");return false;
+    }
     private ProductionOrder? Bill(DemoJob job)=>job.ProductionOrderId==0?null:ProductionOrders.FirstOrDefault(o=>o.Id==job.ProductionOrderId);
     private bool BillAllowsWorker(DemoJob job,DemoWorker worker)=>job.ProductionOrderId==0||Bill(job) is {} o&&o.Enabled&&(o.WorkerId==""||o.WorkerId==worker.Id)&&worker.Person.Level(JobSkill(job))>=o.MinSkill&&worker.Person.Level(JobSkill(job))<=o.MaxSkill;
     private bool BillAllowsSource(DemoJob job,ItemStack stack)
     {
+        if(!UsableSource(stack))return false;
         if(job.ProductionOrderId==0)return true;
         if(Bill(job) is not {} o)return false;
         double durability=stack.Properties.Durability is double d&&stack.Properties.MaxDurability is double max?100*d/max:100;
@@ -112,21 +138,25 @@ public sealed partial class DemoWorld
     {
         if(ProductionOrders.Count==0)return;
         _productionElapsed+=dt;if(_productionElapsed<1)return;_productionElapsed%=1;
-        foreach(var order in ProductionOrders.Where(o=>o.Enabled))
+        foreach(var order in ProductionOrders.Where(o=>o.Enabled))TryScheduleProduction(order);
+    }
+    private bool TryScheduleProduction(ProductionOrder order)
+    {
+        var recipe=Content.Recipe(order.Recipe);string behavior=Content.Mode(order.Mode).Behavior;
+        if(!order.Enabled||behavior=="count"&&order.Target==0||
+            behavior=="maintain"&&ProductionStock(recipe.Output)+PendingOutput(recipe.Output)>=order.Target||
+            Jobs.Any(j=>j.ProductionOrderId==order.Id))return false;
+        foreach(var station in Buildings.Values.Where(b=>b.Kind==recipe.Station&&(order.Station is null||order.Station==b.Cell)))
         {
-            var r=Content.Recipe(order.Recipe);string behavior=Content.Mode(order.Mode).Behavior;
-            if(behavior=="count"&&order.Target==0||behavior=="maintain"&&ProductionStock(r.Output)+PendingOutput(r.Output)>=order.Target||Jobs.Any(j=>j.ProductionOrderId==order.Id))continue;
-            if(!ProductionStationReady(r))continue;
-            foreach(var station in Buildings.Values.Where(b=>b.Kind==r.Station&&(order.Station is null||order.Station==b.Cell)))
-            {
-                if(r.Id=="smelt"&&station.Cell!=_forgeFurnace||r.Id=="sword"&&station.Cell!=_forgeAnvil||Jobs.Any(j=>j.Production&&j.Cell==station.Cell)||r.Station==BuildKind.Stove&&!KitchenReady(station.Cell))continue;
-                var job=new DemoJob{Id=++_nextJob,Cell=station.Cell,Recipe=r.Id,ProductionOrderId=order.Id};
-                BindJobRecipe(job); // Work eligibility is checked before insertion into Jobs.
-                if(Workers.Count>0&&!Workers.Any(w=>!w.Person.Dead&&BillAllowsWorker(job,w)&&ResidentWork.Rank(w.Person,ResidentWork.JobType(job))!=int.MaxValue))continue;
-                if(!Reserve(job,r.Inputs))continue;
-                Jobs.Add(job);Revision++;break;
-            }
+            if(!SafetyWorkAllowed(station.Cell)||!ProductionStationReady(recipe,station.Cell)||Jobs.Any(j=>j.Production&&j.Cell==station.Cell))continue;
+            var job=new DemoJob{Id=++_nextJob,Cell=station.Cell,Recipe=recipe.Id,ProductionOrderId=order.Id};
+            BindJobRecipe(job);
+            if(!ReserveOutputSpace(job))continue;
+            if(Workers.Count>0&&!Workers.Any(w=>!w.Person.Dead&&BillAllowsWorker(job,w)&&ResidentWork.Rank(w.Person,ResidentWork.JobType(job))!=int.MaxValue))continue;
+            if(!Reserve(job,recipe.Inputs))continue;
+            Jobs.Add(job);Revision++;return true;
         }
+        return false;
     }
     private void CompleteProductionOrder(DemoJob job)
     {if(Bill(job) is {} order&&Content.Mode(order.Mode).Behavior=="count")order.Target=Math.Max(0,order.Target-1);}

@@ -8,7 +8,11 @@ public static class PreferencesRuntime
     public static int Revision {get;private set;}
     public static string Issue {get;private set;}="";
     private static bool initialized;
+#if NODWARF_CHECKS
     public static bool Testing=>OS.GetCmdlineUserArgs().Any(a=>a.EndsWith("-test")||a.EndsWith("-review"));
+#else
+    public static bool Testing=>false;
+#endif
     public static string SettingsPath=>ProjectSettings.GlobalizePath(Testing?"res://.local/preferences-tests/game.json":"user://settings/game.json");
     public static string LlmPath=>ProjectSettings.GlobalizePath(Testing?"res://.local/preferences-tests/llm.json":"user://settings/llm-v1.json");
     public static void Initialize()

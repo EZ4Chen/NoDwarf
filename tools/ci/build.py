@@ -13,6 +13,7 @@ import tempfile
 import zipfile
 
 from macos_sign import sign_app, verify_app
+from verify_export import verify_export
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = ROOT / "source"
@@ -122,10 +123,13 @@ def build(target):
     os.environ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
     os.environ["DOTNET_NOLOGO"] = "1"
     run([godot, "--version"])
-    run(["dotnet", "build", "NoDwarf.csproj", "--configuration", "Debug", "--nologo"])
-    run([godot, "--headless", "--path", PROJECT, "--editor", "--import", "--quit"])
+    # Gameplay assertions execute in the editor/check build before exporting.
+    run(["dotnet", "run", "--project", ROOT / "tools/checks/runner/CheckRunner.csproj",
+         "--", "--root", ROOT, "--group", "regression", "--godot", godot], timeout=1200)
 
     output = PROJECT / "builds" / platform
+    if output.resolve() != (PROJECT.resolve() / "builds" / platform):
+        raise RuntimeError("Export directory resolves outside the target workspace path")
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
@@ -151,8 +155,7 @@ def build(target):
     if not executable.is_file():
         raise RuntimeError("Export did not produce a runnable game")
     # Exercise the actual self-contained export, including assets and bundled .NET.
-    run(["dotnet", "run", "--project", ROOT / "tools/checks/runner/CheckRunner.csproj",
-         "--", "--root", ROOT, "--group", "export", "--game", executable], timeout=1200)
+    verify_export(godot, output, executable)
     shutil.copy2(ROOT / "docs/PLAYER-README.txt", output / "README.txt")
     shutil.copy2(PROJECT / "Assets/Textures/PureBDcraft/terms of use.txt", output / "PureBDcraft-terms.txt")
     shutil.copy2(PROJECT / "Assets/Fonts/NotoSansCJK/LICENSE.txt", output / "NotoSansCJK-LICENSE.txt")
@@ -168,8 +171,7 @@ def build(target):
             run(["ditto", "-x", "-k", archive, folder])
             app = Path(folder) / filename
             verify_app(app)
-            run(["dotnet", "run", "--project", ROOT / "tools/checks/runner/CheckRunner.csproj",
-                 "--", "--root", ROOT, "--only", "smoke", "--game", app / "Contents/MacOS/NoDwarf"], timeout=720)
+            verify_export(godot, Path(folder), app / "Contents/MacOS/NoDwarf")
     else:
         shutil.make_archive(str(archive.with_suffix("")), "zip", output)
     manifest = {"platform": platform, "commit": commit, "version": version,

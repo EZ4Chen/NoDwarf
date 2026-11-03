@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image
 
 ART = Path(__file__).resolve().parent
-OUT = ART.parents[2] / 'source/Assets/Characters/ModularDwarf'
+OUT = ART.parents[2] / 'source/Development/Assets/Characters/ModularDwarf'
 atlas = Image.open(ART / 'shared-bodies-source.png').convert('RGBA')
 
 

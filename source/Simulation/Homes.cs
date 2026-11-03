@@ -11,6 +11,7 @@ public sealed partial class DemoWorld
     public bool KitchenReady(Cell c)=>Buildings.TryGetValue(c,out var b)&&b.Kind==BuildKind.Stove&&FurnishedRoom(c);
     public string RoomDescription(Cell c)=>Buildings.TryGetValue(c,out var b)?b.Kind switch
     {
+        BuildKind.Door=>b.Locked?"门：锁闭 · 禁止通行；普通门不挡水，请用闸门挡水":"门：允许通行 · 普通门不挡水，请用闸门挡水",
         BuildKind.Table=>"餐桌 · 邻接木椅可提供用餐心情收益",
         BuildKind.Chair=>"木椅 · 邻接餐桌用于就餐",
         BuildKind.GameTable=>"棋桌 · 公共休闲目的地",
@@ -45,7 +46,7 @@ public sealed partial class DemoWorld
     private static string BedKey(Cell c)=>$"bed:{c.X}:{c.Z}:{c.Level}";
     private double RestRate(DemoWorker w)
     {
-        var bed=Buildings.Values.FirstOrDefault(b=>b.Kind==BuildKind.Bed&&BedKey(b.Cell)==w.Person.Activity?.Target&&
+        var bed=Buildings.Values.FirstOrDefault(b=>b.Kind==BuildKind.Bed&&w.Person.HomeBed==b.Cell&&BedKey(b.Cell)==w.Person.Activity?.Target&&
             Math.Abs(b.Cell.X-w.Tile.X)+Math.Abs(b.Cell.Z-w.Tile.Z)<=1&&b.Cell.Level==w.Level);
         return bed is null?.9:RoomAt(bed.Cell).Enclosed?1.8:1.35;
     }

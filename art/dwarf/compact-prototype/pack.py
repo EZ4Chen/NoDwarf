@@ -4,7 +4,7 @@ from collections import deque
 import numpy as np
 from PIL import Image, ImageFilter, ImageChops
 ROOT=Path(__file__).resolve().parents[3]
-OUT=ROOT/'source/Assets/Characters/CompactPrototype'
+OUT=ROOT/'source/Development/Assets/Characters/CompactPrototype'
 im=Image.open(Path(__file__).with_name('parts-source.png')).convert('RGBA')
 a=np.array(im.getchannel('A')); h,w=a.shape; seen=np.zeros((h,w),dtype=bool); parts=[]
 for y,x in zip(*np.where(a>128)):
